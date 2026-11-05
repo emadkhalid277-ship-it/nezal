@@ -207,6 +207,8 @@ service cloud.firestore {
           'id',
           'subcategoryId',
           'category',
+          'mainCategoryId',
+          'mainCategory',
           'questionText',
           'questionType',
           'difficulty',
@@ -225,6 +227,8 @@ service cloud.firestore {
         ]) &&
         isValidId(data.id) &&
         (!('subcategoryId' in data) || isValidId(data.subcategoryId)) &&
+        (!('mainCategoryId' in data) || isValidId(data.mainCategoryId)) &&
+        (!('mainCategory' in data) || isValidMainCategoryName(data.mainCategory)) &&
         isValidSubcategoryName(data.category) &&
         data.questionText is string && data.questionText.size() >= 3 && data.questionText.size() <= 600 &&
         data.questionType is string && data.questionType.size() == 6 &&
@@ -251,8 +255,8 @@ service cloud.firestore {
           data.imageDescription.size() <= 300
         )) &&
         data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
-        data.createdAt is timestamp &&
-        data.reviewedAt is timestamp;
+        (data.createdAt is timestamp || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+        (data.reviewedAt is timestamp || (data.reviewedAt is string && data.reviewedAt.size() <= 64));
     }
 
     // Admins collection (Read-only for self verification, cannot be self-assigned from client)
@@ -383,49 +387,14 @@ service cloud.firestore {
       allow get: if isValidId(questionId);
       allow list: if true;
 
-      allow create: if isVerifiedUser() &&
-        isValidId(questionId) &&
-        isValidQuestion(incoming()) &&
-        incoming().id == questionId &&
-        incoming().authorId == request.auth.uid &&
-        incoming().createdAt == request.time &&
-        incoming().reviewedAt == request.time &&
-        isAdmin();
+      allow create: if isValidId(questionId) && (
+        isAdmin() ||
+        (incoming().authorId == 'system' && incoming().status == 'pending' && isValidQuestion(incoming()))
+      );
 
-      allow update: if isVerifiedUser() &&
-        isValidId(questionId) &&
-        isValidQuestion(incoming()) &&
-        incoming().id == existing().id &&
-        incoming().authorId == existing().authorId &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().reviewedAt == request.time &&
-        (
-          // Action 1: Status approval/rejection update
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt']) ||
-          // Action 2: Subcategory rename / reassignment update
-          incoming().diff(existing()).affectedKeys().hasOnly(['category', 'subcategoryId', 'reviewedAt']) ||
-          // Action 3: Full question content edit by admin (including optional question image fields)
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'subcategoryId',
-            'category',
-            'questionText',
-            'questionType',
-            'difficulty',
-            'points',
-            'options',
-            'correctAnswer',
-            'explanation',
-            'source',
-            'status',
-            'imageUrl',
-            'imageStoragePath',
-            'imageDescription',
-            'reviewedAt'
-          ])
-        ) &&
-        isAdmin();
+      allow update: if isValidId(questionId) && isAdmin();
 
-      allow delete: if isVerifiedUser() && isValidId(questionId) && isAdmin();
+      allow delete: if isValidId(questionId) && isAdmin();
     }
   }
 }

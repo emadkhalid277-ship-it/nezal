@@ -1,0 +1,476 @@
+[
+  {
+    "id": "sub-1793868485323-7bup",
+    "name": "علوم وطب",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868508434-gnge",
+    "name": "سيارات",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868587059-qe2t",
+    "name": "منتجات",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868616868-ng5b",
+    "name": "مطاعم",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868623827-l2tp",
+    "name": "شعارات",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868708153-q5t9",
+    "name": "لغة وادب",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868719579-3w3j",
+    "name": "تطبيقات",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868728531-5gjp",
+    "name": "عالم الشعر",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868743806-1yh9",
+    "name": "امثال والغاز",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  },
+  {
+    "id": "sub-1793868782501-qijy",
+    "name": "كرة القدم",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868788878-1lrm",
+    "name": "كاس العالم",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868795118-w1as",
+    "name": "كاس الخليج",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868803319-967b",
+    "name": "دوري ابطال اوروبا",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868824715-c9g0",
+    "name": "البالون دور",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868836411-4a99",
+    "name": "كرة القدم السعودية",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868878965-3ltz",
+    "name": "الدوري الانجليزي",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868890094-o8rb",
+    "name": "الدوريات الخمس الكبرى",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868909116-eclb",
+    "name": "شعارات كرة القدم",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868927295-meqw",
+    "name": "كرة القدم القديمة",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868935213-ivzm",
+    "name": "منتخبات",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868942472-0s4q",
+    "name": "خمن اللاعب",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793868990183-dkn4",
+    "name": "القران الكريم",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793868995561-z4l9",
+    "name": "اسلاميات",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869001595-s2bz",
+    "name": "قصص الانبياء",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869008869-gftk",
+    "name": "الصحابة",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869014953-f9hm",
+    "name": "جزء عم",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869023013-613z",
+    "name": "خمن القارئ",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869034239-1d7p",
+    "name": "احاديث",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869050604-30kd",
+    "name": "السيرة النبوية",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869073798-fqec",
+    "name": "اكمل الاية",
+    "mainCategory": "الدين",
+    "mainCategoryId": "main-religion"
+  },
+  {
+    "id": "sub-1793869086761-jwof",
+    "name": "كرة السلة",
+    "mainCategory": "رياضات",
+    "mainCategoryId": "main-sports"
+  },
+  {
+    "id": "sub-1793869090336-n3l6",
+    "name": "تنس",
+    "mainCategory": "رياضات",
+    "mainCategoryId": "main-sports"
+  },
+  {
+    "id": "sub-1793869125079-nchi",
+    "name": "مصارعة",
+    "mainCategory": "رياضات",
+    "mainCategoryId": "main-sports"
+  },
+  {
+    "id": "sub-1793869136861-8zgs",
+    "name": "فورملا ون",
+    "mainCategory": "رياضات",
+    "mainCategoryId": "main-sports"
+  },
+  {
+    "id": "sub-1793869150079-k1mv",
+    "name": "ملاكمة UFC",
+    "mainCategory": "رياضات",
+    "mainCategoryId": "main-sports"
+  },
+  {
+    "id": "sub-1793869315670-lkne",
+    "name": "الدوري الاسباني",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793869383154-82b4",
+    "name": "ملاعب",
+    "mainCategory": "كرة قدم",
+    "mainCategoryId": "main-football"
+  },
+  {
+    "id": "sub-1793869548530-pbnl",
+    "name": "دول وعواصم",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869557496-rzc6",
+    "name": "خمن الدولة",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869565270-1a41",
+    "name": "اعلام",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869574475-1c01",
+    "name": "جغرافيا",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869580018-bsyz",
+    "name": "العرب",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869590220-1sh2",
+    "name": "الخليج",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869610500-z2w4",
+    "name": "لغات ولهجات",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869622160-kgkl",
+    "name": "خرائط",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869629123-pkyu",
+    "name": "عملات",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869646128-xnsk",
+    "name": "الحرب العالمية",
+    "mainCategory": "جغرافيا وتاريخ",
+    "mainCategoryId": "main-geo-history"
+  },
+  {
+    "id": "sub-1793869726278-cwoj",
+    "name": "انمي عام",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869735465-hdu8",
+    "name": "هجوم العمالقة",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869740582-xk3e",
+    "name": "ون بيس",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869748207-d5sk",
+    "name": "ناروتو",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869754945-ttsx",
+    "name": "ديث نوت",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869762598-g4nt",
+    "name": "ديمون سلاير",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869768701-9ram",
+    "name": "كونان",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869773918-jw32",
+    "name": "بليتش",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869786566-8j82",
+    "name": "هنتر x هنتر",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869797648-iski",
+    "name": "سولو ليفيلينغ",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869808346-jyfm",
+    "name": "بلاك كلوفر",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869815104-2vv8",
+    "name": "دراغون بول",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869824767-xi0e",
+    "name": "جوجوتسو كايسن",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869834144-p2j6",
+    "name": "من اكون",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869840126-siu8",
+    "name": "خمن الانمي",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869848669-enk8",
+    "name": "الجيل الجديد",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869857110-6mgu",
+    "name": "انميات رياضية",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869869646-7xmi",
+    "name": "اسلحة انمي",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869876347-9yck",
+    "name": "قصة انمي",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793869883128-wmht",
+    "name": "سبيستون",
+    "mainCategory": "أنمي",
+    "mainCategoryId": "main-anime"
+  },
+  {
+    "id": "sub-1793870003427-6o59",
+    "name": "العاب عام",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870011382-09mr",
+    "name": "ريد ديد",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870018104-27jz",
+    "name": "ماين كرافت",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870029869-bu1o",
+    "name": "الدن رينق",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870039968-7zq2",
+    "name": "رزدننت ايفل",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870058811-7uyn",
+    "name": "ميتل قير",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870077826-14p7",
+    "name": "روكيت ليق",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870085317-in2o",
+    "name": "فورتنايت",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870093102-m2zb",
+    "name": "فيفا",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870111720-nbmz",
+    "name": "خمن الشخصية",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-1793870120396-hyhl",
+    "name": "خمن اللعبة",
+    "mainCategory": "ألعاب",
+    "mainCategoryId": "main-games"
+  },
+  {
+    "id": "sub-general-info",
+    "name": "معلومات عامة",
+    "mainCategory": "عام",
+    "mainCategoryId": "main-general"
+  }
+]

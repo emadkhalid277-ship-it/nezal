@@ -1,3 +1,8 @@
+# AI Studio internals and local artifacts
+.aistudio/
+.git/
+
+# Dependencies & Build
 node_modules/
 build/
 dist/
@@ -14,3 +19,4 @@ coverage/
 *.mkv
 *.zip
 *.tar.gz
+

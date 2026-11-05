@@ -1434,13 +1434,49 @@ export async function updateQuestionInFirestore(
 
 export async function updateQuestionStatusInFirestore(
   questionId: string,
-  status: ApprovalStatus
+  status: ApprovalStatus,
+  fallbackQuestion?: TriviaQuestion
 ): Promise<void> {
   try {
-    await updateDoc(doc(db, QUESTIONS_COLLECTION, questionId), {
-      status,
-      reviewedAt: serverTimestamp(),
-    });
+    const cleanId = sanitizeId(questionId);
+    const docRef = doc(db, QUESTIONS_COLLECTION, cleanId);
+    if (fallbackQuestion) {
+      await setDoc(
+        docRef,
+        {
+          id: cleanId,
+          category: fallbackQuestion.category.trim().slice(0, 80),
+          subcategoryId: fallbackQuestion.subcategoryId ? sanitizeId(fallbackQuestion.subcategoryId) : '',
+          mainCategoryId: fallbackQuestion.mainCategoryId ? sanitizeId(fallbackQuestion.mainCategoryId) : '',
+          mainCategory: fallbackQuestion.mainCategory || '',
+          questionText: fallbackQuestion.questionText.trim().slice(0, 600),
+          questionType: 'direct',
+          difficulty: fallbackQuestion.difficulty,
+          points: Number(fallbackQuestion.points),
+          options: [],
+          correctAnswer: fallbackQuestion.correctAnswer.trim().slice(0, 300),
+          explanation: (fallbackQuestion.explanation || '').trim().slice(0, 800),
+          source: (fallbackQuestion.source || '').trim().slice(0, 300),
+          status,
+          imageUrl: fallbackQuestion.imageUrl || '',
+          imageStoragePath: fallbackQuestion.imageStoragePath || '',
+          imageDescription: fallbackQuestion.imageDescription || '',
+          authorId: fallbackQuestion.authorId || 'system',
+          createdAt: fallbackQuestion.createdAt || serverTimestamp(),
+          reviewedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } else {
+      await setDoc(
+        docRef,
+        {
+          status,
+          reviewedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
   } catch (error) {
     handleFirestoreError(
       error,
@@ -1480,15 +1516,59 @@ export async function deleteQuestionFromFirestore(
 
 export async function bulkUpdateStatusInFirestore(
   questionIds: string[],
-  status: ApprovalStatus
+  status: ApprovalStatus,
+  availableQuestions?: TriviaQuestion[]
 ): Promise<void> {
   const batch = writeBatch(db);
+  const qMap = new Map<string, TriviaQuestion>();
+  if (availableQuestions) {
+    availableQuestions.forEach((q) => qMap.set(q.id, q));
+  }
+
   questionIds.forEach((id) => {
-    batch.update(doc(db, QUESTIONS_COLLECTION, id), {
-      status,
-      reviewedAt: serverTimestamp(),
-    });
+    const cleanId = sanitizeId(id);
+    const fullQ = qMap.get(id) || qMap.get(cleanId);
+    const docRef = doc(db, QUESTIONS_COLLECTION, cleanId);
+
+    if (fullQ) {
+      batch.set(
+        docRef,
+        {
+          id: cleanId,
+          category: fullQ.category.trim().slice(0, 80),
+          subcategoryId: fullQ.subcategoryId ? sanitizeId(fullQ.subcategoryId) : '',
+          mainCategoryId: fullQ.mainCategoryId ? sanitizeId(fullQ.mainCategoryId) : '',
+          mainCategory: fullQ.mainCategory || '',
+          questionText: fullQ.questionText.trim().slice(0, 600),
+          questionType: 'direct',
+          difficulty: fullQ.difficulty,
+          points: Number(fullQ.points),
+          options: [],
+          correctAnswer: fullQ.correctAnswer.trim().slice(0, 300),
+          explanation: (fullQ.explanation || '').trim().slice(0, 800),
+          source: (fullQ.source || '').trim().slice(0, 300),
+          status,
+          imageUrl: fullQ.imageUrl || '',
+          imageStoragePath: fullQ.imageStoragePath || '',
+          imageDescription: fullQ.imageDescription || '',
+          authorId: fullQ.authorId || 'system',
+          createdAt: fullQ.createdAt || serverTimestamp(),
+          reviewedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } else {
+      batch.set(
+        docRef,
+        {
+          status,
+          reviewedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
   });
+
   try {
     await batch.commit();
   } catch (error) {
