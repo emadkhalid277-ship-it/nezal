@@ -113,11 +113,16 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function isUserAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase();
+}
+
 // Automatically save/update user profile in Firestore upon sign in
 export async function syncUserProfile(user: User): Promise<UserProfileData> {
   const userRef = doc(db, 'users', user.uid);
   const isAdminUser =
-    user.email === BOOTSTRAPPED_ADMIN_EMAIL ||
+    isUserAdminEmail(user.email) ||
     (await checkUserIsAdminDirect(user.uid));
 
   const role: 'admin' | 'user' = isAdminUser ? 'admin' : 'user';
@@ -175,8 +180,8 @@ async function checkUserIsAdminDirect(uid: string): Promise<boolean> {
 }
 
 export async function checkUserIsAdmin(user: User | null): Promise<boolean> {
-  if (!user) return false;
-  if (user.email === BOOTSTRAPPED_ADMIN_EMAIL) return true;
+  if (!user || !user.email) return false;
+  if (isUserAdminEmail(user.email)) return true;
   return checkUserIsAdminDirect(user.uid);
 }
 

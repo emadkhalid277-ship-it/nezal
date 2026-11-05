@@ -28,9 +28,9 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isVerifiedUser() && (
+      return isSignedIn() && (
         request.auth.token.email == 'emadkhalid277@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)))
       );
     }
 

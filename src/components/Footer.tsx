@@ -140,13 +140,15 @@ export const Footer: React.FC<FooterProps> = ({
             >
               تواصل معنا
             </button>
-            <button
-              type="button"
-              onClick={() => goTo('admin')}
-              className="hover:text-[#14543D] transition-colors cursor-pointer"
-            >
-              لوحة المشرف
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => goTo('admin')}
+                className="hover:text-[#14543D] text-[#F07842] font-bold transition-colors cursor-pointer"
+              >
+                لوحة المشرف
+              </button>
+            )}
           </div>
         </div>
 

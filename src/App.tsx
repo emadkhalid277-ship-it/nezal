@@ -675,6 +675,13 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+
+    if (page === 'admin' && !isAdmin) {
+      setActivePage('home');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setActivePage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -965,36 +972,42 @@ export default function App() {
               />
             )}
 
-            {activePage === 'admin' && (
-              <AdminDashboardPage
-                user={user}
-                isAdmin={isAdmin}
-                authLoading={authLoading}
-                questions={allQuestions}
-                mainCategories={mainCategories}
-                subcategories={subcategories}
-                contactSettings={contactSettings}
-                loadingQuestions={loadingQuestions}
-                onLoginGoogle={handleGoogleLogin}
-                onOpenAuthModal={() => setIsAuthModalOpen(true)}
-                onLogout={handleLogout}
-                onRefreshQuestions={async () => {
-                  await loadQuestions(isAdmin);
-                }}
-                onRefreshMainCategories={async () => {
-                  const mains = await loadMainCategories();
-                  await loadSubcategories(isAdmin, mains);
-                }}
-                onRefreshSubcategories={async () => {
-                  await loadSubcategories(isAdmin);
-                }}
-                onRefreshContactSettings={async () => {
-                  await loadContactSettings();
-                }}
-                onSeedFoundationalPack={handleSeedFoundationalPack}
-                seeding={seeding}
-              />
-            )}
+            {activePage === 'admin' &&
+              (isAdmin ? (
+                <AdminDashboardPage
+                  user={user}
+                  isAdmin={isAdmin}
+                  authLoading={authLoading}
+                  questions={allQuestions}
+                  mainCategories={mainCategories}
+                  subcategories={subcategories}
+                  contactSettings={contactSettings}
+                  loadingQuestions={loadingQuestions}
+                  onLoginGoogle={handleGoogleLogin}
+                  onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                  onLogout={handleLogout}
+                  onRefreshQuestions={async () => {
+                    await loadQuestions(isAdmin);
+                  }}
+                  onRefreshMainCategories={async () => {
+                    const mains = await loadMainCategories();
+                    await loadSubcategories(isAdmin, mains);
+                  }}
+                  onRefreshSubcategories={async () => {
+                    await loadSubcategories(isAdmin);
+                  }}
+                  onRefreshContactSettings={async () => {
+                    await loadContactSettings();
+                  }}
+                  onSeedFoundationalPack={handleSeedFoundationalPack}
+                  seeding={seeding}
+                />
+              ) : (
+                <HomePage
+                  onStartCategorySelection={() => handleNavigate('categories')}
+                  onNavigate={handleNavigate}
+                />
+              ))}
           </motion.div>
         </AnimatePresence>
       </main>

@@ -48,7 +48,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       locked: isGameLocked,
     },
     { id: 'contact', label: 'تواصل معنا' },
-    { id: 'admin', label: 'لوحة المشرف' },
+    ...(isAdmin ? [{ id: 'admin' as PageView, label: 'لوحة المشرف' }] : []),
   ];
 
   const handleSelect = (page: PageView) => {
