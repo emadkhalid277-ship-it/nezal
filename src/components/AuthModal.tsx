@@ -89,21 +89,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      if (
-        err.code === 'auth/user-not-found' ||
-        err.code === 'auth/wrong-password' ||
-        err.code === 'auth/invalid-credential'
-      ) {
-        console.warn('Authentication note: invalid credentials provided');
-        setError('بيانات الدخول غير صحيحة، يرجى التحقق من البريد الإلكتروني وكلمة المرور.');
+      console.error('Auth error:', err);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
       } else if (err.code === 'auth/email-already-in-use') {
-        console.warn('Authentication note: email already registered');
         setError('هذا البريد مسجل مسبقاً، يمكنك تسجيل الدخول به.');
       } else if (err.code === 'auth/invalid-email') {
         setError('صيغة البريد الإلكتروني غير صالحة.');
       } else {
-        console.error('Unexpected auth error:', err);
-        setError(err.message || 'حدث خطأ أثناء المصادقة، يرجى المحاولة لاحقاً.');
+        setError(err.message || 'حدث خطأ أثناء المصادقة.');
       }
     } finally {
       setLoading(false);

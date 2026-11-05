@@ -1233,12 +1233,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   ) => {
     setActionLoading(true);
     try {
-      const fallbackQ = questions.find((q) => q.id === id);
-      await updateQuestionStatusInFirestore(id, status, fallbackQ);
+      await updateQuestionStatusInFirestore(id, status);
       await onRefreshQuestions();
-    } catch (err: any) {
-      console.error('Failed to update question status:', err);
-      setStatusBanner('تعذر تحديث حالة السؤال في قاعدة البيانات.');
     } finally {
       setActionLoading(false);
     }
@@ -1250,9 +1246,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       await deleteQuestionFromFirestore(id);
       setSelectedIds((prev) => prev.filter((item) => item !== id));
       await onRefreshQuestions();
-    } catch (err: any) {
-      console.error('Failed to delete question:', err);
-      setStatusBanner('تعذر حذف السؤال من قاعدة البيانات.');
     } finally {
       setActionLoading(false);
     }
@@ -1262,13 +1255,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     if (selectedIds.length === 0) return;
     setActionLoading(true);
     try {
-      await bulkUpdateStatusInFirestore(selectedIds, status, questions);
+      await bulkUpdateStatusInFirestore(selectedIds, status);
       setStatusBanner(`تم تحديث حالة ${selectedIds.length} سؤال بنجاح.`);
       setSelectedIds([]);
       await onRefreshQuestions();
-    } catch (err: any) {
-      console.error('Failed to bulk update status:', err);
-      setStatusBanner('تعذر تحديث حالة الأسئلة المحددة، يرجى التحقق من الاتصال.');
     } finally {
       setActionLoading(false);
     }

@@ -89,10 +89,9 @@ service cloud.firestore {
 
     // 7. بنك الأسئلة (questions)
     match /questions/{questionId} {
-      allow get: if isValidId(questionId);
-      allow list: if true;
-      allow create: if isValidId(questionId) && (isAdmin() || (incoming().authorId == 'system' && incoming().status == 'pending'));
-      allow update, delete: if isValidId(questionId) && isAdmin();
+      // الأسئلة المعتمدة متاحة للجميع للعب، وكافة الأسئلة متاحة للمشرف
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     // 8. إعدادات المنصة والتواصل (settings)
