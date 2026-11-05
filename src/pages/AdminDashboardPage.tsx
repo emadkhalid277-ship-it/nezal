@@ -78,7 +78,8 @@ interface AdminDashboardPageProps {
   subcategories: SubcategoryItem[];
   contactSettings: ContactSettings;
   loadingQuestions: boolean;
-  onLoginGoogle: () => Promise<void>;
+  onLoginGoogle?: () => Promise<void> | void;
+  onOpenAuthModal?: () => void;
   onLogout: () => Promise<void>;
   onRefreshQuestions: () => Promise<void>;
   onRefreshSubcategories: () => Promise<void>;
@@ -133,6 +134,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   contactSettings,
   loadingQuestions,
   onLoginGoogle,
+  onOpenAuthModal,
   onLogout,
   onRefreshQuestions,
   onRefreshSubcategories,
@@ -1473,7 +1475,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               لوحة تحكم نِزال الشاملة
             </h1>
             <p className="text-sm text-[#777B73] leading-relaxed">
-              تتطلب إدارة الفئات الرئيسية، الفئات الفرعية، الصور، الأسئلة، وبيانات التواصل تسجيل الدخول بحساب المشرف المعتمد عبر Google.
+              تتطلب إدارة الفئات الرئيسية، الفئات الفرعية، الصور، الأسئلة، وبيانات التواصل تسجيل الدخول بحساب المشرف المعتمد.
             </p>
           </div>
 
@@ -1481,12 +1483,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             <button
               type="button"
               disabled={authLoading}
-              onClick={onLoginGoogle}
+              onClick={() => {
+                if (onOpenAuthModal) {
+                  onOpenAuthModal();
+                } else if (onLoginGoogle) {
+                  onLoginGoogle();
+                }
+              }}
               className="px-7 py-3.5 text-sm font-bold text-white bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center gap-2.5 cursor-pointer"
             >
               <LogIn className="w-4 h-4" />
               <span>
-                {authLoading ? 'جاري التحقق...' : 'تسجيل الدخول بحساب Google'}
+                {authLoading ? 'جاري التحقق...' : 'تسجيل دخول المشرف'}
               </span>
             </button>
           </div>

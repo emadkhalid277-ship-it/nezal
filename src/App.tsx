@@ -976,6 +976,7 @@ export default function App() {
                 contactSettings={contactSettings}
                 loadingQuestions={loadingQuestions}
                 onLoginGoogle={handleGoogleLogin}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
                 onLogout={handleLogout}
                 onRefreshQuestions={async () => {
                   await loadQuestions(isAdmin);
