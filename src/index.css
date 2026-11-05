@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Readex Pro', 'IBM Plex Sans Arabic', sans-serif;
+    --font-sans: 'IBM Plex Sans Arabic', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --bg-main: #F3F5E9;
+    --bg-secondary: #FFFFFF;
+    --color-orange: #F07842;
+    --color-green: #14543D;
+    --text-main: #252824;
+    --text-secondary: #777B73;
+    --border-color: #E5E8DD;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    direction: rtl;
+    scroll-behavior: smooth;
+    background-color: #F3F5E9;
+    color: #252824;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

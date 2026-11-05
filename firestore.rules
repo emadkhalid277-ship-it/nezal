@@ -1,0 +1,431 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'emadkhalid277@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidMainCategoryName(mainCat) {
+      return mainCat is string &&
+        mainCat.size() >= 2 &&
+        mainCat.size() <= 80 &&
+        mainCat != 'مسلسلات وأفلام';
+    }
+
+    function isValidSubcategoryName(cat) {
+      return cat is string &&
+        cat.size() >= 2 &&
+        cat.size() <= 80;
+    }
+
+    function isValidMainCategoryConfig(data) {
+      return data.keys().hasAll([
+          'id',
+          'name',
+          'description',
+          'imageUrl',
+          'sortOrder',
+          'isActive',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'name',
+          'description',
+          'tagline',
+          'imageUrl',
+          'sortOrder',
+          'isActive',
+          'isDeleted',
+          'accentColor',
+          'bgTint',
+          'borderTint',
+          'iconName',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidMainCategoryName(data.name) &&
+        data.description is string && data.description.size() <= 300 &&
+        (!('tagline' in data) || (data.tagline is string && data.tagline.size() <= 200)) &&
+        data.imageUrl is string && data.imageUrl.size() <= 500000 &&
+        data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 10000 &&
+        data.isActive is bool &&
+        (!('isDeleted' in data) || data.isDeleted is bool) &&
+        (!('accentColor' in data) || (data.accentColor is string && data.accentColor.size() >= 4 && data.accentColor.size() <= 20)) &&
+        (!('bgTint' in data) || (data.bgTint is string && data.bgTint.size() >= 4 && data.bgTint.size() <= 20)) &&
+        (!('borderTint' in data) || (data.borderTint is string && data.borderTint.size() >= 4 && data.borderTint.size() <= 20)) &&
+        (!('iconName' in data) || (data.iconName is string && data.iconName.size() >= 2 && data.iconName.size() <= 30)) &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSubcategory(data) {
+      return data.keys().hasAll([
+          'id',
+          'name',
+          'mainCategory',
+          'description',
+          'sortOrder',
+          'isActive',
+          'authorId',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'name',
+          'mainCategoryId',
+          'mainCategory',
+          'description',
+          'sortOrder',
+          'isActive',
+          'isDeleted',
+          'imageUrl',
+          'authorId',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidSubcategoryName(data.name) &&
+        (!('mainCategoryId' in data) || isValidId(data.mainCategoryId)) &&
+        isValidMainCategoryName(data.mainCategory) &&
+        data.description is string && data.description.size() <= 240 &&
+        data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 10000 &&
+        data.isActive is bool &&
+        (!('isDeleted' in data) || data.isDeleted is bool) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500000)) &&
+        data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidContactSettings(data) {
+      return data.keys().hasAll([
+          'id',
+          'heading',
+          'message',
+          'whatsappUrl',
+          'whatsappDisplay',
+          'emailAddress',
+          'twitterUrl',
+          'instagramUrl',
+          'tiktokUrl',
+          'snapchatUrl',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'heading',
+          'message',
+          'whatsappUrl',
+          'whatsappDisplay',
+          'emailAddress',
+          'twitterUrl',
+          'instagramUrl',
+          'tiktokUrl',
+          'snapchatUrl',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.heading is string && data.heading.size() >= 2 && data.heading.size() <= 120 &&
+        data.message is string && data.message.size() <= 500 &&
+        data.whatsappUrl is string && data.whatsappUrl.size() <= 300 &&
+        data.whatsappDisplay is string && data.whatsappDisplay.size() <= 120 &&
+        data.emailAddress is string && data.emailAddress.size() <= 200 &&
+        data.twitterUrl is string && data.twitterUrl.size() <= 300 &&
+        data.instagramUrl is string && data.instagramUrl.size() <= 300 &&
+        data.tiktokUrl is string && data.tiktokUrl.size() <= 300 &&
+        data.snapchatUrl is string && data.snapchatUrl.size() <= 300 &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDifficulty(diff) {
+      return diff is string &&
+        diff.size() >= 2 &&
+        diff.size() <= 20 &&
+        diff in ['سهل', 'متوسط', 'صعب', 'صعب جداً', 'خبير'];
+    }
+
+    function isValidOptionsList(opts, qType) {
+      return opts is list &&
+        qType == 'direct' &&
+        opts.size() == 0;
+    }
+
+    function isValidQuestion(data) {
+      return data.keys().hasAll([
+          'id',
+          'category',
+          'questionText',
+          'questionType',
+          'difficulty',
+          'points',
+          'options',
+          'correctAnswer',
+          'explanation',
+          'source',
+          'status',
+          'authorId',
+          'createdAt',
+          'reviewedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'subcategoryId',
+          'category',
+          'questionText',
+          'questionType',
+          'difficulty',
+          'points',
+          'options',
+          'correctAnswer',
+          'explanation',
+          'source',
+          'status',
+          'imageUrl',
+          'imageStoragePath',
+          'imageDescription',
+          'authorId',
+          'createdAt',
+          'reviewedAt'
+        ]) &&
+        isValidId(data.id) &&
+        (!('subcategoryId' in data) || isValidId(data.subcategoryId)) &&
+        isValidSubcategoryName(data.category) &&
+        data.questionText is string && data.questionText.size() >= 3 && data.questionText.size() <= 600 &&
+        data.questionType is string && data.questionType.size() == 6 &&
+        data.questionType == 'direct' &&
+        isValidDifficulty(data.difficulty) &&
+        data.points is int && data.points in [100, 200, 300, 400, 500] &&
+        isValidOptionsList(data.options, data.questionType) &&
+        data.correctAnswer is string && data.correctAnswer.size() >= 1 && data.correctAnswer.size() <= 300 &&
+        data.explanation is string && data.explanation.size() <= 800 &&
+        data.source is string && data.source.size() <= 300 &&
+        data.status is string && data.status.size() >= 6 && data.status.size() <= 12 &&
+        data.status in ['approved', 'pending', 'rejected'] &&
+        (!('imageUrl' in data) || (
+          data.imageUrl is string &&
+          data.imageUrl.size() <= 2000 &&
+          (data.imageUrl.size() == 0 || data.imageUrl.matches('^https?://.*'))
+        )) &&
+        (!('imageStoragePath' in data) || (
+          data.imageStoragePath is string &&
+          data.imageStoragePath.size() <= 500
+        )) &&
+        (!('imageDescription' in data) || (
+          data.imageDescription is string &&
+          data.imageDescription.size() <= 300
+        )) &&
+        data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.reviewedAt is timestamp;
+    }
+
+    // Admins collection (Read-only for self verification, cannot be self-assigned from client)
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && request.auth.uid == adminId;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Users collection (Player profiles, roles, and authentication records)
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if isAdmin();
+    }
+
+    // GameSessions collection (Saving played matches, live game progress, and scores)
+    match /gameSessions/{sessionId} {
+      allow get, list: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // MainCategories collection (Publicly readable, Admin-only write for full main category management)
+    match /mainCategories/{mainCategoryId} {
+      allow get: if isValidId(mainCategoryId);
+      allow list: if true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(mainCategoryId) &&
+        isValidMainCategoryConfig(incoming()) &&
+        incoming().id == mainCategoryId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(mainCategoryId) &&
+        isValidMainCategoryConfig(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name',
+          'description',
+          'tagline',
+          'imageUrl',
+          'sortOrder',
+          'isActive',
+          'isDeleted',
+          'accentColor',
+          'bgTint',
+          'borderTint',
+          'iconName',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(mainCategoryId) && isAdmin();
+    }
+
+    // Subcategories collection (Publicly readable, Admin-only write)
+    match /subcategories/{subcategoryId} {
+      allow get: if isValidId(subcategoryId);
+      allow list: if true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(subcategoryId) &&
+        isValidSubcategory(incoming()) &&
+        incoming().id == subcategoryId &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(subcategoryId) &&
+        isValidSubcategory(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name',
+          'mainCategoryId',
+          'mainCategory',
+          'description',
+          'sortOrder',
+          'isActive',
+          'isDeleted',
+          'imageUrl',
+          'updatedAt'
+        ]) &&
+        isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(subcategoryId) && isAdmin();
+    }
+
+    // Platform Settings collection (e.g., /settings/contact)
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(settingId) &&
+        isValidContactSettings(incoming()) &&
+        incoming().id == settingId &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(settingId) &&
+        isValidContactSettings(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().updatedBy == request.auth.uid &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+
+      allow delete: if false;
+    }
+
+    // Questions collection
+    match /questions/{questionId} {
+      allow get: if isValidId(questionId);
+      allow list: if true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(questionId) &&
+        isValidQuestion(incoming()) &&
+        incoming().id == questionId &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().reviewedAt == request.time &&
+        isAdmin();
+
+      allow update: if isVerifiedUser() &&
+        isValidId(questionId) &&
+        isValidQuestion(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().reviewedAt == request.time &&
+        (
+          // Action 1: Status approval/rejection update
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt']) ||
+          // Action 2: Subcategory rename / reassignment update
+          incoming().diff(existing()).affectedKeys().hasOnly(['category', 'subcategoryId', 'reviewedAt']) ||
+          // Action 3: Full question content edit by admin (including optional question image fields)
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'subcategoryId',
+            'category',
+            'questionText',
+            'questionType',
+            'difficulty',
+            'points',
+            'options',
+            'correctAnswer',
+            'explanation',
+            'source',
+            'status',
+            'imageUrl',
+            'imageStoragePath',
+            'imageDescription',
+            'reviewedAt'
+          ])
+        ) &&
+        isAdmin();
+
+      allow delete: if isVerifiedUser() && isValidId(questionId) && isAdmin();
+    }
+  }
+}

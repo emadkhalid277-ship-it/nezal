@@ -1,0 +1,468 @@
+{
+  "entities": {
+    "MainCategoryConfig": {
+      "title": "MainCategoryConfig",
+      "description": "Dynamic configuration for a level-1 main category managed by the admin.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the main category (e.g., main-general)",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "The main category display name in Arabic",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the main category",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "tagline": {
+          "type": "string",
+          "description": "Short subtitle shown on the main category card",
+          "minLength": 0,
+          "maxLength": 200
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Dynamic image URL (Firebase Storage URL or cropped image data URL) controlled by the admin",
+          "minLength": 0,
+          "maxLength": 500000
+        },
+        "sortOrder": {
+          "type": "number",
+          "description": "Display order of the main category"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether the main category is visible to players in new games"
+        },
+        "isDeleted": {
+          "type": "boolean",
+          "description": "Whether a built-in main category was deleted by the administrator"
+        },
+        "accentColor": {
+          "type": "string",
+          "description": "Hex accent color for the category",
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "bgTint": {
+          "type": "string",
+          "description": "Hex background tint color",
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "borderTint": {
+          "type": "string",
+          "description": "Hex border tint color",
+          "minLength": 4,
+          "maxLength": 20
+        },
+        "iconName": {
+          "type": "string",
+          "description": "Icon identifier for the category",
+          "minLength": 2,
+          "maxLength": 30
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Admin UID who updated the category",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "imageUrl",
+        "sortOrder",
+        "isActive",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "Subcategory": {
+      "title": "Subcategory",
+      "description": "A level-2 subcategory belonging to a main category with its own independent image.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the subcategory",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the subcategory in Arabic",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "mainCategoryId": {
+          "type": "string",
+          "description": "Unique ID of the parent level-1 main category",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "mainCategory": {
+          "type": "string",
+          "description": "Display name of the parent level-1 main category",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "description": "Short description of the subcategory",
+          "minLength": 0,
+          "maxLength": 240
+        },
+        "sortOrder": {
+          "type": "number",
+          "description": "Display order within the main category"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether the subcategory is visible for selection"
+        },
+        "isDeleted": {
+          "type": "boolean",
+          "description": "Whether the subcategory was deleted by the administrator"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Optional independent image URL for the subcategory card",
+          "minLength": 0,
+          "maxLength": 500000
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Admin UID who created or organized the subcategory",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "mainCategory",
+        "description",
+        "sortOrder",
+        "isActive",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ContactSettings": {
+      "title": "ContactSettings",
+      "description": "Editable Contact Us settings managed from the admin dashboard.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Document identifier (contact)",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "heading": {
+          "type": "string",
+          "description": "Welcoming heading on the contact page",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "message": {
+          "type": "string",
+          "description": "Short message inviting users to contact Nizal",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "whatsappUrl": {
+          "type": "string",
+          "description": "WhatsApp link or phone number configured by admin",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "whatsappDisplay": {
+          "type": "string",
+          "description": "Display label for WhatsApp contact",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "emailAddress": {
+          "type": "string",
+          "description": "Contact email address configured by admin",
+          "minLength": 0,
+          "maxLength": 200
+        },
+        "twitterUrl": {
+          "type": "string",
+          "description": "Optional X / Twitter profile URL",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "instagramUrl": {
+          "type": "string",
+          "description": "Optional Instagram profile URL",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "tiktokUrl": {
+          "type": "string",
+          "description": "Optional TikTok profile URL",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "snapchatUrl": {
+          "type": "string",
+          "description": "Optional Snapchat profile URL",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Admin UID who updated the contact settings",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "heading",
+        "message",
+        "whatsappUrl",
+        "whatsappDisplay",
+        "emailAddress",
+        "twitterUrl",
+        "instagramUrl",
+        "tiktokUrl",
+        "snapchatUrl",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "A trivia question stored in Firestore linked to a subcategory.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the question",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "description": "The Subcategory name that this question belongs to",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "questionText": {
+          "type": "string",
+          "description": "The Arabic question prompt",
+          "minLength": 3,
+          "maxLength": 600
+        },
+        "questionType": {
+          "type": "string",
+          "description": "Direct answer or multiple choice",
+          "enum": ["direct", "mcq"],
+          "minLength": 3,
+          "maxLength": 10
+        },
+        "difficulty": {
+          "type": "string",
+          "description": "Difficulty level of the question",
+          "enum": ["سهل", "متوسط", "صعب", "صعب جداً", "خبير"],
+          "minLength": 2,
+          "maxLength": 20
+        },
+        "points": {
+          "type": "number",
+          "description": "Point value: 100, 200, 300, 400, or 500",
+          "enum": [100, 200, 300, 400, 500]
+        },
+        "options": {
+          "type": "array",
+          "description": "Multiple choice options (4 items for mcq, empty for direct)"
+        },
+        "correctAnswer": {
+          "type": "string",
+          "description": "The correct answer text",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Brief explanation or context for the answer",
+          "minLength": 0,
+          "maxLength": 800
+        },
+        "source": {
+          "type": "string",
+          "description": "Reference or source of the question",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "status": {
+          "type": "string",
+          "description": "Approval status of the question",
+          "enum": ["approved", "pending", "rejected"],
+          "minLength": 6,
+          "maxLength": 12
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of the admin who created the question",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last review server timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "questionText",
+        "questionType",
+        "difficulty",
+        "points",
+        "options",
+        "correctAnswer",
+        "explanation",
+        "source",
+        "status",
+        "authorId",
+        "createdAt",
+        "reviewedAt"
+      ]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Trusted administrator lookup document.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Admin user UID",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"],
+          "minLength": 5,
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        }
+      },
+      "required": ["uid", "role", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and role details.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 200 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 1000 },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role"]
+    },
+    "GameSession": {
+      "title": "GameSession",
+      "description": "Saved game matches, scores, and competitive records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "teams": { "type": "array" },
+        "selectedSubcategories": { "type": "array" },
+        "usedTileKeys": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "completed"] },
+        "winnerTeam": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teams", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles and authentication data."
+    },
+    "/gameSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/GameSession" },
+      "description": "Saved matches, live challenges, and scores."
+    },
+    "/mainCategories/{mainCategoryId}": {
+      "schema": { "$ref": "#/entities/MainCategoryConfig" },
+      "description": "Collection of dynamic configurations and custom images for the 8 main categories."
+    },
+    "/subcategories/{subcategoryId}": {
+      "schema": { "$ref": "#/entities/Subcategory" },
+      "description": "Collection of level-2 subcategories organized under the 8 main categories."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/ContactSettings" },
+      "description": "Collection of global platform settings including Contact Us information."
+    },
+    "/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/Question" },
+      "description": "Collection of trivia questions assigned to subcategories."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRole" },
+      "description": "Collection of authorized administrator UIDs."
+    }
+  }
+}

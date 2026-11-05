@@ -1,0 +1,39 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email == 'emadkhalid277@gmail.com';
+    }
+
+    function isValidImageUpload() {
+      return request.resource != null &&
+        request.resource.size <= 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    // Question images: publicly readable during gameplay, admin-only upload/replace/delete
+    match /question-images/{subcategoryId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isVerifiedAdmin() && isValidImageUpload();
+      allow delete: if isVerifiedAdmin();
+    }
+
+    // Category images: publicly readable, admin-only upload/replace/delete
+    match /category-images/{categoryType}/{categoryId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isVerifiedAdmin() && isValidImageUpload();
+      allow delete: if isVerifiedAdmin();
+    }
+
+    // Default deny for all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

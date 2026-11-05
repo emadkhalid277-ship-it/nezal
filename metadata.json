@@ -1,0 +1,6 @@
+{
+  "name": "منصة التحدي — الألعاب المعرفية والتحديات الجماعية",
+  "description": "منصة ألعاب عربية متكاملة تجمع بين الثقافة والمنافسة الذكية عبر تحدي المعلومات الجماعي ولعبة وصلها الاستراتيجية.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
