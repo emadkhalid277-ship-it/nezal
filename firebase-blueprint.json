@@ -433,6 +433,73 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "teams", "status"]
+    },
+    "UserQuestionList": {
+      "title": "UserQuestionList",
+      "description": "Private question bank list created and owned by a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "questionsCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name"]
+    },
+    "UserCustomQuestion": {
+      "title": "UserCustomQuestion",
+      "description": "Custom trivia question in a user's personal list.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "listId": { "type": "string" },
+        "questionText": { "type": "string" },
+        "correctAnswer": { "type": "string" },
+        "explanation": { "type": "string" },
+        "source": { "type": "string" },
+        "mainCategoryName": { "type": "string" },
+        "subcategoryName": { "type": "string" },
+        "points": { "type": "number", "enum": [100, 200, 300, 400, 500] },
+        "imageUrl": { "type": "string" },
+        "contributionStatus": { "type": "string", "enum": ["draft", "pending", "approved", "rejected"] },
+        "contributionId": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "listId", "questionText", "correctAnswer", "mainCategoryName", "subcategoryName", "points"]
+    },
+    "UserContribution": {
+      "title": "UserContribution",
+      "description": "Question submitted by a user for review and publication by admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userQuestionId": { "type": "string" },
+        "listId": { "type": "string" },
+        "questionText": { "type": "string" },
+        "correctAnswer": { "type": "string" },
+        "explanation": { "type": "string" },
+        "source": { "type": "string" },
+        "mainCategoryName": { "type": "string" },
+        "subcategoryName": { "type": "string" },
+        "points": { "type": "number", "enum": [100, 200, 300, 400, 500] },
+        "imageUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "rejectionReason": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "reviewedBy": { "type": "string" },
+        "publishedQuestionId": { "type": "string" }
+      },
+      "required": ["id", "userId", "questionText", "correctAnswer", "mainCategoryName", "subcategoryName", "points", "status", "submittedAt"]
     }
   },
   "firestore": {
@@ -463,6 +530,18 @@
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/AdminRole" },
       "description": "Collection of authorized administrator UIDs."
+    },
+    "/userQuestionLists/{listId}": {
+      "schema": { "$ref": "#/entities/UserQuestionList" },
+      "description": "Private question lists created and owned by individual users."
+    },
+    "/userCustomQuestions/{questionId}": {
+      "schema": { "$ref": "#/entities/UserCustomQuestion" },
+      "description": "Private custom questions within users' lists."
+    },
+    "/contributions/{contributionId}": {
+      "schema": { "$ref": "#/entities/UserContribution" },
+      "description": "Question submissions sent by users for admin moderation and approval."
     }
   }
 }

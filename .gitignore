@@ -19,4 +19,5 @@ coverage/
 *.mkv
 *.zip
 *.tar.gz
-
+subcategories_dump.json
+DRAFT_firestore.rules

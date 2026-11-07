@@ -26,6 +26,7 @@ import {
   Crop,
   Check,
   LayoutGrid,
+  Inbox,
 } from 'lucide-react';
 import {
   ApprovalStatus,
@@ -42,7 +43,13 @@ import {
   TARGET_QUESTIONS_PER_CATEGORY,
   TARGET_TOTAL_QUESTIONS,
   TriviaQuestion,
+  UserContribution,
 } from '../types/game';
+import {
+  fetchAllContributionsForAdmin,
+  approveAndPublishContribution,
+  rejectContribution,
+} from '../services/contributionService';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
 import { ImageCropModal } from '../components/ImageCropModal';
@@ -94,7 +101,8 @@ type AdminTab =
   | 'subcategories'
   | 'images'
   | 'questions'
-  | 'contact';
+  | 'contact'
+  | 'contributions';
 
 const DIFFICULTIES_LIST: DifficultyLevel[] = [
   'سهل',
@@ -279,6 +287,100 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setContactTiktok(contactSettings.tiktokUrl);
     setContactSnapchat(contactSettings.snapchatUrl);
   }, [contactSettings]);
+
+  // User Contributions State
+  const [contributions, setContributions] = useState<UserContribution[]>([]);
+  const [loadingContributions, setLoadingContributions] = useState(false);
+  const [contributionFilter, setContributionFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [contributionSearch, setContributionSearch] = useState('');
+  const [rejectModalContribution, setRejectModalContribution] = useState<UserContribution | null>(null);
+  const [rejectReasonText, setRejectReasonText] = useState('');
+  const [previewContribution, setPreviewContribution] = useState<UserContribution | null>(null);
+
+  const loadContributions = async () => {
+    try {
+      setLoadingContributions(true);
+      const list = await fetchAllContributionsForAdmin();
+      setContributions(list);
+    } catch (err) {
+      console.error('Failed to load contributions', err);
+    } finally {
+      setLoadingContributions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadContributions();
+    }
+  }, [isAdmin]);
+
+  const pendingContributionsCount = useMemo(
+    () => contributions.filter((c) => c.status === 'pending').length,
+    [contributions]
+  );
+
+  const filteredContributions = useMemo(() => {
+    return contributions.filter((c) => {
+      if (contributionFilter !== 'all' && c.status !== contributionFilter) {
+        return false;
+      }
+      if (contributionSearch.trim()) {
+        const query = contributionSearch.trim().toLowerCase();
+        const matchesQ = c.questionText.toLowerCase().includes(query);
+        const matchesA = c.correctAnswer.toLowerCase().includes(query);
+        const matchesSub = (c.category || '').toLowerCase().includes(query);
+        const matchesUser =
+          (c.userName || '').toLowerCase().includes(query) ||
+          (c.userEmail || '').toLowerCase().includes(query);
+        if (!matchesQ && !matchesA && !matchesSub && !matchesUser) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [contributions, contributionFilter, contributionSearch]);
+
+  const handleApproveContribution = async (item: UserContribution) => {
+    try {
+      setActionLoading(true);
+      await approveAndPublishContribution(item, user?.uid || 'admin');
+      setStatusBanner(`تم اعتماد السؤال «${item.questionText.slice(0, 30)}...» بنجاح وإضافته إلى بنك الأسئلة العام.`);
+      await loadContributions();
+      if (onRefreshQuestions) await onRefreshQuestions();
+    } catch (err: any) {
+      console.error(err);
+      setStatusBanner(`حدث خطأ أثناء اعتماد السؤال: ${err.message || 'خطأ غير معروف'}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenRejectModal = (item: UserContribution) => {
+    setRejectModalContribution(item);
+    setRejectReasonText('');
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectModalContribution) return;
+    try {
+      setActionLoading(true);
+      await rejectContribution(
+        rejectModalContribution,
+        rejectReasonText.trim(),
+        user?.uid || 'admin'
+      );
+      setStatusBanner(`تم رفض المساهمة وإرسال سبب الرفض للمستخدم.`);
+      setRejectModalContribution(null);
+      setRejectReasonText('');
+      await loadContributions();
+    } catch (err: any) {
+      console.error(err);
+      setStatusBanner(`حدث خطأ أثناء الرفض: ${err.message || 'خطأ غير معروف'}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const questionImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -1747,6 +1849,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           <MessageCircle className="w-4 h-4" />
           <span>إدارة صفحة «تواصل معنا»</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setAdminTab('contributions');
+            loadContributions();
+          }}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+            adminTab === 'contributions'
+              ? 'bg-[#14543D] text-white'
+              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
+          }`}
+        >
+          <Inbox className="w-4 h-4" />
+          <span>مساهمات المستخدمين ({contributions.length})</span>
+          {pendingContributionsCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F07842] text-white">
+              {pendingContributionsCount} جديدة
+            </span>
+          )}
+        </button>
       </div>
 
       {statusBanner && (
@@ -3141,6 +3264,305 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         </div>
       )}
 
+      {/* TAB 6: USER CONTRIBUTIONS REVIEW (مساهمات المستخدمين) */}
+      {adminTab === 'contributions' && (
+        <div className="space-y-6">
+          {/* Header & Subtitle */}
+          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-[#14543D] mb-1 font-bold text-sm">
+                <Inbox className="w-5 h-5 text-[#F07842]" />
+                <span>مراجعة مساهمات اللاعبين والأسئلة المقترحة</span>
+              </div>
+              <p className="text-xs text-[#777B73]">
+                هنا تظهر جميع الأسئلة التي اقترحها المستخدمون من خلال «قائمتي الخاصة». يمكنك مراجعة نص السؤال والإجابة والصورة والتصنيف، ثم اعتماده لنشره فوراً في بنك الأسئلة العام أو رفضه مع ذكر السبب.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={loadContributions}
+                disabled={loadingContributions}
+                className="px-4 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 ${loadingContributions ? 'animate-spin' : ''}`}
+                />
+                <span>تحديث</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Bar & Search */}
+          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            {/* Status pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+              <button
+                type="button"
+                onClick={() => setContributionFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  contributionFilter === 'all'
+                    ? 'bg-[#14543D] text-white'
+                    : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
+                }`}
+              >
+                الكل ({contributions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setContributionFilter('pending')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  contributionFilter === 'pending'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                }`}
+              >
+                <span>قيد المراجعة</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
+                  {contributions.filter((c) => c.status === 'pending').length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setContributionFilter('approved')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  contributionFilter === 'approved'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                }`}
+              >
+                <span>معتمدة ومنشورة</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
+                  {contributions.filter((c) => c.status === 'approved').length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setContributionFilter('rejected')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  contributionFilter === 'rejected'
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
+                }`}
+              >
+                <span>مرفوضة</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
+                  {contributions.filter((c) => c.status === 'rejected').length}
+                </span>
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 text-[#777B73] absolute right-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={contributionSearch}
+                onChange={(e) => setContributionSearch(e.target.value)}
+                placeholder="ابحث بالنص، الإجابة، أو الكاتب..."
+                className="w-full pl-3 pr-9 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] placeholder:text-[#777B73]/70 focus:outline-hidden focus:border-[#14543D]"
+              />
+            </div>
+          </div>
+
+          {/* List of Contributions */}
+          {loadingContributions ? (
+            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center text-xs text-[#777B73]">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#14543D] mb-2" />
+              <span>جاري تحميل المساهمات من Firestore...</span>
+            </div>
+          ) : filteredContributions.length === 0 ? (
+            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center text-xs text-[#777B73] space-y-2">
+              <Inbox className="w-10 h-10 text-[#777B73]/40 mx-auto" />
+              <div className="font-bold text-[#252824] text-sm">
+                {contributionFilter === 'pending'
+                  ? 'لا توجد مساهمات قيد المراجعة حالياً'
+                  : 'لم يتم العثور على أي مساهمات مطابقة'}
+              </div>
+              <p className="max-w-md mx-auto text-[11px]">
+                عندما يرسل اللاعبون أسئلة من «قائمتي الخاصة»، ستظهر هنا فوراً لمراجعتها واعتمادها.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {filteredContributions.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#14543D]/40 rounded-2xl p-5 shadow-xs transition-all space-y-4"
+                >
+                  {/* Top Bar: Author Info & Badges */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E5E8DD]">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-[#14543D] text-white flex items-center justify-center text-xs font-bold">
+                        {(item.userName || item.userEmail || 'م')[0].toUpperCase()}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-bold text-[#252824]">
+                          {item.userName || 'مستخدم مساهم'}
+                        </div>
+                        <div className="text-[10px] text-[#777B73]" dir="ltr">
+                          {item.userEmail || '—'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#EAF2EE] text-[#14543D]">
+                        {item.mainCategory}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#F3F5E9] text-[#252824] border border-[#E5E8DD]">
+                        {item.category}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#F07842]/10 text-[#F07842]">
+                        {item.points} نقطة
+                      </span>
+
+                      {/* Status Badge */}
+                      {item.status === 'pending' && (
+                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800">
+                          قيد المراجعة
+                        </span>
+                      )}
+                      {item.status === 'approved' && (
+                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>معتمد ومنشور</span>
+                        </span>
+                      )}
+                      {item.status === 'rejected' && (
+                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100 text-rose-800 flex items-center gap-1">
+                          <XCircle className="w-3 h-3" />
+                          <span>مرفوض</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Question & Image Body */}
+                  <div className="flex flex-col md:flex-row gap-4 items-start">
+                    {item.imageUrl && (
+                      <div className="w-full md:w-40 h-32 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] overflow-hidden shrink-0 group relative">
+                        <img
+                          src={item.imageUrl}
+                          alt="صورة السؤال"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPreviewContribution(item)}
+                          className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-[11px] font-bold transition-opacity cursor-pointer"
+                        >
+                          تكبير الصورة
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex-1 space-y-3 min-w-0">
+                      <div>
+                        <div className="text-[11px] font-bold text-[#777B73] mb-1">
+                          نص السؤال:
+                        </div>
+                        <div className="text-sm font-bold text-[#252824] leading-relaxed">
+                          {item.questionText}
+                        </div>
+                      </div>
+
+                      <div className="bg-[#EAF2EE] border border-[#14543D]/20 rounded-xl p-3 space-y-1">
+                        <div className="text-[10px] font-bold text-[#14543D]">
+                          الإجابة النموذجية:
+                        </div>
+                        <div className="text-xs font-bold text-[#14543D]">
+                          {item.correctAnswer}
+                        </div>
+                      </div>
+
+                      {(item.explanation || item.source) && (
+                        <div className="flex flex-wrap gap-4 text-[11px] text-[#777B73]">
+                          {item.explanation && (
+                            <div>
+                              <span className="font-bold text-[#252824]">الشرح: </span>
+                              <span>{item.explanation}</span>
+                            </div>
+                          )}
+                          {item.source && (
+                            <div>
+                              <span className="font-bold text-[#252824]">المصدر: </span>
+                              <span>{item.source}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {item.status === 'rejected' && item.rejectionReason && (
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-0.5">
+                          <div className="font-bold">سبب الرفض المرسل للمستخدم:</div>
+                          <div>{item.rejectionReason}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-[11px] text-[#777B73]">
+                      تم الإرسال: {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString('ar-SA') : 'مؤخراً'}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewContribution(item)}
+                        className="px-3 py-1.5 rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-[#14543D]" />
+                        <span>معاينة في لوحة اللعبة</span>
+                      </button>
+
+                      {item.status === 'pending' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRejectModal(item)}
+                            disabled={actionLoading}
+                            className="px-3.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-xs font-bold text-rose-700 flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>رفض السؤال</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleApproveContribution(item)}
+                            disabled={actionLoading}
+                            className="px-4 py-1.5 rounded-lg bg-[#14543D] hover:bg-[#0E3D2C] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-[#F07842]" />
+                            <span>اعتماد ونشر في اللعبة</span>
+                          </button>
+                        </>
+                      )}
+
+                      {item.status === 'rejected' && (
+                        <button
+                          type="button"
+                          onClick={() => handleApproveContribution(item)}
+                          disabled={actionLoading}
+                          className="px-3.5 py-1.5 rounded-lg border border-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>إعادة اعتماد السؤال</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}
       {mainModalOpen && (
         <div
@@ -4184,6 +4606,149 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REJECT CONTRIBUTION REASON */}
+      {rejectModalContribution && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/65 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-rose-700 text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <XCircle className="w-4 h-4" />
+                <span>رفض مساهمة السؤال</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectModalContribution(null)}
+                className="text-white/80 hover:text-white text-xs cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div className="bg-[#F3F5E9] p-3 rounded-xl border border-[#E5E8DD] space-y-1">
+                <div className="font-bold text-[#252824]">السؤال:</div>
+                <div className="text-[#777B73] line-clamp-2">
+                  {rejectModalContribution.questionText}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-bold text-[#252824]">
+                  سبب الرفض (سيظهر للمستخدم في قائمته الخاصة لمساعدته في التعديل):
+                </label>
+                <textarea
+                  rows={3}
+                  value={rejectReasonText}
+                  onChange={(e) => setRejectReasonText(e.target.value)}
+                  placeholder="مثال: السؤال مكرر، أو الإجابة بحاجة لتدقيق، أو التصنيف غير مناسب..."
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] leading-relaxed resize-none focus:outline-hidden focus:border-rose-600"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-[#E5E8DD] flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setRejectModalContribution(null)}
+                  className="px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReject}
+                  disabled={actionLoading}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
+                >
+                  {actionLoading ? 'جاري الحفظ...' : 'تأكيد الرفض'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PREVIEW QUESTION IN GAME BOARD */}
+      {previewContribution && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/75 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#14543D] text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Eye className="w-4 h-4 text-[#F07842]" />
+                <span>معاينة السؤال كما يظهر في لوحة المنافسة</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewContribution(null)}
+                className="text-white/80 hover:text-white text-xs cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 text-right">
+              {/* Fake Game Tile Header */}
+              <div className="flex items-center justify-between bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl px-4 py-2.5 text-xs">
+                <div className="font-bold text-[#14543D]">
+                  {previewContribution.mainCategory} • {previewContribution.category}
+                </div>
+                <div className="font-mono font-bold text-[#F07842] text-sm">
+                  {previewContribution.points} نقطة
+                </div>
+              </div>
+
+              {/* Fake Question Card Display */}
+              <div className="border-2 border-[#14543D] rounded-2xl p-6 bg-[#FFFFFF] shadow-md space-y-4 text-center">
+                {previewContribution.imageUrl && (
+                  <div className="w-full max-h-64 rounded-xl overflow-hidden bg-[#F3F5E9] border border-[#E5E8DD] mx-auto">
+                    <img
+                      src={previewContribution.imageUrl}
+                      alt="صورة السؤال"
+                      className="w-full h-full max-h-64 object-contain"
+                    />
+                  </div>
+                )}
+
+                <div className="font-bold text-lg text-[#252824] leading-relaxed py-2">
+                  {previewContribution.questionText}
+                </div>
+
+                <div className="border-t border-[#E5E8DD] pt-4 text-right space-y-2">
+                  <div className="text-xs font-bold text-[#14543D]">الإجابة الصحيحة:</div>
+                  <div className="bg-[#EAF2EE] border border-[#14543D]/20 rounded-xl p-3 text-sm font-bold text-[#14543D]">
+                    {previewContribution.correctAnswer}
+                  </div>
+                </div>
+
+                {previewContribution.explanation && (
+                  <div className="text-right text-xs text-[#777B73] bg-[#F3F5E9] p-3 rounded-xl">
+                    <span className="font-bold text-[#252824]">الشرح: </span>
+                    {previewContribution.explanation}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPreviewContribution(null)}
+                  className="px-6 py-2 rounded-xl bg-[#14543D] text-white font-bold text-xs cursor-pointer hover:bg-[#0E3D2C]"
+                >
+                  إغلاق المعاينة
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

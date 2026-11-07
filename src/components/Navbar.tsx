@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown } from 'lucide-react';
+import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown, Bookmark } from 'lucide-react';
 import { PageView } from '../types/game';
 import { User } from 'firebase/auth';
 
@@ -47,11 +47,17 @@ export const Navbar: React.FC<NavbarProps> = ({
       label: isGameLocked ? 'الفرق (مقفلة)' : 'سوّ فريقك',
       locked: isGameLocked,
     },
+    { id: 'my_lists' as PageView, label: 'قائمتي الخاصة' },
     { id: 'contact', label: 'تواصل معنا' },
     ...(isAdmin ? [{ id: 'admin' as PageView, label: 'لوحة المشرف' }] : []),
   ];
 
   const handleSelect = (page: PageView) => {
+    if (page === 'my_lists' && !user) {
+      if (onOpenAuth) onOpenAuth();
+      setMobileOpen(false);
+      return;
+    }
     onNavigate(page);
     setMobileOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -172,6 +178,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {user.email}
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelect('my_lists')}
+                    className="w-full text-right flex items-center gap-2 px-3 py-2 text-xs font-bold text-[#14543D] hover:bg-[#EAF2EE] rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Bookmark className="w-4 h-4 text-[#F07842]" />
+                    <span>قائمتي الخاصة</span>
+                  </button>
 
                   {isAdmin && (
                     <button

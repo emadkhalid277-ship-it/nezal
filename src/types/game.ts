@@ -5,7 +5,8 @@ export type PageView =
   | 'board'
   | 'results'
   | 'admin'
-  | 'contact';
+  | 'contact'
+  | 'my_lists';
 
 export type MainCategoryName = string;
 
@@ -124,4 +125,68 @@ export const SUBCATEGORIES_PER_TEAM = 3;
 export const TARGET_QUESTIONS_PER_CATEGORY = 25;
 export const TARGET_TOTAL_QUESTIONS = 1975;
 export const DEFAULT_BRAND_NAME = 'نِزال';
+
+export interface UserQuestionList {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ContributionStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+
+export interface UserCustomQuestion {
+  id: string;
+  listId: string;
+  userId: string;
+  mainCategoryId: string;
+  mainCategory: string;
+  subcategoryId: string;
+  category: string;
+  questionText: string;
+  correctAnswer: string;
+  points: PointValue;
+  difficulty: DifficultyLevel;
+  explanation?: string;
+  source?: string;
+  imageUrl?: string;
+  imageStoragePath?: string;
+  imageDescription?: string;
+  contributionStatus: ContributionStatus;
+  contributionId?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserContribution {
+  id: string;
+  originalQuestionId: string;
+  originalListId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  mainCategoryId: string;
+  mainCategory: string;
+  subcategoryId: string;
+  category: string;
+  questionText: string;
+  correctAnswer: string;
+  points: PointValue;
+  difficulty: DifficultyLevel;
+  explanation?: string;
+  source?: string;
+  imageUrl?: string;
+  imageStoragePath?: string;
+  imageDescription?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  publishedQuestionId?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
 

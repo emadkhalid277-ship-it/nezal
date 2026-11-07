@@ -48,6 +48,7 @@ import { GameBoardPage } from './pages/GameBoardPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { ContactPage } from './pages/ContactPage';
+import { MyQuestionListsPage } from './pages/MyQuestionListsPage';
 
 export const DEFAULT_TEAM_TEMPLATES: Omit<TeamConfig, 'score'>[] = [
   {
@@ -94,6 +95,7 @@ const VALID_PAGES: PageView[] = [
   'results',
   'contact',
   'admin',
+  'my_lists',
 ];
 
 interface SavedGameSession {
@@ -970,6 +972,16 @@ export default function App() {
                 contactSettings={contactSettings}
                 isAdmin={isAdmin}
                 onNavigate={handleNavigate}
+              />
+            )}
+
+            {activePage === 'my_lists' && (
+              <MyQuestionListsPage
+                user={user}
+                mainCategories={mainCategories}
+                subcategories={activeSubcategories}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                onNavigateHome={() => handleNavigate('home')}
               />
             )}
 

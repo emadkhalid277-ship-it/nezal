@@ -396,5 +396,32 @@ service cloud.firestore {
 
       allow delete: if isValidId(questionId) && isAdmin();
     }
+
+    // User Question Lists (Personal question lists belonging strictly to the user)
+    match /userQuestionLists/{listId} {
+      allow get: if isSignedIn() && isValidId(listId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(listId) && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(listId) && (existing().userId == request.auth.uid || isAdmin()) && incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && isValidId(listId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // User Custom Questions (Private questions inside personal lists)
+    match /userCustomQuestions/{questionId} {
+      allow get: if isSignedIn() && isValidId(questionId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(questionId) && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(questionId) && (existing().userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && isValidId(questionId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // Contributions collection (Questions submitted by users for admin review)
+    match /contributions/{contributionId} {
+      allow get: if isSignedIn() && isValidId(contributionId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(contributionId) && incoming().userId == request.auth.uid && incoming().status == 'pending';
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
   }
 }
