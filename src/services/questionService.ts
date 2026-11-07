@@ -41,6 +41,7 @@ import {
   INITIAL_SEED_QUESTIONS,
   MAIN_CATEGORIES,
 } from '../data/categoriesAndSeed';
+import { ALL_EXPANDED_QUESTIONS } from '../data/questions';
 
 const QUESTIONS_COLLECTION = 'questions';
 const SUBCATEGORIES_COLLECTION = 'subcategories';
@@ -1374,7 +1375,8 @@ export async function createQuestionInFirestore(
 
 export async function updateQuestionInFirestore(
   questionId: string,
-  payload: Omit<CreateQuestionPayload, 'id'>
+  payload: Omit<CreateQuestionPayload, 'id'>,
+  authorId: string = 'system'
 ): Promise<void> {
   const cleanQuestionText = payload.questionText.trim().slice(0, 600);
   const cleanCorrectAnswer = payload.correctAnswer.trim().slice(0, 300);
@@ -1421,13 +1423,27 @@ export async function updateQuestionInFirestore(
     updateData.subcategoryId = sanitizeId(payload.subcategoryId);
   }
 
+  const cleanDocId = sanitizeId(questionId);
+  const docRef = doc(db, QUESTIONS_COLLECTION, cleanDocId);
+
   try {
-    await updateDoc(doc(db, QUESTIONS_COLLECTION, questionId), updateData);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      await updateDoc(docRef, updateData);
+    } else {
+      // Document is being persisted from the question bank for the first time
+      await setDoc(docRef, {
+        id: cleanDocId,
+        authorId: authorId.slice(0, 128),
+        createdAt: serverTimestamp(),
+        ...updateData,
+      });
+    }
   } catch (error) {
     handleFirestoreError(
       error,
       OperationType.UPDATE,
-      `${QUESTIONS_COLLECTION}/${questionId}`
+      `${QUESTIONS_COLLECTION}/${cleanDocId}`
     );
   }
 }
@@ -1436,16 +1452,45 @@ export async function updateQuestionStatusInFirestore(
   questionId: string,
   status: ApprovalStatus
 ): Promise<void> {
+  const cleanDocId = sanitizeId(questionId);
+  const docRef = doc(db, QUESTIONS_COLLECTION, cleanDocId);
   try {
-    await updateDoc(doc(db, QUESTIONS_COLLECTION, questionId), {
-      status,
-      reviewedAt: serverTimestamp(),
-    });
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      await updateDoc(docRef, {
+        status,
+        reviewedAt: serverTimestamp(),
+      });
+    } else {
+      // Document from expanded question bank being approved/reviewed for the first time
+      const fallback = ALL_EXPANDED_QUESTIONS.find((q) => q.id === questionId);
+      if (fallback) {
+        await setDoc(docRef, {
+          id: cleanDocId,
+          subcategoryId: fallback.subcategoryId ? sanitizeId(fallback.subcategoryId) : undefined,
+          category: fallback.category.trim().slice(0, 80),
+          questionText: fallback.questionText.trim().slice(0, 600),
+          questionType: 'direct',
+          difficulty: fallback.difficulty,
+          points: fallback.points,
+          options: [],
+          correctAnswer: fallback.correctAnswer.trim().slice(0, 300),
+          explanation: (fallback.explanation || '').trim().slice(0, 800),
+          source: (fallback.source || 'بنك أسئلة نِزال المعتمد').trim().slice(0, 300),
+          status,
+          imageUrl: fallback.imageUrl || '',
+          imageDescription: fallback.imageDescription || '',
+          authorId: 'system',
+          createdAt: serverTimestamp(),
+          reviewedAt: serverTimestamp(),
+        });
+      }
+    }
   } catch (error) {
     handleFirestoreError(
       error,
       OperationType.UPDATE,
-      `${QUESTIONS_COLLECTION}/${questionId}`
+      `${QUESTIONS_COLLECTION}/${cleanDocId}`
     );
   }
 }
@@ -1563,33 +1608,78 @@ export async function seedInitialQuestionsToFirestore(
     }
   }
 
-  for (const item of INITIAL_SEED_QUESTIONS) {
-    const cleanId = sanitizeId(item.id);
-    if (existingIds.has(cleanId)) continue;
+  // Combine full expanded bank of 1,975 questions with legacy seed questions (deduplicated by ID)
+  const legacyItems: TriviaQuestion[] = INITIAL_SEED_QUESTIONS.map((seed) => ({
+    id: seed.id,
+    category: seed.category,
+    questionText: seed.questionText,
+    questionType: seed.questionType,
+    difficulty: seed.difficulty,
+    points: seed.points,
+    options: seed.options || [],
+    correctAnswer: seed.correctAnswer,
+    explanation: seed.explanation,
+    source: seed.source,
+    status: 'approved',
+    authorId: 'system',
+    createdAt: new Date().toISOString(),
+    reviewedAt: new Date().toISOString(),
+  }));
 
-    batch.set(doc(db, QUESTIONS_COLLECTION, cleanId), {
-      id: cleanId,
-      category: item.category.trim().slice(0, 80),
-      questionText: item.questionText.trim().slice(0, 600),
-      questionType: 'direct',
-      difficulty: item.difficulty,
-      points: item.points,
-      options: [],
-      correctAnswer: item.correctAnswer.trim().slice(0, 300),
-      explanation: item.explanation.trim().slice(0, 800),
-      source: item.source.trim().slice(0, 300),
-      status: 'approved',
-      authorId: authorId.slice(0, 128),
-      createdAt: serverTimestamp(),
-      reviewedAt: serverTimestamp(),
-    });
-    addedCount++;
+  const combinedItems: TriviaQuestion[] = [
+    ...ALL_EXPANDED_QUESTIONS,
+    ...legacyItems,
+  ];
+
+  const seenIds = new Set<string>();
+  const uniqueItems: TriviaQuestion[] = [];
+  for (const item of combinedItems) {
+    const cleanId = sanitizeId(item.id);
+    if (!seenIds.has(cleanId) && !existingIds.has(cleanId)) {
+      seenIds.add(cleanId);
+      uniqueItems.push(item);
+    }
   }
 
-  try {
-    await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, QUESTIONS_COLLECTION);
+  // Commit in safe chunks of 100 documents per batch to avoid limits and timeouts
+  const BATCH_CHUNK_SIZE = 100;
+  for (let i = 0; i < uniqueItems.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = uniqueItems.slice(i, i + BATCH_CHUNK_SIZE);
+    const chunkBatch = writeBatch(db);
+
+    for (const item of chunk) {
+      const cleanId = sanitizeId(item.id);
+      const docRef = doc(db, QUESTIONS_COLLECTION, cleanId);
+
+      chunkBatch.set(docRef, {
+        id: cleanId,
+        subcategoryId: item.subcategoryId ? sanitizeId(item.subcategoryId) : undefined,
+        category: item.category.trim().slice(0, 80),
+        questionText: item.questionText.trim().slice(0, 600),
+        questionType: 'direct',
+        difficulty: item.difficulty,
+        points: item.points,
+        options: [],
+        correctAnswer: item.correctAnswer.trim().slice(0, 300),
+        explanation: (item.explanation || '').trim().slice(0, 800),
+        source: (item.source || 'بنك أسئلة نِزال المعتمد').trim().slice(0, 300),
+        status: item.status || 'pending',
+        imageUrl: item.imageUrl || '',
+        imageDescription: item.imageDescription || '',
+        authorId: authorId.slice(0, 128),
+        createdAt: serverTimestamp(),
+        reviewedAt: serverTimestamp(),
+      });
+      addedCount++;
+    }
+
+    try {
+      await chunkBatch.commit();
+    } catch (batchErr) {
+      console.error(`Batch commit failed at offset ${i}:`, batchErr);
+      // Stop gracefully to keep successfully saved batches intact
+      throw batchErr;
+    }
   }
 
   return addedCount;

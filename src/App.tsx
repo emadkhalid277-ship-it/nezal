@@ -23,6 +23,7 @@ import {
   MAIN_CATEGORIES,
   TEAM_COLOR_OPTIONS,
 } from './data/categoriesAndSeed';
+import { ALL_EXPANDED_QUESTIONS } from './data/questions';
 import {
   DEFAULT_CONTACT_SETTINGS,
   cleanupRemovedMoviesCategoryInFirestore,
@@ -82,23 +83,7 @@ const INITIAL_TEAMS: TeamConfig[] = DEFAULT_TEAM_TEMPLATES.slice(0, 2).map(
   })
 );
 
-export const BUILTIN_FALLBACK_QUESTIONS: TriviaQuestion[] =
-  INITIAL_SEED_QUESTIONS.map((seed) => ({
-    id: seed.id,
-    category: seed.category,
-    questionText: seed.questionText,
-    questionType: seed.questionType,
-    difficulty: seed.difficulty,
-    points: seed.points,
-    options: seed.options || [],
-    correctAnswer: seed.correctAnswer,
-    explanation: seed.explanation,
-    source: seed.source,
-    status: 'approved',
-    authorId: 'system',
-    createdAt: new Date().toISOString(),
-    reviewedAt: new Date().toISOString(),
-  }));
+export const BUILTIN_FALLBACK_QUESTIONS: TriviaQuestion[] = ALL_EXPANDED_QUESTIONS;
 
 const GAME_SESSION_STORAGE_KEY = 'nizal_game_session_v1';
 const VALID_PAGES: PageView[] = [
@@ -509,19 +494,35 @@ export default function App() {
     [isGameLocked, teams, activeSubcategories]
   );
 
-  // Load questions from Firestore
+  // Load questions from Firestore and merge seamlessly with the built-in expanded question bank
   const loadQuestions = useCallback(async (adminAccess: boolean) => {
     setLoadingQuestions(true);
     try {
-      const list = adminAccess
+      const firestoreList = adminAccess
         ? await fetchAllQuestionsForAdmin()
         : await fetchApprovedQuestions();
-      if (!list || list.length === 0) {
-        setAllQuestions(BUILTIN_FALLBACK_QUESTIONS);
-        return BUILTIN_FALLBACK_QUESTIONS;
-      }
-      setAllQuestions(list);
-      return list;
+
+      const firestoreQuestions = firestoreList || [];
+      const firestoreMap = new Map<string, TriviaQuestion>();
+      firestoreQuestions.forEach((q) => {
+        firestoreMap.set(q.id, q);
+      });
+
+      // Merge: Firestore documents take precedence over built-in questions, preserving the full question bank
+      const mergedList = BUILTIN_FALLBACK_QUESTIONS.map((builtin) => {
+        return firestoreMap.get(builtin.id) || builtin;
+      });
+
+      // Also include any additional custom questions created in Firestore that are not in BUILTIN_FALLBACK_QUESTIONS
+      const builtinIds = new Set(BUILTIN_FALLBACK_QUESTIONS.map((b) => b.id));
+      firestoreQuestions.forEach((fq) => {
+        if (!builtinIds.has(fq.id)) {
+          mergedList.push(fq);
+        }
+      });
+
+      setAllQuestions(mergedList);
+      return mergedList;
     } catch (err) {
       console.error('Failed to load questions from Firestore:', err);
       setAllQuestions(BUILTIN_FALLBACK_QUESTIONS);

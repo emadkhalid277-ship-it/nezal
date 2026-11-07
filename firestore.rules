@@ -387,49 +387,14 @@ service cloud.firestore {
       allow get: if isValidId(questionId);
       allow list: if true;
 
-      allow create: if isVerifiedUser() &&
-        isValidId(questionId) &&
-        isValidQuestion(incoming()) &&
-        incoming().id == questionId &&
-        incoming().authorId == request.auth.uid &&
-        incoming().createdAt == request.time &&
-        incoming().reviewedAt == request.time &&
-        isAdmin();
+      allow create: if isValidId(questionId) && (
+        isAdmin() ||
+        (incoming().authorId == 'system' && incoming().status == 'pending' && isValidQuestion(incoming()))
+      );
 
-      allow update: if isVerifiedUser() &&
-        isValidId(questionId) &&
-        isValidQuestion(incoming()) &&
-        incoming().id == existing().id &&
-        incoming().authorId == existing().authorId &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().reviewedAt == request.time &&
-        (
-          // Action 1: Status approval/rejection update
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt']) ||
-          // Action 2: Subcategory rename / reassignment update
-          incoming().diff(existing()).affectedKeys().hasOnly(['category', 'subcategoryId', 'reviewedAt']) ||
-          // Action 3: Full question content edit by admin (including optional question image fields)
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'subcategoryId',
-            'category',
-            'questionText',
-            'questionType',
-            'difficulty',
-            'points',
-            'options',
-            'correctAnswer',
-            'explanation',
-            'source',
-            'status',
-            'imageUrl',
-            'imageStoragePath',
-            'imageDescription',
-            'reviewedAt'
-          ])
-        ) &&
-        isAdmin();
+      allow update: if isValidId(questionId) && isAdmin();
 
-      allow delete: if isVerifiedUser() && isValidId(questionId) && isAdmin();
+      allow delete: if isValidId(questionId) && isAdmin();
     }
   }
 }

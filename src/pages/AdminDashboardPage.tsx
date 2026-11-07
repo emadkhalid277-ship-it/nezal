@@ -1158,7 +1158,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       };
 
       if (editingQuestionId) {
-        await updateQuestionInFirestore(editingQuestionId, payload);
+        await updateQuestionInFirestore(editingQuestionId, payload, user?.uid || 'system');
         // Clean up old Storage file if the image was replaced or deleted
         if (
           originalImageStoragePath &&
@@ -1641,11 +1641,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             type="button"
             disabled={seeding}
             onClick={onSeedFoundationalPack}
-            className="px-3.5 py-2.5 text-xs font-bold text-[#14543D] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2.5 text-xs font-bold text-[#14543D] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#14543D]/25 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+            title="حفظ وتزامن 1,975 سؤالاً مباشراً لجميع الفئات الـ 79 في Firestore بدفعات منظمة"
           >
-            <Sparkles className="w-4 h-4 text-[#F07842]" />
+            <Sparkles className="w-4 h-4 text-[#F07842] animate-pulse" />
             <span>
-              {seeding ? 'جاري التحديث...' : 'تحديث الحزمة التأسيسية'}
+              {seeding ? 'جارٍ الحفظ والتزامن بدفعات...' : 'تزامن بنك الأسئلة الشامل (1,975 سؤال)'}
             </span>
           </button>
 
