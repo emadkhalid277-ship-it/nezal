@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown, Bookmark } from 'lucide-react';
+import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown, Bookmark, Trophy } from 'lucide-react';
 import { PageView } from '../types/game';
 import { User } from 'firebase/auth';
 
@@ -57,13 +57,14 @@ export const Navbar: React.FC<NavbarProps> = ({
       label: isGameLocked ? 'الفرق (مقفلة)' : 'سوّ فريقك',
       locked: isGameLocked,
     },
+    { id: 'my_matches' as PageView, label: 'مبارياتي' },
     { id: 'my_lists' as PageView, label: 'قائمتي الخاصة' },
     { id: 'contact', label: 'تواصل معنا' },
     ...(isAdmin ? [{ id: 'admin' as PageView, label: 'لوحة المشرف' }] : []),
   ];
 
   const handleSelect = (page: PageView) => {
-    if (page === 'my_lists' && !user) {
+    if ((page === 'my_lists' || page === 'my_matches') && !user) {
       if (onOpenAuth) onOpenAuth();
       setMobileOpen(false);
       return;
@@ -203,6 +204,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     <Bookmark className="w-4 h-4 text-[#F07842]" />
                     <span>قائمتي الخاصة</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelect('my_matches')}
+                    className="w-full text-right flex items-center gap-2 px-3 py-2 text-xs font-bold text-[#14543D] hover:bg-[#EAF2EE] rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Trophy className="w-4 h-4 text-[#F07842]" />
+                    <span>سجل مبارياتي</span>
                   </button>
 
                   {isAdmin && (

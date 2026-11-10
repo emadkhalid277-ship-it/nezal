@@ -14,6 +14,7 @@ import {
   signInWithEmail,
   registerWithEmail,
   resetUserPassword,
+  signInWithGooglePopup,
 } from '../lib/firebase';
 import { User } from 'firebase/auth';
 
@@ -21,6 +22,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (user: User) => void;
+  requireAuthMessage?: string | null;
 }
 
 type AuthMode = 'login' | 'register' | 'forgot';
@@ -29,6 +31,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  requireAuthMessage,
 }) => {
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -39,6 +42,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const user = await signInWithGooglePopup();
+      if (user && onSuccess) {
+        onSuccess(user);
+      }
+      onClose();
+    } catch (err: any) {
+      console.warn('Google sign in error:', err);
+      setError('تعذر تسجيل الدخول بواسطة Google، يرجى المحاولة مرة أخرى.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,6 +155,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Require Auth Message Banner */}
+        {requireAuthMessage && (
+          <div className="p-3.5 rounded-2xl bg-[#EAF2EE] border border-[#14543D]/30 text-xs font-bold text-[#14543D] flex items-center gap-2.5">
+            <LogIn className="w-4 h-4 shrink-0 text-[#F07842]" />
+            <span>{requireAuthMessage}</span>
+          </div>
+        )}
+
+        {/* Google Sign-in Button */}
+        {mode !== 'forgot' && (
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="w-full py-3 px-4 rounded-xl border border-[#E5E8DD] hover:bg-[#F3F5E9] bg-[#FFFFFF] text-xs font-bold text-[#252824] flex items-center justify-center gap-2.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-60"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.665-5.17 3.665-9.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.27v3.09C3.29 21.43 7.37 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.32c-.25-.72-.38-1.49-.38-2.32s.13-1.6.38-2.32V6.59H1.27C.46 8.21 0 10.05 0 12s.46 3.79 1.27 5.41l4.01-3.09z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.29 2.57 1.27 6.59l4.01 3.09c.95-2.83 3.6-4.93 6.72-4.93z"
+                />
+              </svg>
+              <span>المتابعة السريعة باستخدام Google</span>
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-[#E5E8DD]" />
+              <span className="text-[11px] text-[#777B73]">أو عبر البريد الإلكتروني</span>
+              <div className="flex-1 h-px bg-[#E5E8DD]" />
+            </div>
+          </div>
+        )}
 
         {/* Tab switch between Login & Register */}
         {mode !== 'forgot' && (

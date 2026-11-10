@@ -69,6 +69,7 @@ interface GameBoardPageProps {
   isAdmin: boolean;
   onSeedQuestions: () => Promise<void>;
   seeding: boolean;
+  onActiveQuestionChange?: (state: any) => void;
 }
 
 const POINT_TIERS: PointValue[] = [100, 200, 300, 400, 500];
@@ -107,6 +108,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   isAdmin,
   onSeedQuestions,
   seeding,
+  onActiveQuestionChange,
 }) => {
   // Pinned question IDs per tileKey for the current round so closing & reopening a tile keeps the same question
   const [pinnedTileQuestions, setPinnedTileQuestions] = useState<
@@ -234,6 +236,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     try {
       if (!activeSelection) {
         localStorage.removeItem(ACTIVE_MODAL_STORAGE_KEY);
+        onActiveQuestionChange?.(null);
       } else {
         localStorage.setItem(
           ACTIVE_MODAL_STORAGE_KEY,
@@ -244,6 +247,22 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
             timerPaused,
           })
         );
+        onActiveQuestionChange?.({
+          tileKey: activeSelection.tileKey,
+          subcategoryId: activeSelection.subcategoryId,
+          subcategoryName: activeSelection.subcategoryName,
+          mainCategoryName: activeSelection.mainCategoryName,
+          points: activeSelection.points,
+          questionId: activeSelection.question.id,
+          questionText: activeSelection.question.questionText,
+          correctAnswer: activeSelection.question.correctAnswer,
+          imageUrl: activeSelection.question.imageUrl,
+          imageDescription: activeSelection.question.imageDescription,
+          explanation: activeSelection.question.explanation,
+          answerRevealed,
+          timeLeft,
+          timerPaused,
+        });
       }
     } catch {
       // ignore
@@ -253,6 +272,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     answerRevealed,
     timeLeft,
     timerPaused,
+    onActiveQuestionChange,
   ]);
 
   // If the currently open tile was already marked used (e.g. from another tab/action), close modal

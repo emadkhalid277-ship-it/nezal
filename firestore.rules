@@ -431,5 +431,14 @@ service cloud.firestore {
       allow update: if isValidId(roomId);
       allow delete: if isAdmin();
     }
+
+    // User Game Matches collection (Personal match progress and match history)
+    match /userGameMatches/{matchId} {
+      allow get: if isSignedIn() && isValidId(matchId) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(matchId) && incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(matchId) && (existing().userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && isValidId(matchId) && (existing().userId == request.auth.uid || isAdmin());
+    }
   }
 }

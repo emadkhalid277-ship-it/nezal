@@ -66,6 +66,7 @@ import {
 } from '../services/multiplayerService';
 import { TEAM_COLOR_OPTIONS } from '../data/categoriesAndSeed';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
+import { saveMatchProgressToFirestore } from '../services/matchService';
 
 interface OnlineMultiplayerPageProps {
   user: User | null;
@@ -74,6 +75,7 @@ interface OnlineMultiplayerPageProps {
   approvedQuestions: TriviaQuestion[];
   onNavigateHome: () => void;
   onNavigate?: (page: PageView) => void;
+  onOpenAuthModal?: () => void;
   initialRoomCode?: string | null;
 }
 
@@ -85,6 +87,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   subcategories,
   approvedQuestions,
   onNavigateHome,
+  onNavigate,
+  onOpenAuthModal,
   initialRoomCode,
 }) => {
   // Local profile & session
@@ -310,6 +314,57 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           return;
         }
         setCurrentRoom(updatedRoom);
+
+        // Auto-save progress to user's match history
+        if (
+          user &&
+          (updatedRoom.status === 'in_game' || updatedRoom.status === 'finished')
+        ) {
+          const sorted = [...updatedRoom.teams].sort((a, b) => b.score - a.score);
+          const playersList = Object.values(updatedRoom.players || {});
+          saveMatchProgressToFirestore({
+            id: `online_${updatedRoom.code}_${user.uid}`,
+            userId: user.uid,
+            userEmail: user.email || null,
+            status: updatedRoom.status === 'finished' ? 'completed' : 'in_progress',
+            mode: 'online',
+            roomCode: updatedRoom.code,
+            teams: updatedRoom.teams.map((t) => ({
+              id: t.id,
+              name: t.name,
+              color: t.color,
+              score: t.score,
+              players: playersList
+                .filter((p) => p.teamId === t.id)
+                .map((p) => p.name),
+            })),
+            selectedSubcategories: updatedRoom.selectedSubcategoryIds || [],
+            usedTileKeys: updatedRoom.usedTileKeys || [],
+            activeTeamIndex: updatedRoom.activeTeamIndex || 0,
+            activeQuestionState: updatedRoom.activeQuestion
+              ? {
+                  tileKey: updatedRoom.activeQuestion.tileKey,
+                  subcategoryId: updatedRoom.activeQuestion.subcategoryId,
+                  subcategoryName: updatedRoom.activeQuestion.subcategoryName,
+                  mainCategoryName: updatedRoom.activeQuestion.category,
+                  points: (updatedRoom.activeQuestion.points as any) || 100,
+                  questionId: updatedRoom.activeQuestion.questionId,
+                  questionText: updatedRoom.activeQuestion.questionText,
+                  correctAnswer: updatedRoom.activeQuestion.correctAnswer,
+                  imageUrl: updatedRoom.activeQuestion.imageUrl,
+                  imageDescription: updatedRoom.activeQuestion.imageDescription,
+                  explanation: updatedRoom.activeQuestion.explanation,
+                  answerRevealed: updatedRoom.activeQuestion.isAnswerRevealed,
+                  timeLeft: updatedRoom.timerDuration || 60,
+                  timerPaused: false,
+                }
+              : null,
+            winnerTeamName:
+              updatedRoom.status === 'finished' ? sorted[0]?.name : undefined,
+            winnerScore:
+              updatedRoom.status === 'finished' ? sorted[0]?.score : undefined,
+          }).catch(() => {});
+        }
       },
       (err) => {
         console.error('Room subscription error:', err);
@@ -628,6 +683,44 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // Total playable tiles
   const totalPlayableTiles = onlineBoardColumns.length * 5;
   const usedCount = currentRoom?.usedTileKeys?.length || 0;
+
+  // Mandatory Login Gate for Online Multiplayer
+  if (!user) {
+    return (
+      <div className="max-w-[700px] mx-auto px-4 py-16 text-center space-y-6">
+        <div className="w-16 h-16 rounded-3xl bg-[#FEF2EC] border border-[#F07842]/20 text-[#F07842] flex items-center justify-center mx-auto">
+          <Radio className="w-8 h-8 animate-pulse text-[#F07842]" />
+        </div>
+        <div className="space-y-2">
+          <div className="inline-block px-3 py-1 rounded-full bg-[#EAF2EE] text-xs font-bold text-[#14543D]">
+            تسجيل الدخول إلزامي
+          </div>
+          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+            اللعب عن بُعد يتطلب تسجيل الدخول
+          </h1>
+          <p className="text-sm text-[#777B73] max-w-md mx-auto">
+            لإنشاء غرفة أو الانضمام إلى مباراة أونلاين وحفظ تقدمك ونتائجك، يرجى تسجيل الدخول إلى حسابك أو إنشاء حساب جديد.
+          </p>
+        </div>
+        <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={onOpenAuthModal}
+            className="px-8 py-3.5 rounded-2xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer shadow-sm transition-all"
+          >
+            تسجيل الدخول / إنشاء حساب
+          </button>
+          <button
+            type="button"
+            onClick={onNavigateHome}
+            className="px-6 py-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824] text-sm font-bold hover:bg-[#F3F5E9] cursor-pointer transition-colors"
+          >
+            العودة للرئيسية
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // -------------------------------------------------------------
   // RENDER: 1. ENTRY SCREEN (Create or Join Room)

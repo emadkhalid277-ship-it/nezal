@@ -76,6 +76,20 @@ const OnlineMultiplayerPage = lazy(() =>
     default: m.OnlineMultiplayerPage,
   }))
 );
+const MyMatchesPage = lazy(() =>
+  import('./pages/MyMatchesPage').then((m) => ({
+    default: m.MyMatchesPage,
+  }))
+);
+import { ResumeMatchModal } from './components/ResumeMatchModal';
+import { UserGameMatch } from './types/match';
+import {
+  saveMatchProgressToFirestore,
+  fetchActiveIncompleteMatch,
+  markMatchAbandoned,
+  markMatchCompleted,
+  generateMatchId,
+} from './services/matchService';
 
 function PageFallback() {
   return (
@@ -135,6 +149,7 @@ const VALID_PAGES: PageView[] = [
   'admin',
   'my_lists',
   'online_multiplayer',
+  'my_matches',
 ];
 
 interface SavedGameSession {
@@ -250,6 +265,18 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Mandatory Login Target & Resume Match State
+  const [pendingPlayTarget, setPendingPlayTarget] = useState<PageView | null>(
+    null
+  );
+  const [currentMatchId, setCurrentMatchId] = useState<string | null>(null);
+  const [incompleteMatch, setIncompleteMatch] =
+    useState<UserGameMatch | null>(null);
+  const [isResumeModalOpen, setIsResumeModalOpen] = useState<boolean>(false);
+  const [activeQuestionSaved, setActiveQuestionSaved] = useState<any | null>(
+    null
+  );
 
   // Firestore Questions, Categories & Contact Settings State
   const [allQuestions, setAllQuestions] = useState<TriviaQuestion[]>(
@@ -662,6 +689,19 @@ export default function App() {
       ]);
       setCategoriesLoaded(true);
 
+      // Check if user has an unfinished active match from a previous session
+      if (currentUser) {
+        try {
+          const match = await fetchActiveIncompleteMatch(currentUser.uid);
+          if (match && match.status === 'in_progress') {
+            setIncompleteMatch(match);
+            setIsResumeModalOpen(true);
+          }
+        } catch (err) {
+          console.warn('Could not check incomplete matches:', err);
+        }
+      }
+
       // Auto-seed foundational questions & subcategories once if an admin signs in to an empty database
       if (adminStatus && currentUser && loadedQuestions.length === 0) {
         setSeeding(true);
@@ -723,7 +763,75 @@ export default function App() {
     setIsAdmin(false);
   };
 
+  const autoSaveMatch = useCallback(
+    async (overrides?: Partial<UserGameMatch>) => {
+      if (!user) return;
+      const matchId = overrides?.id || currentMatchId || generateMatchId();
+      if (!currentMatchId) {
+        setCurrentMatchId(matchId);
+      }
+
+      const payload: UserGameMatch = {
+        id: matchId,
+        userId: user.uid,
+        userEmail: user.email || null,
+        status: 'in_progress',
+        mode: 'local',
+        teams,
+        teamSubcategoryIds,
+        selectedSubcategories,
+        orderedTeamSelections,
+        activeTeamIndex,
+        usedTileKeys,
+        roundUsedQuestionIds,
+        timerDuration,
+        isGameLocked,
+        activePage,
+        activeQuestionState: activeQuestionSaved,
+        updatedAt: Date.now(),
+        ...overrides,
+      };
+
+      try {
+        await saveMatchProgressToFirestore(payload);
+      } catch (err) {
+        console.warn('Auto-save match progress error:', err);
+      }
+    },
+    [
+      user,
+      currentMatchId,
+      teams,
+      teamSubcategoryIds,
+      selectedSubcategories,
+      orderedTeamSelections,
+      activeTeamIndex,
+      usedTileKeys,
+      roundUsedQuestionIds,
+      timerDuration,
+      isGameLocked,
+      activePage,
+      activeQuestionSaved,
+    ]
+  );
+
   const handleNavigate = (page: PageView) => {
+    // 1. Mandatory Sign-in: require user authentication for playing or managing matches
+    const protectedPages: PageView[] = [
+      'categories',
+      'setup',
+      'board',
+      'online_multiplayer',
+      'my_matches',
+      'my_lists',
+    ];
+
+    if (!user && protectedPages.includes(page)) {
+      setPendingPlayTarget(page);
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     if (page === 'categories') {
       setInitialMainCategoryId(null);
     }
@@ -759,8 +867,113 @@ export default function App() {
     }
   };
 
+  const handleResumeIncompleteMatch = (matchToResume: UserGameMatch) => {
+    setCurrentMatchId(matchToResume.id);
+    if (Array.isArray(matchToResume.teams) && matchToResume.teams.length >= 2) {
+      setTeams(matchToResume.teams);
+    }
+    if (matchToResume.teamSubcategoryIds) {
+      setTeamSubcategoryIds(matchToResume.teamSubcategoryIds);
+    }
+    if (typeof matchToResume.activeTeamIndex === 'number') {
+      setActiveTeamIndex(matchToResume.activeTeamIndex);
+    }
+    if (Array.isArray(matchToResume.usedTileKeys)) {
+      setUsedTileKeys(matchToResume.usedTileKeys);
+    }
+    if (Array.isArray(matchToResume.roundUsedQuestionIds)) {
+      setRoundUsedQuestionIds(matchToResume.roundUsedQuestionIds);
+    }
+    if (typeof matchToResume.timerDuration === 'number') {
+      setTimerDuration(matchToResume.timerDuration);
+    }
+    setIsGameLocked(true);
+
+    if (matchToResume.activeQuestionState?.tileKey) {
+      const qState = matchToResume.activeQuestionState;
+      const restoredModalData = {
+        activeSelection: {
+          tileKey: qState.tileKey,
+          subcategoryId: qState.subcategoryId,
+          subcategoryName: qState.subcategoryName,
+          mainCategoryName: qState.mainCategoryName,
+          points: qState.points,
+          question: {
+            id: qState.questionId,
+            questionText: qState.questionText,
+            correctAnswer: qState.correctAnswer,
+            imageUrl: qState.imageUrl,
+            imageDescription: qState.imageDescription,
+            explanation: qState.explanation,
+            points: qState.points,
+            mainCategory: qState.mainCategoryName,
+            subcategory: qState.subcategoryName,
+            subcategoryId: qState.subcategoryId,
+            type: 'direct',
+          },
+        },
+        answerRevealed: Boolean(qState.answerRevealed),
+        timeLeft:
+          typeof qState.timeLeft === 'number'
+            ? qState.timeLeft
+            : matchToResume.timerDuration || 60,
+        timerPaused: Boolean(qState.timerPaused),
+      };
+      try {
+        localStorage.setItem(
+          'nizal_active_question_modal_v1',
+          JSON.stringify(restoredModalData)
+        );
+      } catch {
+        // ignore
+      }
+      setActiveQuestionSaved(qState);
+    } else {
+      try {
+        localStorage.removeItem('nizal_active_question_modal_v1');
+      } catch {
+        // ignore
+      }
+      setActiveQuestionSaved(null);
+    }
+
+    setIsResumeModalOpen(false);
+    setIncompleteMatch(null);
+    const targetPage: PageView =
+      matchToResume.activePage === 'results' ? 'results' : 'board';
+    setActivePage(targetPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStartNewGameFromResumeModal = async () => {
+    if (incompleteMatch && user) {
+      try {
+        await markMatchAbandoned(incompleteMatch.id, user.uid);
+      } catch (err) {
+        console.warn('Failed to mark previous match abandoned:', err);
+      }
+    }
+    clearModalLocalStorage();
+    setIsResumeModalOpen(false);
+    setIncompleteMatch(null);
+    const freshId = generateMatchId();
+    setCurrentMatchId(freshId);
+    setIsGameLocked(false);
+    setUsedTileKeys([]);
+    setRoundUsedQuestionIds([]);
+    setTeams((prev) => prev.map((t) => ({ ...t, score: 0 })));
+    setActivePage('categories');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // Game Board Handlers
   const handleStartGameFromSetup = () => {
+    if (!user) {
+      setPendingPlayTarget('setup');
+      setIsAuthModalOpen(true);
+      return;
+    }
+
     if (!isAllTeamsSelectionComplete) {
       const firstIncompleteIdx = teams.findIndex(
         (t) => (teamSubcategoryIds[t.id] || []).length < SUBCATEGORIES_PER_TEAM
@@ -775,16 +988,32 @@ export default function App() {
 
     clearModalLocalStorage();
     setIsGameLocked(true);
-    setTeams((prev) =>
-      prev.map((t, idx) => ({
-        ...t,
-        name: t.name.trim() || `الفريق ${idx + 1}`,
-        score: 0,
-      }))
-    );
+    const updatedTeams = teams.map((t, idx) => ({
+      ...t,
+      name: t.name.trim() || `الفريق ${idx + 1}`,
+      score: 0,
+    }));
+    setTeams(updatedTeams);
     setUsedTileKeys([]);
     setRoundUsedQuestionIds([]);
     setActiveTeamIndex(0);
+    setActiveQuestionSaved(null);
+
+    const freshMatchId = generateMatchId();
+    setCurrentMatchId(freshMatchId);
+    autoSaveMatch({
+      id: freshMatchId,
+      status: 'in_progress',
+      mode: 'local',
+      teams: updatedTeams,
+      usedTileKeys: [],
+      roundUsedQuestionIds: [],
+      activeTeamIndex: 0,
+      activePage: 'board',
+      activeQuestionState: null,
+      isGameLocked: true,
+    });
+
     setActivePage('board');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -804,36 +1033,51 @@ export default function App() {
     // Idempotency guard: prevent double scoring for the same tile
     if (usedTileKeys.includes(tileKey)) return;
 
-    setTeams((prev) => {
-      const safeIndex =
-        teamIndex >= 0 && teamIndex < prev.length ? teamIndex : 0;
-      return prev.map((t, idx) =>
-        idx === safeIndex ? { ...t, score: t.score + points } : t
-      );
-    });
+    const safeIndex =
+      teamIndex >= 0 && teamIndex < teams.length ? teamIndex : 0;
+    const nextTeams = teams.map((t, idx) =>
+      idx === safeIndex ? { ...t, score: t.score + points } : t
+    );
+    setTeams(nextTeams);
 
     const nextUsedTiles = [...usedTileKeys, tileKey];
     setUsedTileKeys(nextUsedTiles);
-    setRoundUsedQuestionIds((prev) =>
-      prev.includes(questionId) ? prev : [...prev, questionId]
-    );
+    const nextRoundUsed = roundUsedQuestionIds.includes(questionId)
+      ? roundUsedQuestionIds
+      : [...roundUsedQuestionIds, questionId];
+    setRoundUsedQuestionIds(nextRoundUsed);
     setUsedQuestionIds((prev) =>
       prev.includes(questionId) ? prev : [...prev, questionId]
     );
-    setActiveTeamIndex((prev) =>
-      teams.length > 0 ? (prev + 1) % teams.length : 0
-    );
+    const nextTeamIdx =
+      nextTeams.length > 0 ? (activeTeamIndex + 1) % nextTeams.length : 0;
+    setActiveTeamIndex(nextTeamIdx);
+    setActiveQuestionSaved(null);
 
     const targetTotal =
       typeof playableTilesCount === 'number' && playableTilesCount > 0
         ? playableTilesCount
         : defaultTotalBoardTiles;
 
-    if (nextUsedTiles.length >= targetTotal) {
-      const sorted = [...teams].sort((a, b) => b.score - a.score);
-      const winner = sorted[0];
+    const isMatchFinished = nextUsedTiles.length >= targetTotal;
+    const sorted = [...nextTeams].sort((a, b) => b.score - a.score);
+    const winner = sorted[0];
+
+    autoSaveMatch({
+      teams: nextTeams,
+      usedTileKeys: nextUsedTiles,
+      roundUsedQuestionIds: nextRoundUsed,
+      activeTeamIndex: nextTeamIdx,
+      status: isMatchFinished ? 'completed' : 'in_progress',
+      winnerTeamName: isMatchFinished ? winner?.name : undefined,
+      winnerScore: isMatchFinished ? winner?.score : undefined,
+      activeQuestionState: null,
+      activePage: isMatchFinished ? 'results' : 'board',
+    });
+
+    if (isMatchFinished) {
       recordGameSessionInFirestore({
-        teams,
+        teams: nextTeams,
         selectedSubcategories,
         totalQuestionsPlayed: nextUsedTiles.length,
         winnerTeamName: winner ? winner.name : '',
@@ -856,24 +1100,40 @@ export default function App() {
 
     const nextUsedTiles = [...usedTileKeys, tileKey];
     setUsedTileKeys(nextUsedTiles);
-    setRoundUsedQuestionIds((prev) =>
-      prev.includes(questionId) ? prev : [...prev, questionId]
-    );
+    const nextRoundUsed = roundUsedQuestionIds.includes(questionId)
+      ? roundUsedQuestionIds
+      : [...roundUsedQuestionIds, questionId];
+    setRoundUsedQuestionIds(nextRoundUsed);
     setUsedQuestionIds((prev) =>
       prev.includes(questionId) ? prev : [...prev, questionId]
     );
-    setActiveTeamIndex((prev) =>
-      teams.length > 0 ? (prev + 1) % teams.length : 0
-    );
+    const nextTeamIdx =
+      teams.length > 0 ? (activeTeamIndex + 1) % teams.length : 0;
+    setActiveTeamIndex(nextTeamIdx);
+    setActiveQuestionSaved(null);
 
     const targetTotal =
       typeof playableTilesCount === 'number' && playableTilesCount > 0
         ? playableTilesCount
         : defaultTotalBoardTiles;
 
-    if (nextUsedTiles.length >= targetTotal) {
-      const sorted = [...teams].sort((a, b) => b.score - a.score);
-      const winner = sorted[0];
+    const isMatchFinished = nextUsedTiles.length >= targetTotal;
+    const sorted = [...teams].sort((a, b) => b.score - a.score);
+    const winner = sorted[0];
+
+    autoSaveMatch({
+      teams,
+      usedTileKeys: nextUsedTiles,
+      roundUsedQuestionIds: nextRoundUsed,
+      activeTeamIndex: nextTeamIdx,
+      status: isMatchFinished ? 'completed' : 'in_progress',
+      winnerTeamName: isMatchFinished ? winner?.name : undefined,
+      winnerScore: isMatchFinished ? winner?.score : undefined,
+      activeQuestionState: null,
+      activePage: isMatchFinished ? 'results' : 'board',
+    });
+
+    if (isMatchFinished) {
       recordGameSessionInFirestore({
         teams,
         selectedSubcategories,
@@ -1005,6 +1265,12 @@ export default function App() {
                 isAdmin={isAdmin}
                 onSeedQuestions={handleSeedFoundationalPack}
                 seeding={seeding}
+                onActiveQuestionChange={(st) => {
+                  setActiveQuestionSaved(st);
+                  if (user && isGameLocked) {
+                    autoSaveMatch({ activeQuestionState: st });
+                  }
+                }}
               />
             )}
 
@@ -1047,6 +1313,15 @@ export default function App() {
               />
             )}
 
+            {activePage === 'my_matches' && (
+              <MyMatchesPage
+                user={user}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                onResumeMatch={handleResumeIncompleteMatch}
+                onNavigateHome={() => handleNavigate('home')}
+              />
+            )}
+
             {activePage === 'online_multiplayer' && (
               <OnlineMultiplayerPage
                 user={user}
@@ -1055,6 +1330,7 @@ export default function App() {
                 approvedQuestions={approvedQuestions}
                 onNavigateHome={() => handleNavigate('home')}
                 onNavigate={handleNavigate}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
                 initialRoomCode={initialRoomCode}
               />
             )}
@@ -1107,10 +1383,32 @@ export default function App() {
         isAdmin={isAdmin}
       />
 
+      <ResumeMatchModal
+        isOpen={isResumeModalOpen}
+        match={incompleteMatch}
+        onResume={() => {
+          if (incompleteMatch) {
+            handleResumeIncompleteMatch(incompleteMatch);
+          }
+        }}
+        onStartNew={handleStartNewGameFromResumeModal}
+        onClose={() => setIsResumeModalOpen(false)}
+      />
+
       <AuthModal
         isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={() => setIsAuthModalOpen(false)}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          setPendingPlayTarget(null);
+        }}
+        onSuccess={() => {
+          setIsAuthModalOpen(false);
+          if (pendingPlayTarget) {
+            const target = pendingPlayTarget;
+            setPendingPlayTarget(null);
+            handleNavigate(target);
+          }
+        }}
       />
     </div>
   );
