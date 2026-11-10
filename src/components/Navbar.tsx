@@ -31,8 +31,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
-  const navLinks: { id: PageView; label: string; locked?: boolean }[] = [
+  const navLinks: {
+    id: PageView;
+    label: string;
+    locked?: boolean;
+    badge?: string;
+  }[] = [
     { id: 'home', label: 'الرئيسية' },
+    {
+      id: 'online_multiplayer' as PageView,
+      label: 'العب عن بُعد',
+      badge: 'أونلاين',
+    },
     {
       id: 'categories',
       label: isGameLocked
@@ -124,7 +134,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                     : 'text-[#777B73] hover:text-[#252824]'
                 }`}
               >
-                {link.label}
+                <span className="inline-flex items-center gap-1.5">
+                  <span>{link.label}</span>
+                  {link.badge && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/20">
+                      {link.badge}
+                    </span>
+                  )}
+                </span>
                 {isActive && (
                   <span className="absolute inset-x-0 -bottom-1 h-0.5 bg-[#F07842] rounded-full" />
                 )}
@@ -308,7 +325,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                     : 'text-[#777B73] hover:bg-[#F3F5E9]/60 hover:text-[#252824]'
                 }`}
               >
-                {link.label}
+                <span className="flex items-center justify-between">
+                  <span>{link.label}</span>
+                  {link.badge && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EAF2EE] text-[#14543D]">
+                      {link.badge}
+                    </span>
+                  )}
+                </span>
               </button>
             );
           })}

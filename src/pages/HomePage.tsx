@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Users, Layers, Zap, Trophy, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Users, Layers, Zap, Trophy, CheckCircle2, Radio } from 'lucide-react';
 import { PageView } from '../types/game';
 
 interface HomePageProps {
@@ -9,6 +9,7 @@ interface HomePageProps {
 
 export const HomePage: React.FC<HomePageProps> = ({
   onStartCategorySelection,
+  onNavigate,
 }) => {
   const steps = [
     {
@@ -70,10 +71,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <button
                   type="button"
                   onClick={onStartCategorySelection}
-                  className="px-9 py-4 text-base md:text-lg font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-2xl transition-all flex items-center gap-3 cursor-pointer shadow-sm"
+                  className="px-8 py-4 text-base md:text-lg font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-2xl transition-all flex items-center gap-3 cursor-pointer shadow-sm"
                 >
-                  <span>يلا نلعب</span>
+                  <span>يلا نلعب محلياً</span>
                   <ArrowLeft className="w-5 h-5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.('online_multiplayer')}
+                  className="px-7 py-4 text-base md:text-lg font-bold text-[#14543D] bg-[#EAF2EE] hover:bg-[#D5E6DC] border-2 border-[#14543D]/30 active:scale-[0.99] rounded-2xl transition-all flex items-center gap-2.5 cursor-pointer shadow-sm"
+                >
+                  <Radio className="w-5 h-5 text-[#F07842] animate-pulse" />
+                  <span>العب عن بُعد</span>
+                  <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-[#14543D] text-[#FFFFFF]">
+                    أونلاين
+                  </span>
                 </button>
 
                 <a

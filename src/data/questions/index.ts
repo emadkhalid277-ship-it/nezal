@@ -6,7 +6,7 @@ import { GEOGRAPHY_QUESTIONS } from './geography';
 import { RELIGION_QUESTIONS, QuestionTemplate } from './religion';
 import { SPORTS_QUESTIONS } from './sports';
 import { TriviaQuestion } from '../../types/game';
-import subcategoriesData from '../../../subcategories_dump.json';
+import { DEFAULT_SUBCATEGORIES } from '../categoriesAndSeed';
 
 interface SubcategoryMeta {
   id: string;
@@ -105,7 +105,7 @@ const VISUAL_IMAGES_MAP: Record<string, { url: string; desc: string }> = {
 };
 
 export function buildExpandedQuestionBank(): TriviaQuestion[] {
-  const subcategories: SubcategoryMeta[] = subcategoriesData as SubcategoryMeta[];
+  const subcategories: SubcategoryMeta[] = DEFAULT_SUBCATEGORIES;
   const normalizedMap = new Map<string, SubcategoryMeta>();
   subcategories.forEach(sub => {
     normalizedMap.set(normalizeName(sub.name), sub);

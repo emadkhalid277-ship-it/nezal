@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -42,13 +42,51 @@ import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { Footer } from './components/Footer';
 import { HomePage } from './pages/HomePage';
-import { CategorySelectionPage } from './pages/CategorySelectionPage';
-import { TeamSetupPage } from './pages/TeamSetupPage';
-import { GameBoardPage } from './pages/GameBoardPage';
-import { ResultsPage } from './pages/ResultsPage';
-import { AdminDashboardPage } from './pages/AdminDashboardPage';
-import { ContactPage } from './pages/ContactPage';
-import { MyQuestionListsPage } from './pages/MyQuestionListsPage';
+
+// Code-split heavy pages to keep initial bundle ultra-light and fast
+const CategorySelectionPage = lazy(() =>
+  import('./pages/CategorySelectionPage').then((m) => ({
+    default: m.CategorySelectionPage,
+  }))
+);
+const TeamSetupPage = lazy(() =>
+  import('./pages/TeamSetupPage').then((m) => ({ default: m.TeamSetupPage }))
+);
+const GameBoardPage = lazy(() =>
+  import('./pages/GameBoardPage').then((m) => ({ default: m.GameBoardPage }))
+);
+const ResultsPage = lazy(() =>
+  import('./pages/ResultsPage').then((m) => ({ default: m.ResultsPage }))
+);
+const AdminDashboardPage = lazy(() =>
+  import('./pages/AdminDashboardPage').then((m) => ({
+    default: m.AdminDashboardPage,
+  }))
+);
+const ContactPage = lazy(() =>
+  import('./pages/ContactPage').then((m) => ({ default: m.ContactPage }))
+);
+const MyQuestionListsPage = lazy(() =>
+  import('./pages/MyQuestionListsPage').then((m) => ({
+    default: m.MyQuestionListsPage,
+  }))
+);
+const OnlineMultiplayerPage = lazy(() =>
+  import('./pages/OnlineMultiplayerPage').then((m) => ({
+    default: m.OnlineMultiplayerPage,
+  }))
+);
+
+function PageFallback() {
+  return (
+    <div className="min-h-[50vh] flex flex-col items-center justify-center py-20 px-4 text-center">
+      <div className="w-12 h-12 rounded-2xl bg-[#EAF2EE] border border-[#14543D]/20 flex items-center justify-center mb-4">
+        <div className="w-6 h-6 border-3 border-[#14543D] border-t-transparent rounded-full animate-spin" />
+      </div>
+      <p className="text-sm font-bold text-[#14543D]">جاري تحميل الصفحة...</p>
+    </div>
+  );
+}
 
 export const DEFAULT_TEAM_TEMPLATES: Omit<TeamConfig, 'score'>[] = [
   {
@@ -96,6 +134,7 @@ const VALID_PAGES: PageView[] = [
   'contact',
   'admin',
   'my_lists',
+  'online_multiplayer',
 ];
 
 interface SavedGameSession {
@@ -183,7 +222,22 @@ export default function App() {
     }
   });
 
+  const [initialRoomCode, setInitialRoomCode] = useState<string | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('room') || params.get('join') || null;
+    } catch {
+      return null;
+    }
+  });
+
   const [activePage, setActivePage] = useState<PageView>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('room') || params.get('join')) return 'online_multiplayer';
+    } catch {
+      // ignore
+    }
     const saved = loadSavedGameSession().activePage;
     return saved && VALID_PAGES.includes(saved) ? saved : 'home';
   });
@@ -198,7 +252,9 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Firestore Questions, Categories & Contact Settings State
-  const [allQuestions, setAllQuestions] = useState<TriviaQuestion[]>([]);
+  const [allQuestions, setAllQuestions] = useState<TriviaQuestion[]>(
+    () => BUILTIN_FALLBACK_QUESTIONS
+  );
   const [mainCategories, setMainCategories] =
     useState<MainCategoryMeta[]>(MAIN_CATEGORIES);
   const [subcategories, setSubcategories] = useState<SubcategoryItem[]>(
@@ -208,7 +264,7 @@ export default function App() {
   const [contactSettings, setContactSettings] = useState<ContactSettings>(
     DEFAULT_CONTACT_SETTINGS
   );
-  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
   // Game Session State (Persisted across page refreshes)
@@ -585,11 +641,16 @@ export default function App() {
       setAuthLoading(false);
 
       if (adminStatus && currentUser) {
-        try {
-          await cleanupRemovedMoviesCategoryInFirestore();
-          await convertExistingQuestionsToDirectInFirestore();
-        } catch (err) {
-          console.error('Cleanup/convert legacy data error:', err);
+        // Run migration/cleanup at most once per session in background without blocking initial render
+        const migrationKey = 'nizal_admin_cleanup_done_v1';
+        if (!sessionStorage.getItem(migrationKey)) {
+          sessionStorage.setItem(migrationKey, 'true');
+          cleanupRemovedMoviesCategoryInFirestore().catch((err) =>
+            console.error('Cleanup/convert legacy data error:', err)
+          );
+          convertExistingQuestionsToDirectInFirestore().catch((err) =>
+            console.error('Convert questions error:', err)
+          );
         }
       }
 
@@ -867,7 +928,8 @@ export default function App() {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
           >
-            {activePage === 'home' && (
+            <Suspense fallback={<PageFallback />}>
+              {activePage === 'home' && (
               <HomePage
                 onStartCategorySelection={() => handleNavigate('categories')}
                 onNavigate={handleNavigate}
@@ -985,6 +1047,18 @@ export default function App() {
               />
             )}
 
+            {activePage === 'online_multiplayer' && (
+              <OnlineMultiplayerPage
+                user={user}
+                mainCategories={mainCategories}
+                subcategories={activeSubcategories}
+                approvedQuestions={approvedQuestions}
+                onNavigateHome={() => handleNavigate('home')}
+                onNavigate={handleNavigate}
+                initialRoomCode={initialRoomCode}
+              />
+            )}
+
             {activePage === 'admin' &&
               (isAdmin ? (
                 <AdminDashboardPage
@@ -1021,6 +1095,7 @@ export default function App() {
                   onNavigate={handleNavigate}
                 />
               ))}
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </main>

@@ -423,5 +423,13 @@ service cloud.firestore {
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
+
+    // Online Multiplayer Game Rooms (Realtime synchronization & game state)
+    match /gameRooms/{roomId} {
+      allow get, list: if true;
+      allow create: if isValidId(roomId);
+      allow update: if isValidId(roomId);
+      allow delete: if isAdmin();
+    }
   }
 }

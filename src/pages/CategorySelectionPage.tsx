@@ -223,15 +223,51 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     return list;
   }, [activeSubcategories, selectedMainFilter, searchQuery]);
 
+  const questionCountBySubMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const sub of activeSubcategories) {
+      map.set(sub.id, 0);
+      map.set(sub.name, 0);
+    }
+    for (const q of approvedQuestions) {
+      for (const sub of activeSubcategories) {
+        if (
+          matchesSubcategoryQuestion(
+            q.category,
+            sub.name,
+            q.subcategoryId,
+            sub.id
+          )
+        ) {
+          map.set(sub.id, (map.get(sub.id) || 0) + 1);
+          map.set(sub.name, (map.get(sub.name) || 0) + 1);
+        }
+      }
+    }
+    return map;
+  }, [activeSubcategories, approvedQuestions]);
+
   const getQuestionCountForSub = (sub: SubcategoryItem) =>
-    approvedQuestions.filter((q) =>
-      matchesSubcategoryQuestion(
-        q.category,
-        sub.name,
-        q.subcategoryId,
-        sub.id
-      )
-    ).length;
+    questionCountBySubMap.get(sub.id) ?? questionCountBySubMap.get(sub.name) ?? 0;
+
+  const mainCategoryCounts = useMemo(() => {
+    const totalMap = new Map<string, number>();
+    const selectedMap = new Map<string, number>();
+
+    for (const sub of activeSubcategories) {
+      const mainId = sub.mainCategoryId || sub.mainCategory;
+      const mainName = sub.mainCategory;
+      totalMap.set(mainId, (totalMap.get(mainId) || 0) + 1);
+      totalMap.set(mainName, (totalMap.get(mainName) || 0) + 1);
+
+      if (subcategoryOwnerMap.has(sub.id)) {
+        selectedMap.set(mainId, (selectedMap.get(mainId) || 0) + 1);
+        selectedMap.set(mainName, (selectedMap.get(mainName) || 0) + 1);
+      }
+    }
+
+    return { totalMap, selectedMap };
+  }, [activeSubcategories, subcategoryOwnerMap]);
 
   // Handle changing team count (2, 3, or 4 teams)
   const handleTeamCountChange = (newCount: number) => {
@@ -689,17 +725,14 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               const isSelected =
                 selectedMainFilter === mainCat.id ||
                 selectedMainFilter === mainCat.name;
-              const subsCount = activeSubcategories.filter(
-                (s) =>
-                  s.mainCategoryId === mainCat.id ||
-                  s.mainCategory === mainCat.name
-              ).length;
-              const selectedInMain = activeSubcategories.filter(
-                (s) =>
-                  (s.mainCategoryId === mainCat.id ||
-                    s.mainCategory === mainCat.name) &&
-                  subcategoryOwnerMap.has(s.id)
-              ).length;
+              const subsCount =
+                mainCategoryCounts.totalMap.get(mainCat.id) ??
+                mainCategoryCounts.totalMap.get(mainCat.name) ??
+                0;
+              const selectedInMain =
+                mainCategoryCounts.selectedMap.get(mainCat.id) ??
+                mainCategoryCounts.selectedMap.get(mainCat.name) ??
+                0;
 
               return (
                 <button

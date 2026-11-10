@@ -87,6 +87,79 @@ export const DEFAULT_CONTACT_SETTINGS: ContactSettings = {
   snapchatUrl: '',
 };
 
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const CACHE_TTL_MS = 8 * 60 * 1000; // 8 minutes TTL
+
+class ServiceCache {
+  private memoryCache = new Map<string, CacheEntry<unknown>>();
+
+  get<T>(key: string): T | null {
+    const memory = this.memoryCache.get(key);
+    const now = Date.now();
+    if (memory && now - memory.timestamp < CACHE_TTL_MS) {
+      return memory.data as T;
+    }
+    try {
+      const raw = sessionStorage.getItem(`nizal_cache_${key}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as CacheEntry<T>;
+        if (now - parsed.timestamp < CACHE_TTL_MS) {
+          this.memoryCache.set(key, parsed);
+          return parsed.data;
+        }
+      }
+    } catch {
+      // ignore storage access issues
+    }
+    return null;
+  }
+
+  set<T>(key: string, data: T): void {
+    const entry: CacheEntry<T> = { data, timestamp: Date.now() };
+    this.memoryCache.set(key, entry);
+    try {
+      sessionStorage.setItem(`nizal_cache_${key}`, JSON.stringify(entry));
+    } catch {
+      // ignore storage access issues
+    }
+  }
+
+  invalidate(keyPrefix?: string): void {
+    if (!keyPrefix) {
+      this.memoryCache.clear();
+      try {
+        const keys = Object.keys(sessionStorage).filter((k) =>
+          k.startsWith('nizal_cache_')
+        );
+        keys.forEach((k) => sessionStorage.removeItem(k));
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    for (const k of Array.from(this.memoryCache.keys())) {
+      if (k.startsWith(keyPrefix)) {
+        this.memoryCache.delete(k);
+      }
+    }
+    try {
+      const keys = Object.keys(sessionStorage).filter((k) =>
+        k.startsWith(`nizal_cache_${keyPrefix}`)
+      );
+      keys.forEach((k) => sessionStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export const serviceCache = new ServiceCache();
+
 function sanitizeId(rawId: string): string {
   const cleaned = rawId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 128);
   return cleaned || `item-${Date.now()}`;
@@ -357,10 +430,17 @@ export function mergeSubcategories(
   return Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-// Fetch all Main Categories dynamically from Firestore merged with built-in defaults
-export async function fetchMainCategoriesFromFirestore(): Promise<
-  MainCategoryMeta[]
-> {
+// Fetch all Main Categories dynamically from Firestore merged with built-in defaults (cached)
+export async function fetchMainCategoriesFromFirestore(
+  forceRefresh = false
+): Promise<MainCategoryMeta[]> {
+  if (!forceRefresh) {
+    const cached = serviceCache.get<MainCategoryMeta[]>('main_categories');
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+  }
+
   try {
     const snap = await getDocs(collection(db, MAIN_CATEGORIES_COLLECTION));
     const byId = new Map<string, MainCategoryMeta>();
@@ -467,7 +547,9 @@ export async function fetchMainCategoriesFromFirestore(): Promise<
       });
     });
 
-    return Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+    const result = Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+    serviceCache.set('main_categories', result);
+    return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, MAIN_CATEGORIES_COLLECTION);
   }
@@ -590,6 +672,10 @@ export async function saveMainCategoryToFirestore(
         await batch.commit();
       }
     }
+
+    serviceCache.invalidate('main_categories');
+    serviceCache.invalidate('active_subcategories');
+    serviceCache.invalidate('admin_subcategories');
 
     return docId;
   } catch (error) {
@@ -746,6 +832,9 @@ export async function deleteMainCategoryFromFirestore(
     }
 
     await batch.commit();
+    serviceCache.invalidate('main_categories');
+    serviceCache.invalidate('active_subcategories');
+    serviceCache.invalidate('admin_subcategories');
   } catch (error) {
     handleFirestoreError(
       error,
@@ -870,16 +959,24 @@ export async function saveSubcategoryImageToFirestore(
   }
 }
 
-// Fetch Contact Us settings from Firestore
-export async function fetchContactSettingsFromFirestore(): Promise<ContactSettings> {
+// Fetch Contact Us settings from Firestore (cached)
+export async function fetchContactSettingsFromFirestore(
+  forceRefresh = false
+): Promise<ContactSettings> {
+  if (!forceRefresh) {
+    const cached = serviceCache.get<ContactSettings>('contact_settings');
+    if (cached) return cached;
+  }
+
   try {
     const docRef = doc(db, SETTINGS_COLLECTION, CONTACT_DOC_ID);
     const snap = await getDoc(docRef);
     if (!snap.exists()) {
+      serviceCache.set('contact_settings', DEFAULT_CONTACT_SETTINGS);
       return DEFAULT_CONTACT_SETTINGS;
     }
     const data = snap.data();
-    return {
+    const result: ContactSettings = {
       id: CONTACT_DOC_ID,
       heading: String(data.heading || DEFAULT_CONTACT_SETTINGS.heading),
       message: String(data.message ?? DEFAULT_CONTACT_SETTINGS.message),
@@ -893,6 +990,8 @@ export async function fetchContactSettingsFromFirestore(): Promise<ContactSettin
       updatedBy: String(data.updatedBy || ''),
       updatedAt: formatTimestamp(data.updatedAt),
     };
+    serviceCache.set('contact_settings', result);
+    return result;
   } catch (error) {
     handleFirestoreError(
       error,
@@ -932,6 +1031,7 @@ export async function saveContactSettingsToFirestore(
     } else {
       await setDoc(docRef, docData);
     }
+    serviceCache.invalidate('contact_settings');
   } catch (error) {
     handleFirestoreError(
       error,
@@ -942,26 +1042,46 @@ export async function saveContactSettingsToFirestore(
 }
 
 export async function fetchActiveSubcategories(
-  mainCategories: MainCategoryMeta[] = MAIN_CATEGORIES
+  mainCategories: MainCategoryMeta[] = MAIN_CATEGORIES,
+  forceRefresh = false
 ): Promise<SubcategoryItem[]> {
+  if (!forceRefresh) {
+    const cached = serviceCache.get<SubcategoryItem[]>('active_subcategories');
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+  }
+
   try {
     const snap = await getDocs(collection(db, SUBCATEGORIES_COLLECTION));
     const fromDb = snap.docs.map((d) => mapDocToSubcategory(d.id, d.data()));
-    return mergeSubcategories(fromDb, mainCategories).filter(
+    const result = mergeSubcategories(fromDb, mainCategories).filter(
       (s) => s.isActive && !s.isDeleted
     );
+    serviceCache.set('active_subcategories', result);
+    return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, SUBCATEGORIES_COLLECTION);
   }
 }
 
 export async function fetchAllSubcategoriesForAdmin(
-  mainCategories: MainCategoryMeta[] = MAIN_CATEGORIES
+  mainCategories: MainCategoryMeta[] = MAIN_CATEGORIES,
+  forceRefresh = false
 ): Promise<SubcategoryItem[]> {
+  if (!forceRefresh) {
+    const cached = serviceCache.get<SubcategoryItem[]>('admin_subcategories');
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+  }
+
   try {
     const snap = await getDocs(collection(db, SUBCATEGORIES_COLLECTION));
     const fromDb = snap.docs.map((d) => mapDocToSubcategory(d.id, d.data()));
-    return mergeSubcategories(fromDb, mainCategories);
+    const result = mergeSubcategories(fromDb, mainCategories);
+    serviceCache.set('admin_subcategories', result);
+    return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, SUBCATEGORIES_COLLECTION);
   }
@@ -1056,6 +1176,9 @@ export async function saveSubcategoryToFirestore(
       }
     }
 
+    serviceCache.invalidate('active_subcategories');
+    serviceCache.invalidate('admin_subcategories');
+
     return docId;
   } catch (error) {
     handleFirestoreError(
@@ -1139,6 +1262,8 @@ export async function deleteSubcategorySafeFromFirestore(
     }
 
     await batch.commit();
+    serviceCache.invalidate('active_subcategories');
+    serviceCache.invalidate('admin_subcategories');
   } catch (error) {
     handleFirestoreError(
       error,
@@ -1148,33 +1273,99 @@ export async function deleteSubcategorySafeFromFirestore(
   }
 }
 
-export async function fetchApprovedQuestions(): Promise<TriviaQuestion[]> {
+export async function fetchApprovedQuestions(
+  forceRefresh = false
+): Promise<TriviaQuestion[]> {
+  if (!forceRefresh) {
+    const cached = serviceCache.get<TriviaQuestion[]>('approved_questions');
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+  }
+
   try {
     const q = query(
       collection(db, QUESTIONS_COLLECTION),
       where('status', 'in', ['approved', 'pending'])
     );
     const snap = await getDocs(q);
-    return snap.docs
+    const result = snap.docs
       .map((d) => mapDocToQuestion(d.id, d.data()))
       .filter(
         (item) =>
           item.status !== 'rejected' &&
           !REMOVED_SUBCATEGORY_NAMES.has(item.category)
       );
+    serviceCache.set('approved_questions', result);
+    return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, QUESTIONS_COLLECTION);
   }
 }
 
-export async function fetchAllQuestionsForAdmin(): Promise<TriviaQuestion[]> {
+export async function fetchAllQuestionsForAdmin(
+  forceRefresh = false
+): Promise<TriviaQuestion[]> {
+  if (!forceRefresh) {
+    const cached = serviceCache.get<TriviaQuestion[]>('admin_questions');
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+  }
+
   try {
     const snap = await getDocs(collection(db, QUESTIONS_COLLECTION));
-    return snap.docs
+    const result = snap.docs
       .map((d) => mapDocToQuestion(d.id, d.data()))
       .filter((item) => !REMOVED_SUBCATEGORY_NAMES.has(item.category));
+    serviceCache.set('admin_questions', result);
+    return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, QUESTIONS_COLLECTION);
+  }
+}
+
+// Optimized targeted query: fetch questions only for the selected subcategories used on the game board
+export async function fetchQuestionsForSubcategories(
+  subcategories: { id: string; name: string }[]
+): Promise<TriviaQuestion[]> {
+  if (!subcategories || subcategories.length === 0) return [];
+
+  // Check if we already have the full approved questions in cache
+  const cachedFull = serviceCache.get<TriviaQuestion[]>('approved_questions');
+  if (cachedFull && cachedFull.length > 0) {
+    const subNames = new Set(subcategories.map((s) => s.name));
+    const subIds = new Set(subcategories.map((s) => s.id));
+    return cachedFull.filter(
+      (q) =>
+        (q.subcategoryId && subIds.has(q.subcategoryId)) ||
+        subNames.has(q.category)
+    );
+  }
+
+  // Otherwise, query Firestore specifically for these subcategory IDs / names in batches of 10
+  try {
+    const results: TriviaQuestion[] = [];
+    const names = Array.from(new Set(subcategories.map((s) => s.name)));
+    const chunkSize = 10;
+    for (let i = 0; i < names.length; i += chunkSize) {
+      const chunk = names.slice(i, i + chunkSize);
+      const q = query(
+        collection(db, QUESTIONS_COLLECTION),
+        where('category', 'in', chunk)
+      );
+      const snap = await getDocs(q);
+      snap.docs.forEach((d) => {
+        const item = mapDocToQuestion(d.id, d.data());
+        if (item.status !== 'rejected') {
+          results.push(item);
+        }
+      });
+    }
+    return results;
+  } catch (err) {
+    console.warn('Targeted questions query error:', err);
+    return [];
   }
 }
 
@@ -1363,6 +1554,8 @@ export async function createQuestionInFirestore(
 
   try {
     await setDoc(doc(db, QUESTIONS_COLLECTION, docId), docData);
+    serviceCache.invalidate('approved_questions');
+    serviceCache.invalidate('admin_questions');
     return docId;
   } catch (error) {
     handleFirestoreError(
@@ -1439,6 +1632,8 @@ export async function updateQuestionInFirestore(
         ...updateData,
       });
     }
+    serviceCache.invalidate('approved_questions');
+    serviceCache.invalidate('admin_questions');
   } catch (error) {
     handleFirestoreError(
       error,
@@ -1486,6 +1681,8 @@ export async function updateQuestionStatusInFirestore(
         });
       }
     }
+    serviceCache.invalidate('approved_questions');
+    serviceCache.invalidate('admin_questions');
   } catch (error) {
     handleFirestoreError(
       error,
@@ -1514,6 +1711,8 @@ export async function deleteQuestionFromFirestore(
     if (pathToDelete) {
       await deleteQuestionImageFromStorage(pathToDelete);
     }
+    serviceCache.invalidate('approved_questions');
+    serviceCache.invalidate('admin_questions');
   } catch (error) {
     handleFirestoreError(
       error,
@@ -1536,6 +1735,8 @@ export async function bulkUpdateStatusInFirestore(
   });
   try {
     await batch.commit();
+    serviceCache.invalidate('approved_questions');
+    serviceCache.invalidate('admin_questions');
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, QUESTIONS_COLLECTION);
   }
@@ -1550,6 +1751,8 @@ export async function bulkDeleteFromFirestore(
   });
   try {
     await batch.commit();
+    serviceCache.invalidate('approved_questions');
+    serviceCache.invalidate('admin_questions');
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, QUESTIONS_COLLECTION);
   }

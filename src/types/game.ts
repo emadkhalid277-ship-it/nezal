@@ -6,7 +6,8 @@ export type PageView =
   | 'results'
   | 'admin'
   | 'contact'
-  | 'my_lists';
+  | 'my_lists'
+  | 'online_multiplayer';
 
 export type MainCategoryName = string;
 

@@ -161,6 +161,21 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [typeFilter, setTypeFilter] = useState<string>('الكل');
   const [statusFilter, setStatusFilter] = useState<string>('الكل');
   const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  const [questionsPage, setQuestionsPage] = useState<number>(1);
+  const questionsPerPage = 50;
+
+  // Reset to first page whenever question filters change
+  useEffect(() => {
+    setQuestionsPage(1);
+  }, [
+    mainCategoryFilter,
+    categoryFilter,
+    difficultyFilter,
+    typeFilter,
+    statusFilter,
+    showDuplicatesOnly,
+    searchQuery,
+  ]);
 
   // Bulk Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -497,6 +512,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     searchQuery,
     subcategoryToMainMap,
   ]);
+
+  const totalQuestionPages = Math.max(
+    1,
+    Math.ceil(filteredQuestions.length / questionsPerPage)
+  );
+
+  const paginatedQuestions = useMemo(() => {
+    const start = (questionsPage - 1) * questionsPerPage;
+    return filteredQuestions.slice(start, start + questionsPerPage);
+  }, [filteredQuestions, questionsPage, questionsPerPage]);
 
   const counts = useMemo(() => {
     const approved = questions.filter((q) => q.status === 'approved').length;
@@ -2936,7 +2961,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filteredQuestions.map((q) => {
+                    paginatedQuestions.map((q) => {
                       const isDup = duplicateIdsSet.has(q.id);
                       const isChecked = selectedIds.includes(q.id);
                       const parentMain = subcategoryToMainMap.get(q.category);
@@ -3089,6 +3114,59 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls for Questions */}
+            {filteredQuestions.length > questionsPerPage && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-[#E5E8DD] bg-[#FFFFFF] rounded-b-2xl">
+                <div className="text-xs text-[#777B73]">
+                  عرض{' '}
+                  <span className="font-bold text-[#252824]">
+                    {((questionsPage - 1) * questionsPerPage + 1).toLocaleString('ar-SA')}
+                  </span>{' '}
+                  -{' '}
+                  <span className="font-bold text-[#252824]">
+                    {Math.min(questionsPage * questionsPerPage, filteredQuestions.length).toLocaleString('ar-SA')}
+                  </span>{' '}
+                  من أصل{' '}
+                  <span className="font-bold text-[#252824]">
+                    {filteredQuestions.length.toLocaleString('ar-SA')}
+                  </span>{' '}
+                  سؤال
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={questionsPage <= 1}
+                    onClick={() => {
+                      setQuestionsPage((p) => Math.max(1, p - 1));
+                      window.scrollTo({ top: 400, behavior: 'smooth' });
+                    }}
+                    className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] text-[#252824] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                  >
+                    الصفحة السابقة
+                  </button>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#252824]">
+                    <span>صفحة</span>
+                    <span className="px-2.5 py-1 rounded bg-[#EAF2EE] text-[#14543D]">
+                      {questionsPage.toLocaleString('ar-SA')}
+                    </span>
+                    <span>من</span>
+                    <span>{totalQuestionPages.toLocaleString('ar-SA')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={questionsPage >= totalQuestionPages}
+                    onClick={() => {
+                      setQuestionsPage((p) => Math.min(totalQuestionPages, p + 1));
+                      window.scrollTo({ top: 400, behavior: 'smooth' });
+                    }}
+                    className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] text-[#252824] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                  >
+                    الصفحة التالية
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -27,6 +27,7 @@ import {
   PointValue,
   DifficultyLevel,
 } from '../types/game';
+import { serviceCache } from './questionService';
 
 const USER_LISTS_COLLECTION = 'userQuestionLists';
 const USER_QUESTIONS_COLLECTION = 'userCustomQuestions';
@@ -525,6 +526,9 @@ export async function approveAndPublishContribution(
         console.warn('Could not update original user question status:', uErr);
       }
     }
+
+    serviceCache.invalidate('approved_questions');
+    serviceCache.invalidate('admin_questions');
 
     return publishedId;
   } catch (error) {

@@ -338,6 +338,22 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     mainCategories,
   ]);
 
+  // Fast pre-indexed lookup map for questions by subcategory and point value
+  const questionsBySlotMap = useMemo(() => {
+    const map = new Map<string, TriviaQuestion[]>();
+    for (const q of approvedQuestions) {
+      if (q.subcategoryId) {
+        const keyId = `${q.subcategoryId}__${q.points}`;
+        if (!map.has(keyId)) map.set(keyId, []);
+        map.get(keyId)!.push(q);
+      }
+      const keyName = `${q.category}__${q.points}`;
+      if (!map.has(keyName)) map.set(keyName, []);
+      map.get(keyName)!.push(q);
+    }
+    return map;
+  }, [approvedQuestions]);
+
   // Find an available approved question for a subcategory + point tier without repeating questions in the same round
   const getQuestionForSlot = (
     subcategoryName: string,
@@ -346,16 +362,21 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   ): TriviaQuestion | null => {
     const tileKey = `${subcategoryName}__${points}`;
 
-    const matching = approvedQuestions.filter(
-      (q) =>
-        matchesSubcategoryQuestion(
-          q.category,
-          subcategoryName,
-          q.subcategoryId,
-          subcategoryId
-        ) && q.points === points
-    );
-    if (matching.length === 0) return null;
+    let matching = (subcategoryId && questionsBySlotMap.get(`${subcategoryId}__${points}`)) ||
+      questionsBySlotMap.get(`${subcategoryName}__${points}`);
+
+    if (!matching || matching.length === 0) {
+      matching = approvedQuestions.filter(
+        (q) =>
+          matchesSubcategoryQuestion(
+            q.category,
+            subcategoryName,
+            q.subcategoryId,
+            subcategoryId
+          ) && q.points === points
+      );
+    }
+    if (!matching || matching.length === 0) return null;
 
     // 1. If a question was already pinned to this tile in this round and hasn't been used by another tile, return it
     const pinnedId = pinnedTileQuestions[tileKey];

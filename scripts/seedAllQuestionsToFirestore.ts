@@ -11,6 +11,7 @@ import { GENERAL_QUESTIONS } from './questions/general';
 import { GEOGRAPHY_QUESTIONS } from './questions/geography';
 import { RELIGION_QUESTIONS, QuestionTemplate } from './questions/religion';
 import { SPORTS_QUESTIONS } from './questions/sports';
+import { DEFAULT_SUBCATEGORIES } from '../src/data/categoriesAndSeed';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBBuSda47An2NBc8hZt5vMY8yuYn08hXqo",
@@ -44,9 +45,16 @@ function normalizeName(name: string): string {
 async function run() {
   console.log('--- Starting Question Bank Seeding to Firestore ---');
 
-  // Load subcategories dump
-  const dumpRaw = fs.readFileSync(path.join(process.cwd(), 'subcategories_dump.json'), 'utf-8');
-  const subcategories: SubcategoryMeta[] = JSON.parse(dumpRaw);
+  // Load subcategories from DEFAULT_SUBCATEGORIES
+  let subcategories: SubcategoryMeta[] = DEFAULT_SUBCATEGORIES;
+  const dumpPath = path.join(process.cwd(), 'subcategories_dump.json');
+  if (fs.existsSync(dumpPath)) {
+    try {
+      subcategories = JSON.parse(fs.readFileSync(dumpPath, 'utf-8'));
+    } catch {
+      subcategories = DEFAULT_SUBCATEGORIES;
+    }
+  }
   const normalizedMap = new Map<string, SubcategoryMeta>();
   subcategories.forEach(sub => {
     normalizedMap.set(normalizeName(sub.name), sub);
