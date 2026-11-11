@@ -101,6 +101,20 @@ service cloud.firestore {
       allow create, update: if isAdmin();
       allow delete: if false;
     }
+
+    // 9. غرف اللعب عن بُعد (gameRooms)
+    match /gameRooms/{roomId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // 10. سجل المباريات والتقدم (userGameMatches)
+    match /userGameMatches/{matchId} {
+      allow get, list: if true;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
   }
 }
 ```

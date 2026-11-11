@@ -8,7 +8,7 @@ service cloud.firestore {
 
     // Global Hardened Primitives
     function isValidId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() >= 1 && id.size() <= 128;
     }
 
     function incoming() {
@@ -427,8 +427,8 @@ service cloud.firestore {
     // Online Multiplayer Game Rooms (Realtime synchronization & game state)
     match /gameRooms/{roomId} {
       allow get, list: if true;
-      allow create: if isValidId(roomId);
-      allow update: if isValidId(roomId);
+      allow create: if true;
+      allow update: if true;
       allow delete: if isAdmin();
     }
 

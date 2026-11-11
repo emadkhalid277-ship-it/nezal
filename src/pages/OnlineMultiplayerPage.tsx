@@ -64,7 +64,7 @@ import {
   subscribeToOnlineRoom,
   updateOnlinePlayerPresence,
 } from '../services/multiplayerService';
-import { TEAM_COLOR_OPTIONS } from '../data/categoriesAndSeed';
+import { TEAM_COLOR_OPTIONS, DEFAULT_SUBCATEGORIES } from '../data/categoriesAndSeed';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
 import { saveMatchProgressToFirestore } from '../services/matchService';
 
@@ -377,10 +377,18 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // 1. Handle Create Room
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMsg(null);
-    const name = playerNameInput.trim();
+
+    let name = playerNameInput.trim();
     if (!name) {
-      setErrorMsg('يرجى إدخال اسمك أولاً');
+      name = user?.displayName || user?.email?.split('@')[0] || '';
+      if (name) {
+        setPlayerNameInput(name);
+      }
+    }
+    if (!name) {
+      setErrorMsg('يرجى إدخال اسمك أولاً لإنشاء الغرفة');
       return;
     }
 
@@ -401,7 +409,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       connectToRoomStream(newRoom.code);
     } catch (err: any) {
       console.error('Failed to create room:', err);
-      setErrorMsg(err.message || 'فشل إنشاء الغرفة. يرجى المحاولة مرة أخرى.');
+      setErrorMsg(err.message || 'فشل إنشاء الغرفة. يرجى التحقق من اتصال الإنترنت والمحاولة مجدداً.');
     } finally {
       setLoading(false);
     }
@@ -410,8 +418,16 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // 2. Handle Join Room
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setErrorMsg(null);
-    const name = playerNameInput.trim();
+
+    let name = playerNameInput.trim();
+    if (!name) {
+      name = user?.displayName || user?.email?.split('@')[0] || '';
+      if (name) {
+        setPlayerNameInput(name);
+      }
+    }
     const code = roomCodeInput.trim().toUpperCase();
 
     if (!name) {
@@ -438,7 +454,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       connectToRoomStream(room.code);
     } catch (err: any) {
       console.error('Failed to join room:', err);
-      setErrorMsg(err.message || 'تعذر الانضمام إلى الغرفة. تحقق من الرمز.');
+      setErrorMsg(err.message || 'تعذر الانضمام إلى الغرفة. تحقق من صحة الرمز.');
     } finally {
       setLoading(false);
     }
@@ -480,18 +496,24 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // 5. Host Auto-Pick Subcategories and Start Game
   const handleHostStartGameAuto = async () => {
     if (!currentRoom || !isHost) return;
+    if (loading) return; // Prevent double clicking
     setLoading(true);
     setErrorMsg(null);
 
     try {
       // Pick 3 unique subcategories per team
-      const neededCount = currentRoom.teams.length * 3;
-      const shuffledSubs = [...activeSubcategories].sort(() => 0.5 - Math.random());
-      const selectedSubs = shuffledSubs.slice(0, neededCount);
-
-      if (selectedSubs.length < neededCount) {
-        throw new Error('لا يوجد عدد كافٍ من التصنيفات الفرعية النشطة لبدء اللعبة.');
+      const neededCount = (currentRoom.teams || []).length * 3;
+      let pool = activeSubcategories;
+      if (!pool || pool.length < neededCount) {
+        pool = DEFAULT_SUBCATEGORIES.filter((s) => s.isActive !== false);
       }
+
+      if (pool.length < neededCount) {
+        throw new Error(`لا يوجد عدد كافٍ من التصنيفات الفرعية لبدء المباراة (المطلوب ${neededCount}).`);
+      }
+
+      const shuffledSubs = [...pool].sort(() => 0.5 - Math.random());
+      const selectedSubs = shuffledSubs.slice(0, neededCount);
 
       const teamSubMap: Record<string, string[]> = {};
       const selectedIds: string[] = [];
@@ -506,7 +528,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       setIsCategoryPickerOpen(false);
     } catch (err: any) {
       console.error('Error starting game:', err);
-      setErrorMsg(err.message || 'حدث خطأ أثناء بدء المباراة');
+      setErrorMsg(err.message || 'حدث خطأ أثناء بدء المباراة. يرجى المحاولة مرة أخرى.');
     } finally {
       setLoading(false);
     }
@@ -904,10 +926,13 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] active:scale-[0.99] rounded-2xl transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              className="w-full py-4 text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] active:scale-[0.99] rounded-2xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
             >
               {loading ? (
-                <span>جاري إنشاء الغرفة...</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>جاري إنشاء الغرفة...</span>
+                </div>
               ) : (
                 <>
                   <Sparkles className="w-5 h-5 text-[#F07842]" />
@@ -972,13 +997,16 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             <button
               type="submit"
               disabled={loading || roomCodeInput.length < 5}
-              className="w-full py-4 text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-2xl transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              className="w-full py-4 text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-2xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
             >
               {loading ? (
-                <span>جاري الاتصال بالغرفة...</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>جاري الاتصال بالغرفة...</span>
+                </div>
               ) : (
                 <>
-                  <Play className="w-5 h-5" />
+                  <Play className="w-5 h-5 fill-current" />
                   <span>دخول الغرفة</span>
                 </>
               )}
@@ -992,9 +1020,26 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // -------------------------------------------------------------
   // RENDER: 2. LOBBY SCREEN (شاشة انتظار اللاعبين)
   // -------------------------------------------------------------
-  if (currentRoom.status === 'lobby') {
+  if (currentRoom.status === 'lobby' || (currentRoom.status as string) === 'waiting') {
     return (
       <div className="max-w-[1100px] mx-auto px-4 py-8 space-y-8">
+        {/* Error Alert in Lobby */}
+        {errorMsg && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
+              <p className="font-bold">{errorMsg}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer"
+            >
+              إغلاق
+            </button>
+          </div>
+        )}
+
         {/* Toast Alert */}
         {toastNotification && (
           <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#14543D] text-[#FFFFFF] px-5 py-2.5 rounded-2xl shadow-lg border border-[#FFFFFF]/20 text-xs font-bold flex items-center gap-2 animate-bounce">
@@ -1255,28 +1300,36 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
           <div>
             <div className="font-display font-bold text-base text-[#252824]">
-              {isHost ? 'جاهزون لبدء المنافسة؟' : 'بانتظار المضيف لبدء المباراة...'}
+              {isHost ? 'جاهزون لبدء المنافسة والتحدي؟' : 'بانتظار المضيف لبدء المباراة...'}
             </div>
             <p className="text-xs text-[#777B73]">
               {isHost
                 ? 'سيتم اختيار 3 تصنيفات فرعية لكل فريق بشكل متوازن ثم بدء البورد فوراً لجميع الأجهزة المتصلة.'
                 : 'ستبدأ شاشة الأسئلة تلقائياً بمجرد إطلاق المضيف للمباراة.'}
             </p>
+            {isHost && playersList.length < 2 && (
+              <p className="text-[11px] text-[#F07842] font-bold mt-1">
+                💡 تنبيه: أنت وحدك في الغرفة حالياً. شارك الرمز أو رابط الدعوة مع صديقك، أو اضغط للبدء للتجربة.
+              </p>
+            )}
           </div>
 
           {isHost ? (
             <button
               type="button"
-              disabled={loading || playersList.length === 0}
+              disabled={loading}
               onClick={handleHostStartGameAuto}
-              className="px-8 py-3.5 text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] active:scale-[0.99] rounded-2xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2 shadow-sm"
+              className="px-8 py-3.5 text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] active:scale-[0.99] rounded-2xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm shrink-0"
             >
               {loading ? (
-                <span>جاري إعداد البورد...</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>جاري إعداد البورد وبدء المباراة...</span>
+                </div>
               ) : (
                 <>
-                  <Play className="w-5 h-5 text-[#F07842]" />
-                  <span>بدء المباراة الآن 🔥</span>
+                  <Play className="w-5 h-5 text-[#F07842] fill-current" />
+                  <span>بدء التحدي الآن 🔥</span>
                 </>
               )}
             </button>
@@ -1294,7 +1347,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // -------------------------------------------------------------
   // RENDER: 3. IN-GAME BOARD (المباراة المباشرة المتزامنة)
   // -------------------------------------------------------------
-  if (currentRoom.status === 'in_game') {
+  if (currentRoom.status === 'in_game' || (currentRoom.status as string) === 'playing') {
     return (
       <div className="max-w-[1320px] mx-auto px-4 py-6 space-y-6">
         {/* Toast Alert */}

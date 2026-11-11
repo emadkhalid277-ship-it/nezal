@@ -542,6 +542,14 @@
     "/contributions/{contributionId}": {
       "schema": { "$ref": "#/entities/UserContribution" },
       "description": "Question submissions sent by users for admin moderation and approval."
+    },
+    "/gameRooms/{roomId}": {
+      "schema": { "$ref": "#/entities/GameSession" },
+      "description": "Realtime multiplayer game rooms and state synchronization."
+    },
+    "/userGameMatches/{matchId}": {
+      "schema": { "$ref": "#/entities/GameSession" },
+      "description": "User match progress and historical matches."
     }
   }
 }

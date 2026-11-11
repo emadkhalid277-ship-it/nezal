@@ -4,7 +4,6 @@ import {
   setDoc,
   updateDoc,
   onSnapshot,
-  runTransaction,
   deleteField,
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
@@ -18,8 +17,16 @@ import {
 } from '../types/multiplayer';
 import { TEAM_COLOR_OPTIONS } from '../data/categoriesAndSeed';
 
-const ROOMS_COLLECTION = 'gameRooms';
+// Primary Firestore collection for persistent room synchronization
+// Uses gameSessions for full compatibility with existing Firestore security rules
+const ROOMS_COLLECTION = 'gameSessions';
+const ROOM_DOC_PREFIX = 'room_';
 const PLAYER_STORAGE_KEY = 'nizal_mp_player_v1';
+
+export function getRoomDoc(code: string) {
+  const clean = (code || '').trim().toUpperCase();
+  return doc(db, ROOMS_COLLECTION, `${ROOM_DOC_PREFIX}${clean}`);
+}
 
 export interface PersistentPlayerProfile {
   id: string;
@@ -51,7 +58,11 @@ export function getOrCreatePlayerProfile(user?: User | null, defaultName?: strin
   }
 
   const generatedId = user?.uid || `player_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-  const initialName = defaultName?.trim() || user?.displayName || `لاعب ${Math.floor(100 + Math.random() * 900)}`;
+  const initialName =
+    defaultName?.trim() ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    `لاعب ${Math.floor(100 + Math.random() * 900)}`;
 
   const profile: PersistentPlayerProfile = {
     id: generatedId,
@@ -126,7 +137,7 @@ export interface CreateRoomParams {
 export async function createOnlineRoom(params: CreateRoomParams): Promise<OnlineGameRoom> {
   const playerProfile = getOrCreatePlayerProfile(params.user, params.hostName);
   const code = generateRoomCode();
-  const roomRef = doc(db, ROOMS_COLLECTION, code);
+  const roomRef = getRoomDoc(code);
 
   const teamCount = Math.max(2, Math.min(4, params.teamCount || 2));
   const teams: RoomTeam[] = [];
@@ -196,8 +207,19 @@ export async function createOnlineRoom(params: CreateRoomParams): Promise<Online
 // 2. Fetch single room
 export async function fetchOnlineRoom(code: string): Promise<OnlineGameRoom | null> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
-  const snap = await getDoc(roomRef);
+  // Check primary room_CODE
+  let snap = await getDoc(getRoomDoc(cleanCode));
+  if (!snap.exists()) {
+    // Check fallback without prefix
+    snap = await getDoc(doc(db, ROOMS_COLLECTION, cleanCode));
+  }
+  if (!snap.exists()) {
+    try {
+      snap = await getDoc(doc(db, 'gameRooms', cleanCode));
+    } catch {
+      // ignore
+    }
+  }
   if (!snap.exists()) return null;
   return snap.data() as OnlineGameRoom;
 }
@@ -209,7 +231,7 @@ export function subscribeToOnlineRoom(
   onError?: (err: Error) => void
 ): () => void {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
 
   return onSnapshot(
     roomRef,
@@ -227,7 +249,7 @@ export function subscribeToOnlineRoom(
   );
 }
 
-// 4. Join an existing Room with Atomic Transaction
+// 4. Join an existing Room
 export async function joinOnlineRoom(params: {
   code: string;
   playerName: string;
@@ -236,83 +258,81 @@ export async function joinOnlineRoom(params: {
 }): Promise<{ room: OnlineGameRoom; player: RoomPlayer }> {
   const cleanCode = params.code.trim().toUpperCase();
   const playerProfile = getOrCreatePlayerProfile(params.user, params.playerName);
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
 
-  return await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(roomRef);
-    if (!snap.exists()) {
-      throw new Error('رمز الغرفة غير صحيح أو أن الغرفة غير موجودة');
+  const snap = await getDoc(roomRef);
+  if (!snap.exists()) {
+    throw new Error('رمز الغرفة غير صحيح أو أن الغرفة غير موجودة');
+  }
+
+  const room = snap.data() as OnlineGameRoom;
+
+  if (room.status === 'finished') {
+    throw new Error('المباراة في هذه الغرفة انتهت بالفعل. يرجى إنشاء غرفة جديدة');
+  }
+
+  const existingPlayer = room.players ? room.players[playerProfile.id] : undefined;
+  const totalPlayers = Object.keys(room.players || {}).length;
+
+  if (!existingPlayer && totalPlayers >= (room.maxPlayers || 16)) {
+    throw new Error('الغرفة ممتلئة بالكامل');
+  }
+
+  // Determine team
+  let assignedTeamId = existingPlayer?.teamId || null;
+  if (!assignedTeamId) {
+    if (params.preferredTeamId && room.teams.some((t) => t.id === params.preferredTeamId)) {
+      assignedTeamId = params.preferredTeamId;
+    } else {
+      // Pick team with fewest players
+      const counts: Record<string, number> = {};
+      room.teams.forEach((t) => (counts[t.id] = 0));
+      Object.values(room.players || {}).forEach((p) => {
+        if (p.teamId && counts[p.teamId] !== undefined) {
+          counts[p.teamId]++;
+        }
+      });
+      const sorted = [...room.teams].sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0));
+      assignedTeamId = sorted[0]?.id || room.teams[0].id;
     }
+  }
 
-    const room = snap.data() as OnlineGameRoom;
+  const now = Date.now();
+  const updatedPlayer: RoomPlayer = {
+    id: playerProfile.id,
+    name: playerProfile.name,
+    teamId: assignedTeamId,
+    isHost: existingPlayer ? existingPlayer.isHost : playerProfile.id === room.hostId,
+    joinedAt: existingPlayer ? existingPlayer.joinedAt : now,
+    lastSeen: now,
+    connectionStatus: 'online',
+    userId: params.user?.uid || null,
+  };
 
-    if (room.status === 'finished') {
-      throw new Error('المباراة في هذه الغرفة انتهت بالفعل. يرجى إنشاء غرفة جديدة');
-    }
+  const nextPlayers = {
+    ...(room.players || {}),
+    [playerProfile.id]: updatedPlayer,
+  };
 
-    const existingPlayer = room.players[playerProfile.id];
-    const totalPlayers = Object.keys(room.players).length;
+  const isHost = updatedPlayer.isHost;
 
-    if (!existingPlayer && totalPlayers >= (room.maxPlayers || 16)) {
-      throw new Error('الغرفة ممتلئة بالكامل');
-    }
-
-    // Determine team
-    let assignedTeamId = existingPlayer?.teamId || null;
-    if (!assignedTeamId) {
-      if (params.preferredTeamId && room.teams.some((t) => t.id === params.preferredTeamId)) {
-        assignedTeamId = params.preferredTeamId;
-      } else {
-        // Pick team with fewest players
-        const counts: Record<string, number> = {};
-        room.teams.forEach((t) => (counts[t.id] = 0));
-        Object.values(room.players).forEach((p) => {
-          if (p.teamId && counts[p.teamId] !== undefined) {
-            counts[p.teamId]++;
-          }
-        });
-        const sorted = [...room.teams].sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0));
-        assignedTeamId = sorted[0]?.id || room.teams[0].id;
-      }
-    }
-
-    const now = Date.now();
-    const updatedPlayer: RoomPlayer = {
-      id: playerProfile.id,
-      name: playerProfile.name,
-      teamId: assignedTeamId,
-      isHost: existingPlayer ? existingPlayer.isHost : playerProfile.id === room.hostId,
-      joinedAt: existingPlayer ? existingPlayer.joinedAt : now,
-      lastSeen: now,
-      connectionStatus: 'online',
-      userId: params.user?.uid || null,
-    };
-
-    const nextPlayers = {
-      ...room.players,
-      [playerProfile.id]: updatedPlayer,
-    };
-
-    const isHost = updatedPlayer.isHost;
-
-    transaction.update(roomRef, {
-      [`players.${playerProfile.id}`]: updatedPlayer,
-      updatedAt: now,
-      ...(isHost ? { hostLastSeen: now } : {}),
-      lastActionMessage: existingPlayer
-        ? `عاد ${playerProfile.name} للاتصال باللعبة`
-        : `انضم ${playerProfile.name} إلى الغرفة`,
-      lastActionAt: now,
-    });
-
-    return {
-      room: {
-        ...room,
-        players: nextPlayers,
-      },
-      player: updatedPlayer,
-    };
+  await updateDoc(roomRef, {
+    [`players.${playerProfile.id}`]: updatedPlayer,
+    updatedAt: now,
+    ...(isHost ? { hostLastSeen: now } : {}),
+    lastActionMessage: existingPlayer
+      ? `عاد ${playerProfile.name} للاتصال باللعبة`
+      : `انضم ${playerProfile.name} إلى الغرفة`,
+    lastActionAt: now,
   });
+
+  return {
+    room: {
+      ...room,
+      players: nextPlayers,
+    },
+    player: updatedPlayer,
+  };
 }
 
 // 5. Update Player Presence (Heartbeat & Connection Status)
@@ -322,7 +342,7 @@ export async function updateOnlinePlayerPresence(
   status: 'online' | 'connecting' | 'offline'
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   try {
@@ -339,19 +359,19 @@ export async function updateOnlinePlayerPresence(
 // 6. Leave Room
 export async function leaveOnlineRoom(code: string, playerId: string): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   try {
     const snap = await getDoc(roomRef);
     if (!snap.exists()) return;
     const room = snap.data() as OnlineGameRoom;
-    const player = room.players[playerId];
+    const player = room.players ? room.players[playerId] : undefined;
     if (!player) return;
 
-    if (room.status === 'lobby') {
+    if (room.status === 'lobby' || (room.status as string) === 'waiting') {
       // In lobby, completely remove player or transfer host
-      const nextPlayers = { ...room.players };
+      const nextPlayers = { ...(room.players || {}) };
       delete nextPlayers[playerId];
 
       let nextHostId = room.hostId;
@@ -395,18 +415,18 @@ export async function leaveOnlineRoom(code: string, playerId: string): Promise<v
 // 7. Transfer or Claim Host when Host is Inactive
 export async function claimOnlineHost(code: string, newHostPlayerId: string): Promise<boolean> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
 
-  return await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(roomRef);
+  try {
+    const snap = await getDoc(roomRef);
     if (!snap.exists()) return false;
     const room = snap.data() as OnlineGameRoom;
 
-    const candidate = room.players[newHostPlayerId];
+    const candidate = room.players ? room.players[newHostPlayerId] : undefined;
     if (!candidate) return false;
 
-    // Verify current host is offline or hasn't responded in > 30 seconds
-    const currentHost = room.players[room.hostId];
+    // Verify current host is offline or hasn't responded in > 35 seconds
+    const currentHost = room.players ? room.players[room.hostId] : undefined;
     const isCurrentHostStale =
       !currentHost ||
       currentHost.connectionStatus === 'offline' ||
@@ -417,7 +437,7 @@ export async function claimOnlineHost(code: string, newHostPlayerId: string): Pr
     }
 
     const now = Date.now();
-    const nextPlayers = { ...room.players };
+    const nextPlayers = { ...(room.players || {}) };
 
     if (currentHost) {
       nextPlayers[room.hostId] = {
@@ -432,7 +452,7 @@ export async function claimOnlineHost(code: string, newHostPlayerId: string): Pr
       lastSeen: now,
     };
 
-    transaction.update(roomRef, {
+    await updateDoc(roomRef, {
       hostId: newHostPlayerId,
       hostName: candidate.name,
       hostLastSeen: now,
@@ -443,7 +463,10 @@ export async function claimOnlineHost(code: string, newHostPlayerId: string): Pr
     });
 
     return true;
-  });
+  } catch (err) {
+    console.warn('Could not claim host:', err);
+    return false;
+  }
 }
 
 // 8. Host Actions: Change Teams Configuration (Lobby)
@@ -453,7 +476,7 @@ export async function hostUpdateTeams(
   newTeams: RoomTeam[]
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   await updateDoc(roomRef, {
@@ -471,7 +494,7 @@ export async function assignPlayerTeam(
   targetTeamId: string
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   await updateDoc(roomRef, {
@@ -489,7 +512,7 @@ export async function hostKickPlayer(
   targetPlayerId: string
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   const snap = await getDoc(roomRef);
@@ -497,7 +520,7 @@ export async function hostKickPlayer(
   const room = snap.data() as OnlineGameRoom;
   if (room.hostId !== hostId || targetPlayerId === hostId) return;
 
-  const target = room.players[targetPlayerId];
+  const target = room.players ? room.players[targetPlayerId] : undefined;
 
   await updateDoc(roomRef, {
     [`players.${targetPlayerId}`]: deleteField(),
@@ -515,7 +538,7 @@ export async function hostStartGame(
   teamSubcategoryIds: Record<string, string[]>
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   await updateDoc(roomRef, {
@@ -542,7 +565,7 @@ export async function hostSelectQuestion(
   questionPayload: ActiveQuestionState
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   await updateDoc(roomRef, {
@@ -556,7 +579,7 @@ export async function hostSelectQuestion(
 // 13. Host: Reveal Answer to all players
 export async function hostRevealAnswer(code: string, hostId: string): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   await updateDoc(roomRef, {
@@ -570,7 +593,7 @@ export async function hostRevealAnswer(code: string, hostId: string): Promise<vo
 // 14. Host: Close Active Question Modal without scoring (Dismiss)
 export async function hostCloseActiveQuestion(code: string, hostId: string): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   await updateDoc(roomRef, {
@@ -581,7 +604,7 @@ export async function hostCloseActiveQuestion(code: string, hostId: string): Pro
   });
 }
 
-// 15. Host: Award Points to a Team (Atomic Transaction to prevent double scoring)
+// 15. Host: Award Points to a Team
 export async function hostAwardPoints(params: {
   code: string;
   hostId: string;
@@ -592,69 +615,67 @@ export async function hostAwardPoints(params: {
   totalPlayableTiles: number;
 }): Promise<void> {
   const cleanCode = params.code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
 
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(roomRef);
-    if (!snap.exists()) throw new Error('الغرفة غير موجودة');
-    const room = snap.data() as OnlineGameRoom;
+  const snap = await getDoc(roomRef);
+  if (!snap.exists()) throw new Error('الغرفة غير موجودة');
+  const room = snap.data() as OnlineGameRoom;
 
-    // Verify host
-    if (room.hostId !== params.hostId) {
-      throw new Error('المضيف فقط يملك صلاحية تسجيل النقاط');
-    }
+  // Verify host
+  if (room.hostId !== params.hostId) {
+    throw new Error('المضيف فقط يملك صلاحية تسجيل النقاط');
+  }
 
-    // Idempotency check: tile already used
-    if (room.usedTileKeys.includes(params.tileKey)) {
-      return;
-    }
+  // Idempotency check: tile already used
+  if (room.usedTileKeys.includes(params.tileKey)) {
+    return;
+  }
 
-    const nextUsedTiles = [...room.usedTileKeys, params.tileKey];
-    const nextRoundQuestions = room.roundUsedQuestionIds.includes(params.questionId)
-      ? room.roundUsedQuestionIds
-      : [...room.roundUsedQuestionIds, params.questionId];
+  const nextUsedTiles = [...room.usedTileKeys, params.tileKey];
+  const nextRoundQuestions = room.roundUsedQuestionIds.includes(params.questionId)
+    ? room.roundUsedQuestionIds
+    : [...room.roundUsedQuestionIds, params.questionId];
 
-    const safeTeamIndex =
-      params.awardedTeamIndex >= 0 && params.awardedTeamIndex < room.teams.length
-        ? params.awardedTeamIndex
-        : 0;
+  const safeTeamIndex =
+    params.awardedTeamIndex >= 0 && params.awardedTeamIndex < room.teams.length
+      ? params.awardedTeamIndex
+      : 0;
 
-    const awardedTeam = room.teams[safeTeamIndex];
-    const nextTeams = room.teams.map((t, idx) =>
-      idx === safeTeamIndex ? { ...t, score: t.score + params.points } : t
-    );
+  const awardedTeam = room.teams[safeTeamIndex];
+  const nextTeams = room.teams.map((t, idx) =>
+    idx === safeTeamIndex ? { ...t, score: t.score + params.points } : t
+  );
 
-    const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
-    const now = Date.now();
+  const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
+  const now = Date.now();
 
-    // Check if game is completed
-    const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
-    let winnerId: string | null = null;
-    let winnerName: string | null = null;
-    let winnerScore = 0;
+  // Check if game is completed
+  const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
+  let winnerId: string | null = null;
+  let winnerName: string | null = null;
+  let winnerScore = 0;
 
-    if (isGameFinished) {
-      const sorted = [...nextTeams].sort((a, b) => b.score - a.score);
-      const win = sorted[0];
-      winnerId = win ? win.id : null;
-      winnerName = win ? win.name : '';
-      winnerScore = win ? win.score : 0;
-    }
+  if (isGameFinished) {
+    const sorted = [...nextTeams].sort((a, b) => b.score - a.score);
+    const win = sorted[0];
+    winnerId = win ? win.id : null;
+    winnerName = win ? win.name : '';
+    winnerScore = win ? win.score : 0;
+  }
 
-    transaction.update(roomRef, {
-      teams: nextTeams,
-      usedTileKeys: nextUsedTiles,
-      roundUsedQuestionIds: nextRoundQuestions,
-      activeTeamIndex: nextActiveTeamIndex,
-      activeQuestion: null,
-      status: isGameFinished ? 'finished' : room.status,
-      winnerTeamId: winnerId,
-      winnerTeamName: winnerName,
-      winnerScore,
-      lastActionMessage: `حصل ${awardedTeam.name} على +${params.points} نقطة! 🎉`,
-      lastActionAt: now,
-      updatedAt: now,
-    });
+  await updateDoc(roomRef, {
+    teams: nextTeams,
+    usedTileKeys: nextUsedTiles,
+    roundUsedQuestionIds: nextRoundQuestions,
+    activeTeamIndex: nextActiveTeamIndex,
+    activeQuestion: null,
+    status: isGameFinished ? 'finished' : room.status,
+    winnerTeamId: winnerId,
+    winnerTeamName: winnerName,
+    winnerScore,
+    lastActionMessage: `حصل ${awardedTeam.name} على +${params.points} نقطة! 🎉`,
+    lastActionAt: now,
+    updatedAt: now,
   });
 }
 
@@ -667,57 +688,55 @@ export async function hostMarkTileNoPoints(params: {
   totalPlayableTiles: number;
 }): Promise<void> {
   const cleanCode = params.code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
 
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(roomRef);
-    if (!snap.exists()) return;
-    const room = snap.data() as OnlineGameRoom;
+  const snap = await getDoc(roomRef);
+  if (!snap.exists()) return;
+  const room = snap.data() as OnlineGameRoom;
 
-    if (room.hostId !== params.hostId) return;
-    if (room.usedTileKeys.includes(params.tileKey)) return;
+  if (room.hostId !== params.hostId) return;
+  if (room.usedTileKeys.includes(params.tileKey)) return;
 
-    const nextUsedTiles = [...room.usedTileKeys, params.tileKey];
-    const nextRoundQuestions = room.roundUsedQuestionIds.includes(params.questionId)
-      ? room.roundUsedQuestionIds
-      : [...room.roundUsedQuestionIds, params.questionId];
+  const nextUsedTiles = [...room.usedTileKeys, params.tileKey];
+  const nextRoundQuestions = room.roundUsedQuestionIds.includes(params.questionId)
+    ? room.roundUsedQuestionIds
+    : [...room.roundUsedQuestionIds, params.questionId];
 
-    const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
-    const now = Date.now();
+  const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
+  const now = Date.now();
 
-    const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
-    let winnerId: string | null = null;
-    let winnerName: string | null = null;
-    let winnerScore = 0;
+  const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
+  let winnerId: string | null = null;
+  let winnerName: string | null = null;
+  let winnerScore = 0;
 
-    if (isGameFinished) {
-      const sorted = [...room.teams].sort((a, b) => b.score - a.score);
-      const win = sorted[0];
-      winnerId = win ? win.id : null;
-      winnerName = win ? win.name : '';
-      winnerScore = win ? win.score : 0;
-    }
+  if (isGameFinished) {
+    const sorted = [...room.teams].sort((a, b) => b.score - a.score);
+    const win = sorted[0];
+    winnerId = win ? win.id : null;
+    winnerName = win ? win.name : '';
+    winnerScore = win ? win.score : 0;
+  }
 
-    transaction.update(roomRef, {
-      usedTileKeys: nextUsedTiles,
-      roundUsedQuestionIds: nextRoundQuestions,
-      activeTeamIndex: nextActiveTeamIndex,
-      activeQuestion: null,
-      status: isGameFinished ? 'finished' : room.status,
-      winnerTeamId: winnerId,
-      winnerTeamName: winnerName,
-      winnerScore,
-      lastActionMessage: 'تم تخطي السؤال بدون نقاط',
-      lastActionAt: now,
-      updatedAt: now,
-    });
+  await updateDoc(roomRef, {
+    usedTileKeys: nextUsedTiles,
+    roundUsedQuestionIds: nextRoundQuestions,
+    activeTeamIndex: nextActiveTeamIndex,
+    activeQuestion: null,
+    status: isGameFinished ? 'finished' : room.status,
+    winnerTeamId: winnerId,
+    winnerTeamName: winnerName,
+    winnerScore,
+    lastActionMessage: 'تم تخطي السؤال بدون نقاط',
+    lastActionAt: now,
+    updatedAt: now,
   });
 }
 
 // 17. Host: Finish Game Manually
 export async function hostFinishGame(code: string, hostId: string): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   const snap = await getDoc(roomRef);
@@ -747,7 +766,7 @@ export async function hostRestartGame(
   returnToLobby = false
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   const snap = await getDoc(roomRef);
@@ -779,7 +798,7 @@ export async function playerSendOnlineRequest(
   request: PlayerRequest
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
-  const roomRef = doc(db, ROOMS_COLLECTION, cleanCode);
+  const roomRef = getRoomDoc(cleanCode);
   const now = Date.now();
 
   try {

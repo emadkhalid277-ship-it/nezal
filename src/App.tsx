@@ -903,7 +903,23 @@ export default function App() {
   };
 
   const handleResumeIncompleteMatch = (matchToResume: UserGameMatch) => {
-    if (!matchToResume || !Array.isArray(matchToResume.teams) || matchToResume.teams.length < 2) {
+    if (!matchToResume) {
+      alert('تعذر استعادة المباراة: بيانات هذه المباراة غير مكتملة.');
+      return;
+    }
+
+    // 1. Online match: transition immediately to online multiplayer room
+    if (matchToResume.mode === 'online' && matchToResume.roomCode) {
+      setInitialRoomCode(matchToResume.roomCode);
+      setIsResumeModalOpen(false);
+      setIncompleteMatch(null);
+      setActivePage('online_multiplayer');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // 2. Local match: validate teams and restore state to game board
+    if (!Array.isArray(matchToResume.teams) || matchToResume.teams.length < 2) {
       alert('تعذر استعادة المباراة: بيانات هذه المباراة غير مكتملة.');
       return;
     }

@@ -1,7 +1,9 @@
 export type RoomStatus =
   | 'lobby'
+  | 'waiting'
   | 'selecting_categories'
   | 'in_game'
+  | 'playing'
   | 'finished';
 
 export type PlayerConnectionStatus = 'online' | 'connecting' | 'offline';
