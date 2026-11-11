@@ -27,7 +27,9 @@ import {
   Check,
   LayoutGrid,
   Inbox,
+  BarChart3,
 } from 'lucide-react';
+import { AdminPlayerAnalytics } from '../components/AdminPlayerAnalytics';
 import {
   ApprovalStatus,
   ContactSettings,
@@ -102,7 +104,8 @@ type AdminTab =
   | 'images'
   | 'questions'
   | 'contact'
-  | 'contributions';
+  | 'contributions'
+  | 'player_analytics';
 
 const DIFFICULTIES_LIST: DifficultyLevel[] = [
   'سهل',
@@ -1895,6 +1898,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </span>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('player_analytics')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+            adminTab === 'player_analytics'
+              ? 'bg-[#14543D] text-white shadow-xs'
+              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4 text-[#F07842]" />
+          <span>إحصائيات اللاعبين</span>
+        </button>
       </div>
 
       {statusBanner && (
@@ -3639,6 +3655,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* SECTION 7: PLAYER & CATEGORY ANALYTICS DASHBOARD */}
+      {adminTab === 'player_analytics' && (
+        <AdminPlayerAnalytics />
       )}
 
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}

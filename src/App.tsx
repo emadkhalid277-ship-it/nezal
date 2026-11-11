@@ -771,10 +771,18 @@ export default function App() {
         setCurrentMatchId(matchId);
       }
 
+      const title =
+        overrides?.matchTitle ||
+        (teams && teams.length >= 2
+          ? `${teams[0].name} ضد ${teams[1].name}`
+          : 'مباراة نِزال');
+
       const payload: UserGameMatch = {
         id: matchId,
         userId: user.uid,
         userEmail: user.email || null,
+        userName: user.displayName || null,
+        matchTitle: title,
         status: 'in_progress',
         mode: 'local',
         teams,
@@ -788,6 +796,7 @@ export default function App() {
         isGameLocked,
         activePage,
         activeQuestionState: activeQuestionSaved,
+        totalQuestionsPlayed: usedTileKeys.length,
         updatedAt: Date.now(),
         ...overrides,
       };
@@ -815,6 +824,26 @@ export default function App() {
     ]
   );
 
+  // Periodic auto-save to Firestore every 30 seconds if game is locked and user is signed in
+  useEffect(() => {
+    if (!user || !isGameLocked || !currentMatchId || activePage === 'results') return;
+
+    const interval = setInterval(() => {
+      autoSaveMatch();
+    }, 30000);
+
+    const handleBeforeUnload = () => {
+      autoSaveMatch();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [user, isGameLocked, currentMatchId, activePage, autoSaveMatch]);
+
   const handleNavigate = (page: PageView) => {
     // 1. Mandatory Sign-in: require user authentication for playing or managing matches
     const protectedPages: PageView[] = [
@@ -827,15 +856,21 @@ export default function App() {
     ];
 
     if (!user && protectedPages.includes(page)) {
-      setPendingPlayTarget(page);
-      setIsAuthModalOpen(true);
-      return;
+      if (isGameLocked && (page === 'board' || page === 'categories')) {
+        // Allow ongoing active game session to continue without interruption
+      } else {
+        setPendingPlayTarget(page);
+        setIsAuthModalOpen(true);
+        return;
+      }
     }
 
     if (page === 'categories') {
       setInitialMainCategoryId(null);
     }
-    if (page === 'board' && !isAllTeamsSelectionComplete) {
+
+    // Never block returning to board if the game is already in progress / locked!
+    if (page === 'board' && !isGameLocked && !isAllTeamsSelectionComplete) {
       // Do not allow entering the board until every team has selected 3 unique subcategories
       const firstIncompleteIdx = teams.findIndex(
         (t) => (teamSubcategoryIds[t.id] || []).length < SUBCATEGORIES_PER_TEAM
@@ -868,6 +903,11 @@ export default function App() {
   };
 
   const handleResumeIncompleteMatch = (matchToResume: UserGameMatch) => {
+    if (!matchToResume || !Array.isArray(matchToResume.teams) || matchToResume.teams.length < 2) {
+      alert('تعذر استعادة المباراة: بيانات هذه المباراة غير مكتملة.');
+      return;
+    }
+
     setCurrentMatchId(matchToResume.id);
     if (Array.isArray(matchToResume.teams) && matchToResume.teams.length >= 2) {
       setTeams(matchToResume.teams);

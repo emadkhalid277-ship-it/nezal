@@ -110,6 +110,24 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [autoAdvanceBanner, setAutoAdvanceBanner] = useState<string | null>(null);
   const [isTeamSetupModalOpen, setIsTeamSetupModalOpen] = useState(false);
+  const [navError, setNavError] = useState<string | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const handleReturnToBoard = () => {
+    setNavError(null);
+    setIsNavigating(true);
+    try {
+      if (onGoToBoard) {
+        onGoToBoard();
+      } else {
+        throw new Error('دالة العودة للوحة اللعب غير متاحة');
+      }
+    } catch (err: any) {
+      console.error('Error navigating to board:', err);
+      setNavError('حدث خطأ أثناء العودة للوحة اللعب. يرجى إعادة المحاولة.');
+      setIsNavigating(false);
+    }
+  };
 
   const safeSelectingTeamIndex =
     selectingTeamIndex >= 0 && selectingTeamIndex < teams.length
@@ -606,7 +624,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
       <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 md:p-7 space-y-5 shadow-xs">
         {/* Lock Banner if Game is Active */}
         {isGameLocked && (
-          <div className="p-4 rounded-xl bg-[#14543D] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="p-4 rounded-xl bg-[#14543D] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm relative z-20">
             <div className="flex items-center gap-2.5">
               <Lock className="w-5 h-5 text-[#F07842] shrink-0" />
               <div>
@@ -616,17 +634,26 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 <div className="text-xs text-white/80">
                   تم قفل الفرق والفئات المختارة نهائياً لحماية نزاهة المنافسة حتى انتهاء التحدي وبدء لعبة جديدة.
                 </div>
+                {navError && (
+                  <div className="text-xs text-rose-300 font-bold mt-1 bg-rose-950/50 px-2.5 py-1 rounded-lg">
+                    {navError}
+                  </div>
+                )}
               </div>
             </div>
-            {onGoToBoard && (
-              <button
-                type="button"
-                onClick={onGoToBoard}
-                className="px-4 py-2 rounded-lg bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold whitespace-nowrap self-start sm:self-center cursor-pointer"
-              >
-                العودة إلى لوحة اللعب
-              </button>
-            )}
+            <button
+              type="button"
+              disabled={isNavigating}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleReturnToBoard();
+              }}
+              className="relative z-30 px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] active:scale-95 text-white text-xs sm:text-sm font-bold whitespace-nowrap self-start sm:self-center cursor-pointer shadow-sm transition-all flex items-center gap-2 touch-manipulation select-none disabled:opacity-60"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>{isNavigating ? 'جاري الانتقال...' : 'العودة إلى لوحة اللعب'}</span>
+            </button>
           </div>
         )}
 
@@ -959,11 +986,16 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 {isGameLocked ? (
                   <button
                     type="button"
-                    onClick={onGoToBoard || handleStartChallenge}
-                    className="px-6 py-2.5 rounded-xl bg-[#14543D] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm cursor-pointer"
+                    disabled={isNavigating}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleReturnToBoard();
+                    }}
+                    className="px-6 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] active:scale-95 text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm cursor-pointer transition-all touch-manipulation select-none disabled:opacity-60"
                   >
                     <Lock className="w-4 h-4 text-[#F07842]" />
-                    <span>العودة إلى لوحة اللعب (الجولة مقفلة)</span>
+                    <span>{isNavigating ? 'جاري الانتقال...' : 'العودة إلى لوحة اللعب (الجولة مقفلة)'}</span>
                   </button>
                 ) : isAllTeamsComplete ? (
                   <button

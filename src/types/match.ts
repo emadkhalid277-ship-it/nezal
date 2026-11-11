@@ -25,6 +25,7 @@ export interface UserGameMatch {
   userId: string;
   userEmail?: string | null;
   userName?: string | null;
+  matchTitle?: string;
   status: MatchStatus;
   mode: MatchMode;
   roomCode?: string;
