@@ -1,9 +1,13 @@
 export type RoomStatus =
+  | 'waiting_for_opponent'
+  | 'selecting_categories'
+  | 'ready'
+  | 'playing'
+  | 'completed'
+  // Aliases for backwards compatibility:
   | 'lobby'
   | 'waiting'
-  | 'selecting_categories'
   | 'in_game'
-  | 'playing'
   | 'finished';
 
 export type PlayerConnectionStatus = 'online' | 'connecting' | 'offline';

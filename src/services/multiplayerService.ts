@@ -13,6 +13,7 @@ import {
   OnlineGameRoom,
   PlayerRequest,
   RoomPlayer,
+  RoomStatus,
   RoomTeam,
 } from '../types/multiplayer';
 import { TEAM_COLOR_OPTIONS } from '../data/categoriesAndSeed';
@@ -175,7 +176,7 @@ export async function createOnlineRoom(params: CreateRoomParams): Promise<Online
     code,
     hostId: playerProfile.id,
     hostName: playerProfile.name,
-    status: 'lobby',
+    status: 'waiting_for_opponent',
     maxPlayers: 16,
     allowPlayerTeamSelection: true,
     timerDuration: params.timerDuration || 60,
@@ -184,7 +185,10 @@ export async function createOnlineRoom(params: CreateRoomParams): Promise<Online
       [playerProfile.id]: hostPlayer,
     },
     selectedSubcategoryIds: [],
-    teamSubcategoryIds: {},
+    teamSubcategoryIds: {
+      [teams[0].id]: [],
+      [teams[1].id]: [],
+    },
     activeTeamIndex: 0,
     usedTileKeys: [],
     roundUsedQuestionIds: [],
@@ -192,7 +196,7 @@ export async function createOnlineRoom(params: CreateRoomParams): Promise<Online
     winnerTeamId: null,
     winnerTeamName: null,
     winnerScore: 0,
-    lastActionMessage: `أنشأ ${playerProfile.name} الغرفة`,
+    lastActionMessage: `أنشأ ${playerProfile.name} الغرفة، بانتظار دخول المنافس...`,
     lastActionAt: now,
     hostLastSeen: now,
     playerRequests: {},
@@ -278,22 +282,20 @@ export async function joinOnlineRoom(params: {
     throw new Error('الغرفة ممتلئة بالكامل');
   }
 
-  // Determine team
+  // Determine team: if opponent is entering, guarantee placement on the opposing team (team 2)
   let assignedTeamId = existingPlayer?.teamId || null;
   if (!assignedTeamId) {
     if (params.preferredTeamId && room.teams.some((t) => t.id === params.preferredTeamId)) {
       assignedTeamId = params.preferredTeamId;
     } else {
-      // Pick team with fewest players
-      const counts: Record<string, number> = {};
-      room.teams.forEach((t) => (counts[t.id] = 0));
-      Object.values(room.players || {}).forEach((p) => {
-        if (p.teamId && counts[p.teamId] !== undefined) {
-          counts[p.teamId]++;
-        }
-      });
-      const sorted = [...room.teams].sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0));
-      assignedTeamId = sorted[0]?.id || room.teams[0].id;
+      const team1Id = room.teams[0]?.id || 'team_1';
+      const team2Id = room.teams[1]?.id || 'team_2';
+      // If player is host, put in team 1; if guest, place in team 2
+      if (playerProfile.id === room.hostId) {
+        assignedTeamId = team1Id;
+      } else {
+        assignedTeamId = team2Id;
+      }
     }
   }
 
@@ -315,14 +317,35 @@ export async function joinOnlineRoom(params: {
   };
 
   const isHost = updatedPlayer.isHost;
+  const totalPlayersCount = Object.keys(nextPlayers).length;
+
+  // Determine next room status
+  let nextStatus: RoomStatus = room.status;
+  if (totalPlayersCount >= 2) {
+    const t1Id = room.teams[0]?.id || 'team_1';
+    const t2Id = room.teams[1]?.id || 'team_2';
+    const t1Count = (room.teamSubcategoryIds?.[t1Id] || []).length;
+    const t2Count = (room.teamSubcategoryIds?.[t2Id] || []).length;
+
+    if (t1Count === 3 && t2Count === 3) {
+      nextStatus = 'ready';
+    } else if (room.status === 'waiting_for_opponent' || room.status === 'lobby' || (room.status as string) === 'waiting') {
+      nextStatus = 'selecting_categories';
+    }
+  } else {
+    nextStatus = 'waiting_for_opponent';
+  }
+
+  const actionMsg = existingPlayer
+    ? `عاد ${playerProfile.name} للاتصال باللعبة`
+    : `انضم المنافس ${playerProfile.name}! ابدأوا باختيار 3 فئات لكل فريق 🎯`;
 
   await updateDoc(roomRef, {
     [`players.${playerProfile.id}`]: updatedPlayer,
+    status: nextStatus,
     updatedAt: now,
     ...(isHost ? { hostLastSeen: now } : {}),
-    lastActionMessage: existingPlayer
-      ? `عاد ${playerProfile.name} للاتصال باللعبة`
-      : `انضم ${playerProfile.name} إلى الغرفة`,
+    lastActionMessage: actionMsg,
     lastActionAt: now,
   });
 
@@ -330,6 +353,8 @@ export async function joinOnlineRoom(params: {
     room: {
       ...room,
       players: nextPlayers,
+      status: nextStatus,
+      lastActionMessage: actionMsg,
     },
     player: updatedPlayer,
   };
@@ -530,21 +555,140 @@ export async function hostKickPlayer(
   });
 }
 
-// 11. Host: Set Subcategories & Start Game
+// 11. Team Subcategory Pick (Toggle up to 3 subcategories per team)
+export async function toggleOnlineSubcategoryPick(
+  code: string,
+  playerId: string,
+  teamId: string,
+  subcategoryId: string
+): Promise<OnlineGameRoom> {
+  const cleanCode = code.trim().toUpperCase();
+  const roomRef = getRoomDoc(cleanCode);
+
+  const snap = await getDoc(roomRef);
+  if (!snap.exists()) throw new Error('الغرفة غير موجودة');
+  const room = snap.data() as OnlineGameRoom;
+
+  // Cannot modify categories once game has started
+  if (
+    room.status === 'playing' ||
+    room.status === 'in_game' ||
+    room.status === 'completed' ||
+    room.status === 'finished'
+  ) {
+    throw new Error('لا يمكن تعديل الفئات بعد بدء المباراة');
+  }
+
+  // Security check: verify player belongs to this team
+  const player = room.players ? room.players[playerId] : undefined;
+  if (!player) throw new Error('أنت غير مسجل في هذه الغرفة');
+
+  if (player.teamId !== teamId) {
+    throw new Error('لا يمكنك تعديل اختيارات الفريق الآخر');
+  }
+
+  const currentPicks = room.teamSubcategoryIds?.[teamId] || [];
+  let nextPicks: string[];
+
+  if (currentPicks.includes(subcategoryId)) {
+    // Deselect
+    nextPicks = currentPicks.filter((id) => id !== subcategoryId);
+  } else {
+    // Select
+    if (currentPicks.length >= 3) {
+      throw new Error('لقد اخترت الحد الأقصى (3 فئات) لفريقك. اضغط على فئة لإلغاء تحديدها أولاً.');
+    }
+    nextPicks = [...currentPicks, subcategoryId];
+  }
+
+  const updatedTeamSubcategoryIds = {
+    ...(room.teamSubcategoryIds || {}),
+    [teamId]: nextPicks,
+  };
+
+  const team1Id = room.teams[0]?.id || 'team_1';
+  const team2Id = room.teams[1]?.id || 'team_2';
+  const team1Count = (updatedTeamSubcategoryIds[team1Id] || []).length;
+  const team2Count = (updatedTeamSubcategoryIds[team2Id] || []).length;
+
+  const playersList = Object.values(room.players || {});
+  const hasOpponent = playersList.length >= 2;
+
+  let nextStatus: RoomStatus = room.status;
+  if (!hasOpponent) {
+    nextStatus = 'waiting_for_opponent';
+  } else if (team1Count === 3 && team2Count === 3) {
+    nextStatus = 'ready';
+  } else {
+    nextStatus = 'selecting_categories';
+  }
+
+  const now = Date.now();
+  const updatePayload = {
+    teamSubcategoryIds: updatedTeamSubcategoryIds,
+    status: nextStatus,
+    lastActionMessage: `حدّث ${player.name} اختيارات فريقه (${nextPicks.length}/3 فئات)`,
+    lastActionAt: now,
+    updatedAt: now,
+  };
+
+  await updateDoc(roomRef, updatePayload);
+
+  return {
+    ...room,
+    ...updatePayload,
+  };
+}
+
+// 12. Host: Set Subcategories & Start Game (Enforcing opponent presence + 3 categories each)
 export async function hostStartGame(
   code: string,
   hostId: string,
-  selectedSubcategoryIds: string[],
-  teamSubcategoryIds: Record<string, string[]>
+  selectedSubcategoryIds?: string[],
+  teamSubcategoryIds?: Record<string, string[]>
 ): Promise<void> {
   const cleanCode = code.trim().toUpperCase();
   const roomRef = getRoomDoc(cleanCode);
+
+  const snap = await getDoc(roomRef);
+  if (!snap.exists()) throw new Error('الغرفة غير موجودة');
+  const room = snap.data() as OnlineGameRoom;
+
+  if (room.hostId !== hostId) {
+    throw new Error('المضيف فقط يملك صلاحية بدء التحدي');
+  }
+
+  const playersList = Object.values(room.players || {});
+  if (playersList.length < 2) {
+    throw new Error('بانتظار دخول المنافس');
+  }
+
+  const t1Id = room.teams[0]?.id || 'team_1';
+  const t2Id = room.teams[1]?.id || 'team_2';
+
+  const t1Picks = teamSubcategoryIds?.[t1Id] || room.teamSubcategoryIds?.[t1Id] || [];
+  const t2Picks = teamSubcategoryIds?.[t2Id] || room.teamSubcategoryIds?.[t2Id] || [];
+
+  if (t1Picks.length !== 3) {
+    throw new Error('يجب على الفريق الأول (المضيف) اختيار 3 فئات قبل البدء');
+  }
+  if (t2Picks.length !== 3) {
+    throw new Error('يجب على الفريق الثاني (المنافس) اختيار 3 فئات قبل البدء');
+  }
+
+  const finalMergedIds = selectedSubcategoryIds && selectedSubcategoryIds.length === 6
+    ? selectedSubcategoryIds
+    : [...t1Picks, ...t2Picks];
+
   const now = Date.now();
 
   await updateDoc(roomRef, {
-    status: 'in_game',
-    selectedSubcategoryIds,
-    teamSubcategoryIds,
+    status: 'playing',
+    selectedSubcategoryIds: finalMergedIds,
+    teamSubcategoryIds: {
+      [t1Id]: t1Picks,
+      [t2Id]: t2Picks,
+    },
     activeTeamIndex: 0,
     usedTileKeys: [],
     roundUsedQuestionIds: [],
@@ -552,7 +696,7 @@ export async function hostStartGame(
     winnerTeamId: null,
     winnerTeamName: null,
     winnerScore: 0,
-    lastActionMessage: 'بدأت المباراة! بالتوفيق للجميع 🔥',
+    lastActionMessage: 'بدأت المباراة والتحدي! بالتوفيق للفريقين 🔥',
     lastActionAt: now,
     updatedAt: now,
   });

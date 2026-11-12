@@ -26,6 +26,11 @@ import {
   Hand,
   Layers,
   ChevronDown,
+  Search,
+  X,
+  CheckCircle2,
+  Lock,
+  Flame,
 } from 'lucide-react';
 import {
   ActiveQuestionState,
@@ -62,6 +67,7 @@ import {
   playerSendOnlineRequest,
   savePlayerName,
   subscribeToOnlineRoom,
+  toggleOnlineSubcategoryPick,
   updateOnlinePlayerPresence,
 } from '../services/multiplayerService';
 import { TEAM_COLOR_OPTIONS, DEFAULT_SUBCATEGORIES } from '../data/categoriesAndSeed';
@@ -127,10 +133,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     null
   );
 
-  // Category selection step inside Lobby for host
-  const [isCategoryPickerOpen, setIsCategoryPickerOpen] =
-    useState<boolean>(false);
-  const [hostPicksMap, setHostPicksMap] = useState<Record<string, string[]>>({});
+  // Category selection & search states
+  const [categoryFilterMainId, setCategoryFilterMainId] = useState<string>('all');
+  const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
+  const [isTogglingSubId, setIsTogglingSubId] = useState<string | null>(null);
 
   // Question Timer State (synced from openedAt)
   const [modalTimeLeft, setModalTimeLeft] = useState<number>(60);
@@ -493,39 +499,91 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  // 5. Host Auto-Pick Subcategories and Start Game
-  const handleHostStartGameAuto = async () => {
+  // 5. Player Toggles Category Pick (Each team picks 3 subcategories)
+  const handleToggleCategoryPick = async (subcategoryId: string) => {
+    if (!currentRoom) return;
+    if (
+      currentRoom.status === 'playing' ||
+      currentRoom.status === 'in_game' ||
+      currentRoom.status === 'completed' ||
+      currentRoom.status === 'finished'
+    ) {
+      setErrorMsg('لا يمكن تعديل الفئات بعد بدء المباراة');
+      return;
+    }
+
+    const myPlayer = currentRoom.players?.[playerProfile.id];
+    const myTeamId =
+      myPlayer?.teamId ||
+      (isHost ? currentRoom.teams[0]?.id : currentRoom.teams[1]?.id);
+
+    if (!myTeamId) {
+      setErrorMsg('يرجى الانضمام إلى فريق أولاً لاختيار الفئات.');
+      return;
+    }
+
+    // Check if player's team already has 3 picks and this is an add
+    const currentTeamPicks = currentRoom.teamSubcategoryIds?.[myTeamId] || [];
+    if (!currentTeamPicks.includes(subcategoryId) && currentTeamPicks.length >= 3) {
+      setErrorMsg('لقد اخترت الحد الأقصى (3 فئات) لفريقك. أزل إحدى الفئات أولاً لاختيار غيرها.');
+      return;
+    }
+
+    setErrorMsg(null);
+    setIsTogglingSubId(subcategoryId);
+
+    try {
+      await toggleOnlineSubcategoryPick(
+        currentRoom.code,
+        playerProfile.id,
+        myTeamId,
+        subcategoryId
+      );
+    } catch (err: any) {
+      console.error('Error toggling category pick:', err);
+      setErrorMsg(err.message || 'حدث خطأ أثناء تعديل اختيار الفئة.');
+    } finally {
+      setIsTogglingSubId(null);
+    }
+  };
+
+  // 6. Host starts game after validating all 5 conditions
+  const handleHostStartGameClick = async () => {
     if (!currentRoom || !isHost) return;
-    if (loading) return; // Prevent double clicking
+    if (loading) return;
+
+    const playersList = Object.values(currentRoom.players || {});
+    if (playersList.length < 2) {
+      setErrorMsg('بانتظار دخول المنافس لمتابعة بدء التحدي');
+      return;
+    }
+
+    const t1Id = currentRoom.teams[0]?.id || 'team_1';
+    const t2Id = currentRoom.teams[1]?.id || 'team_2';
+    const t1Picks = currentRoom.teamSubcategoryIds?.[t1Id] || [];
+    const t2Picks = currentRoom.teamSubcategoryIds?.[t2Id] || [];
+
+    if (t1Picks.length !== 3) {
+      setErrorMsg(`فريق ${currentRoom.teams[0]?.name || 'المضيف'} يحتاج لاختيار 3 فئات (تم اختيار ${t1Picks.length})`);
+      return;
+    }
+
+    if (t2Picks.length !== 3) {
+      setErrorMsg(`فريق ${currentRoom.teams[1]?.name || 'المنافس'} يحتاج لاختيار 3 فئات (تم اختيار ${t2Picks.length})`);
+      return;
+    }
+
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      // Pick 3 unique subcategories per team
-      const neededCount = (currentRoom.teams || []).length * 3;
-      let pool = activeSubcategories;
-      if (!pool || pool.length < neededCount) {
-        pool = DEFAULT_SUBCATEGORIES.filter((s) => s.isActive !== false);
-      }
-
-      if (pool.length < neededCount) {
-        throw new Error(`لا يوجد عدد كافٍ من التصنيفات الفرعية لبدء المباراة (المطلوب ${neededCount}).`);
-      }
-
-      const shuffledSubs = [...pool].sort(() => 0.5 - Math.random());
-      const selectedSubs = shuffledSubs.slice(0, neededCount);
-
-      const teamSubMap: Record<string, string[]> = {};
-      const selectedIds: string[] = [];
-
-      currentRoom.teams.forEach((team, idx) => {
-        const teamSubs = selectedSubs.slice(idx * 3, idx * 3 + 3).map((s) => s.id);
-        teamSubMap[team.id] = teamSubs;
-        selectedIds.push(...teamSubs);
-      });
-
-      await hostStartGame(currentRoom.code, currentRoom.hostId, selectedIds, teamSubMap);
-      setIsCategoryPickerOpen(false);
+      const mergedSubcategoryIds = [...t1Picks, ...t2Picks];
+      await hostStartGame(
+        currentRoom.code,
+        currentRoom.hostId,
+        mergedSubcategoryIds,
+        currentRoom.teamSubcategoryIds
+      );
     } catch (err: any) {
       console.error('Error starting game:', err);
       setErrorMsg(err.message || 'حدث خطأ أثناء بدء المباراة. يرجى المحاولة مرة أخرى.');
@@ -657,6 +715,48 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const playersList = useMemo(() => {
     return currentRoom ? Object.values(currentRoom.players) : [];
   }, [currentRoom]);
+
+  const myPlayer = currentRoom?.players ? currentRoom.players[playerProfile.id] : undefined;
+  const myTeamId =
+    myPlayer?.teamId ||
+    (isHost ? currentRoom?.teams[0]?.id : currentRoom?.teams[1]?.id);
+
+  const myTeam = currentRoom?.teams.find((t) => t.id === myTeamId) || currentRoom?.teams[0];
+  const team1 = currentRoom?.teams[0] || { id: 'team_1', name: 'فريق 1', color: '#14543D', score: 0 };
+  const team2 = currentRoom?.teams[1] || { id: 'team_2', name: 'فريق 2', color: '#F07842', score: 0 };
+
+  const team1Picks = (currentRoom?.teamSubcategoryIds && currentRoom.teamSubcategoryIds[team1.id]) || [];
+  const team2Picks = (currentRoom?.teamSubcategoryIds && currentRoom.teamSubcategoryIds[team2.id]) || [];
+
+  const hasOpponent = playersList.length >= 2;
+  const isCategoriesComplete = team1Picks.length === 3 && team2Picks.length === 3;
+  const isRoomReadyToStart = hasOpponent && isCategoriesComplete;
+
+  // Filtered subcategories for interactive lobby picker
+  const filteredSubcategories = useMemo(() => {
+    return activeSubcategories.filter((sub) => {
+      // Main category filter
+      if (categoryFilterMainId !== 'all') {
+        const parentMain = mainCategories.find(
+          (m) => m.id === categoryFilterMainId || m.name === categoryFilterMainId
+        );
+        const matchesMain =
+          (sub.mainCategoryId && sub.mainCategoryId === categoryFilterMainId) ||
+          (parentMain && sub.mainCategory === parentMain.name);
+        if (!matchesMain) return false;
+      }
+
+      // Search query filter
+      if (categorySearchQuery.trim()) {
+        const q = categorySearchQuery.trim().toLowerCase();
+        const matchesName = (sub.name || '').toLowerCase().includes(q);
+        const matchesMain = (sub.mainCategory || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesMain) return false;
+      }
+
+      return true;
+    });
+  }, [activeSubcategories, categoryFilterMainId, categorySearchQuery, mainCategories]);
 
   const activeTurnTeam = useMemo(() => {
     if (!currentRoom || currentRoom.teams.length === 0) return null;
@@ -1018,14 +1118,37 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   }
 
   // -------------------------------------------------------------
-  // RENDER: 2. LOBBY SCREEN (شاشة انتظار اللاعبين)
+  // RENDER: 2. LOBBY & CATEGORY SELECTION SCREEN (شاشة انتظار اللاعبين واختيار الفئات)
   // -------------------------------------------------------------
-  if (currentRoom.status === 'lobby' || (currentRoom.status as string) === 'waiting') {
+  const isLobbyOrSelecting =
+    currentRoom.status === 'waiting_for_opponent' ||
+    currentRoom.status === 'selecting_categories' ||
+    currentRoom.status === 'ready' ||
+    currentRoom.status === 'lobby' ||
+    (currentRoom.status as string) === 'waiting';
+
+  if (isLobbyOrSelecting) {
+    const myTeamPicks =
+      (myTeamId && currentRoom.teamSubcategoryIds && currentRoom.teamSubcategoryIds[myTeamId]) || [];
+
+    const getSubcategoryById = (id: string) => {
+      return (
+        subcategories.find((s) => s.id === id) ||
+        subcategories.find((s) => s.name === id) ||
+        DEFAULT_SUBCATEGORIES.find((s) => s.id === id) || {
+          id,
+          name: id,
+          mainCategory: 'عام',
+          iconName: 'help-circle',
+        }
+      );
+    };
+
     return (
-      <div className="max-w-[1100px] mx-auto px-4 py-8 space-y-8">
-        {/* Error Alert in Lobby */}
+      <div className="max-w-[1150px] mx-auto px-4 py-8 space-y-8">
+        {/* Error Alert */}
         {errorMsg && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between gap-3 shadow-xs">
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between gap-3 shadow-xs animate-in fade-in">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
               <p className="font-bold">{errorMsg}</p>
@@ -1071,14 +1194,18 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             <div>
               <div className="flex items-center gap-2 text-xs text-[#777B73]">
                 <Radio className="w-3.5 h-3.5 text-[#14543D] animate-pulse" />
-                <span>صالة انتظار اللاعبين</span>
+                <span>غرفة اللعب عن بُعد</span>
                 <span>•</span>
                 <span className="font-bold text-[#14543D]">
                   المضيف: {currentRoom.hostName}
                 </span>
+                <span>•</span>
+                <span>
+                  أنت في: <strong style={{ color: myTeam?.color }}>{myTeam?.name}</strong>
+                </span>
               </div>
               <h1 className="font-display text-2xl font-bold text-[#252824]">
-                استعدوا للمباراة!
+                صالة التحدي واختيار الفئات
               </h1>
             </div>
 
@@ -1098,7 +1225,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           <div className="bg-[#F3F5E9] border-2 border-[#14543D]/20 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
             <div className="space-y-1">
               <div className="text-xs font-bold text-[#777B73]">
-                شارك هذا الرمز مع أصدقائك للانضمام:
+                رمز الغرفة (شاركه مع منافسك للانضمام):
               </div>
               <div className="font-mono text-4xl md:text-5xl font-bold tracking-widest text-[#14543D]">
                 {currentRoom.code}
@@ -1143,202 +1270,532 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Opponent Status Notice */}
+          {!hasOpponent ? (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-3 animate-pulse">
+              <Clock className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="text-xs">
+                <span className="font-bold block text-sm">بانتظار دخول المنافس...</span>
+                <span>لا يمكن بدء التحدي قبل انضمام المنافس إلى الغرفة باستخدام رمز الغرفة أعلاه.</span>
+              </div>
+            </div>
+          ) : isCategoriesComplete ? (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div className="text-xs">
+                <span className="font-bold block text-sm text-emerald-800">الغرفة جاهزة الآن لبدء التحدي! 🚀</span>
+                <span>اكتمل اختيار 3 فئات لكل فريق (6 فئات إجمالاً). يمكن للمضيف إطلاق التحدي الآن.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-sky-50 border border-sky-200 text-sky-900 flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-sky-600 shrink-0" />
+              <div className="text-xs">
+                <span className="font-bold block text-sm text-sky-800">المنافس متصل! مرحلة اختيار الفئات 🎯</span>
+                <span>
+                  كل فريق يختار 3 فئات خاصة به من القائمة أدناه ({team1.name}: {team1Picks.length}/3 • {team2.name}: {team2Picks.length}/3).
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* TEAMS AND PLAYERS LIST */}
+        {/* TEAMS AND THEIR 3 SELECTED CATEGORIES */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-[#14543D]" />
               <h2 className="font-display text-lg font-bold text-[#252824]">
-                الفرق واللاعبين المتصلين ({playersList.length})
+                فئات الفرق (3 فئات لكل فريق • 6 إجمالاً)
               </h2>
             </div>
             <div className="text-xs text-[#777B73]">
-              {isHost
-                ? 'يمكنك نقل اللاعبين بين الفرق أو استبعاد أي لاعب'
-                : 'يمكنك اختيار فريقك بالضغط على الزر أدناه'}
+              تحديث مباشر متزامن فورياً على الشاشتين
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {currentRoom.teams.map((team) => {
-              const teamPlayers = playersList.filter((p) => p.teamId === team.id);
-              const isMyTeam = currentRoom.players[playerProfile.id]?.teamId === team.id;
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* TEAM 1 (Host Team) */}
+            <div
+              className={`bg-[#FFFFFF] border-2 rounded-2xl p-5 space-y-4 transition-all shadow-sm ${
+                myTeamId === team1.id ? 'ring-2 ring-[#14543D]/20' : ''
+              }`}
+              style={{ borderColor: `${team1.color}60` }}
+            >
+              <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="w-4 h-4 rounded-full border border-black/10"
+                    style={{ backgroundColor: team1.color }}
+                  />
+                  <span className="font-display font-bold text-base text-[#252824]">
+                    {team1.name}
+                  </span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#14543D] text-white">
+                    فريق المضيف 👑
+                  </span>
+                </div>
+                <div className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#F3F5E9] text-[#14543D]">
+                  {team1Picks.length} / 3 فئات
+                </div>
+              </div>
+
+              {/* Team 1 Players */}
+              <div className="text-xs text-[#777B73] flex items-center gap-2 flex-wrap">
+                <span className="font-bold">اللاعبون:</span>
+                {playersList
+                  .filter((p) => p.teamId === team1.id)
+                  .map((p) => (
+                    <span
+                      key={p.id}
+                      className="px-2 py-0.5 rounded-md bg-[#F3F5E9] text-[#252824] font-bold text-[11px]"
+                    >
+                      {p.name} {p.id === playerProfile.id ? '(أنت)' : ''}
+                    </span>
+                  ))}
+              </div>
+
+              {/* 3 Category Slots for Team 1 */}
+              <div className="space-y-2 pt-1">
+                <div className="text-[11px] font-bold text-[#777B73]">
+                  الفئات المختارة لـ {team1.name}:
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[0, 1, 2].map((slotIdx) => {
+                    const subId = team1Picks[slotIdx];
+                    if (subId) {
+                      const subObj = getSubcategoryById(subId);
+                      const isMyTeamChoice = myTeamId === team1.id;
+
+                      return (
+                        <div
+                          key={slotIdx}
+                          className="p-2.5 rounded-xl border border-[#14543D]/30 bg-[#EAF2EE] flex flex-col justify-between min-h-[75px] relative group"
+                        >
+                          <div className="text-[10px] text-[#777B73] line-clamp-1">
+                            {subObj.mainCategory || 'فئة'}
+                          </div>
+                          <div className="font-display text-xs font-bold text-[#14543D] line-clamp-2">
+                            {subObj.name}
+                          </div>
+                          {isMyTeamChoice && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCategoryPick(subId)}
+                              title="إلغاء اختيار هذه الفئة"
+                              className="absolute top-1 left-1 w-5 h-5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={slotIdx}
+                        className="p-2.5 rounded-xl border border-dashed border-[#E5E8DD] bg-[#FFFFFF] flex flex-col items-center justify-center text-center min-h-[75px] text-[#777B73]/60"
+                      >
+                        <span className="text-xs font-bold">فئة {slotIdx + 1}</span>
+                        <span className="text-[10px]">فارغة</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* TEAM 2 (Opponent Team) */}
+            <div
+              className={`bg-[#FFFFFF] border-2 rounded-2xl p-5 space-y-4 transition-all shadow-sm ${
+                myTeamId === team2.id ? 'ring-2 ring-[#F07842]/20' : ''
+              }`}
+              style={{ borderColor: `${team2.color}60` }}
+            >
+              <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="w-4 h-4 rounded-full border border-black/10"
+                    style={{ backgroundColor: team2.color }}
+                  />
+                  <span className="font-display font-bold text-base text-[#252824]">
+                    {team2.name}
+                  </span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F07842] text-white">
+                    فريق المنافس ⚔️
+                  </span>
+                </div>
+                <div className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#F3F5E9] text-[#F07842]">
+                  {team2Picks.length} / 3 فئات
+                </div>
+              </div>
+
+              {/* Team 2 Players */}
+              <div className="text-xs text-[#777B73] flex items-center gap-2 flex-wrap min-h-[22px]">
+                <span className="font-bold">اللاعبون:</span>
+                {playersList.filter((p) => p.teamId === team2.id).length === 0 ? (
+                  <span className="text-amber-600 font-bold text-[11px] animate-pulse">
+                    بانتظار انضمام المنافس...
+                  </span>
+                ) : (
+                  playersList
+                    .filter((p) => p.teamId === team2.id)
+                    .map((p) => (
+                      <span
+                        key={p.id}
+                        className="px-2 py-0.5 rounded-md bg-[#FEF2EC] text-[#252824] font-bold text-[11px]"
+                      >
+                        {p.name} {p.id === playerProfile.id ? '(أنت)' : ''}
+                      </span>
+                    ))
+                )}
+              </div>
+
+              {/* 3 Category Slots for Team 2 */}
+              <div className="space-y-2 pt-1">
+                <div className="text-[11px] font-bold text-[#777B73]">
+                  الفئات المختارة لـ {team2.name}:
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[0, 1, 2].map((slotIdx) => {
+                    const subId = team2Picks[slotIdx];
+                    if (subId) {
+                      const subObj = getSubcategoryById(subId);
+                      const isMyTeamChoice = myTeamId === team2.id;
+
+                      return (
+                        <div
+                          key={slotIdx}
+                          className="p-2.5 rounded-xl border border-[#F07842]/30 bg-[#FEF2EC] flex flex-col justify-between min-h-[75px] relative group"
+                        >
+                          <div className="text-[10px] text-[#777B73] line-clamp-1">
+                            {subObj.mainCategory || 'فئة'}
+                          </div>
+                          <div className="font-display text-xs font-bold text-[#F07842] line-clamp-2">
+                            {subObj.name}
+                          </div>
+                          {isMyTeamChoice && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCategoryPick(subId)}
+                              title="إلغاء اختيار هذه الفئة"
+                              className="absolute top-1 left-1 w-5 h-5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={slotIdx}
+                        className="p-2.5 rounded-xl border border-dashed border-[#E5E8DD] bg-[#FFFFFF] flex flex-col items-center justify-center text-center min-h-[75px] text-[#777B73]/60"
+                      >
+                        <span className="text-xs font-bold">فئة {slotIdx + 1}</span>
+                        <span className="text-[10px]">فارغة</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* INTERACTIVE CATEGORY SELECTION BROWSER */}
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EAF2EE] text-xs font-bold text-[#14543D] mb-1">
+                <Sparkles className="w-3.5 h-3.5 text-[#F07842]" />
+                <span>دورك: اختر 3 فئات لفريقك ({myTeam?.name})</span>
+              </div>
+              <h2 className="font-display text-xl font-bold text-[#252824]">
+                قائمة الفئات المتاحة في نِزال
+              </h2>
+              <p className="text-xs text-[#777B73]">
+                اضغط على أي فئة لإضافتها أو إزالتها من اختيارات فريقك. يمكنك رؤية اختيارات المنافس في الوقت الفعلي.
+              </p>
+            </div>
+
+            {/* My Team Pick Counter Badge */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#777B73]">اختيارات فريقك:</span>
+              <span
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold text-white ${
+                  myTeamPicks.length === 3 ? 'bg-emerald-600' : 'bg-[#14543D]'
+                }`}
+              >
+                {myTeamPicks.length} من 3 فئات
+              </span>
+            </div>
+          </div>
+
+          {/* Search & Main Category Filters */}
+          <div className="space-y-3">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-[#777B73]" />
+              <input
+                type="text"
+                value={categorySearchQuery}
+                onChange={(e) => setCategorySearchQuery(e.target.value)}
+                placeholder="ابحث عن فئة معينة..."
+                className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-[#E5E8DD] focus:border-[#14543D] text-xs font-bold text-[#252824] outline-none"
+              />
+              {categorySearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCategorySearchQuery('')}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#777B73] hover:text-[#252824]"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Main Category Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setCategoryFilterMainId('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                  categoryFilterMainId === 'all'
+                    ? 'bg-[#14543D] text-white shadow-xs'
+                    : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
+                }`}
+              >
+                الكل ({activeSubcategories.length})
+              </button>
+              {mainCategories
+                .filter((m) => m.isActive && !m.isDeleted)
+                .map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setCategoryFilterMainId(m.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                      categoryFilterMainId === m.id
+                        ? 'bg-[#14543D] text-white shadow-xs'
+                        : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
+                    }`}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+            </div>
+          </div>
+
+          {/* Subcategories Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[380px] overflow-y-auto p-1">
+            {filteredSubcategories.map((sub) => {
+              const isPickedByTeam1 = team1Picks.includes(sub.id);
+              const isPickedByTeam2 = team2Picks.includes(sub.id);
+              const isPickedByMyTeam = myTeamPicks.includes(sub.id);
+              const isMyTeamFull = myTeamPicks.length >= 3;
+              const isToggling = isTogglingSubId === sub.id;
 
               return (
-                <div
-                  key={team.id}
-                  className="bg-[#FFFFFF] border-2 rounded-2xl p-5 space-y-4 transition-all"
-                  style={{ borderColor: `${team.color}40` }}
+                <button
+                  key={sub.id}
+                  type="button"
+                  disabled={isToggling}
+                  onClick={() => handleToggleCategoryPick(sub.id)}
+                  className={`p-3 rounded-2xl border text-right transition-all cursor-pointer relative flex flex-col justify-between min-h-[95px] select-none ${
+                    isPickedByMyTeam
+                      ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                      : 'bg-[#FFFFFF] border-[#E5E8DD] hover:border-[#14543D]/40 hover:bg-[#F3F5E9]/50'
+                  }`}
                 >
-                  {/* Team header */}
-                  <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className="w-4 h-4 rounded-full border border-black/10"
-                        style={{ backgroundColor: team.color }}
-                      />
-                      <span className="font-display font-bold text-base text-[#252824]">
-                        {team.name}
+                  <div>
+                    {/* Top badging */}
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[10px] text-[#777B73] font-bold line-clamp-1">
+                        {sub.mainCategory || 'تصنيف'}
                       </span>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#F3F5E9] text-[#777B73]">
-                        {teamPlayers.length} لاعبين
-                      </span>
+                      {isToggling && (
+                        <span className="w-3.5 h-3.5 border-2 border-[#14543D] border-t-transparent rounded-full animate-spin" />
+                      )}
                     </div>
 
-                    {!isMyTeam && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          assignPlayerTeam(currentRoom.code, playerProfile.id, team.id)
-                        }
-                        className="text-xs font-bold px-3 py-1 rounded-lg border border-[#E5E8DD] hover:bg-[#F3F5E9] text-[#14543D] cursor-pointer"
+                    <div className="font-display text-xs font-bold text-[#252824] line-clamp-2">
+                      {sub.name}
+                    </div>
+                  </div>
+
+                  {/* Badges showing which team picked it */}
+                  <div className="pt-2 flex flex-wrap items-center gap-1">
+                    {isPickedByTeam1 && (
+                      <span
+                        className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
+                        style={{ backgroundColor: team1.color }}
                       >
-                        الانضمام لهذا الفريق
-                      </button>
+                        {team1.name} ✓
+                      </span>
                     )}
-                  </div>
-
-                  {/* Players list */}
-                  <div className="space-y-2 min-h-[90px]">
-                    {teamPlayers.length === 0 ? (
-                      <div className="py-6 text-center text-xs text-[#777B73]">
-                        لا يوجد لاعبين في هذا الفريق حتى الآن
-                      </div>
-                    ) : (
-                      teamPlayers.map((player) => {
-                        const isSelf = player.id === playerProfile.id;
-                        const isOnline =
-                          player.connectionStatus === 'online' &&
-                          Date.now() - (player.lastSeen || 0) < 35000;
-
-                        return (
-                          <div
-                            key={player.id}
-                            className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
-                              isSelf
-                                ? 'bg-[#EAF2EE] border-[#14543D]/30'
-                                : 'bg-[#F3F5E9]/60 border-[#E5E8DD]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              {/* Online indicator */}
-                              <span
-                                className={`w-2.5 h-2.5 rounded-full ${
-                                  isOnline
-                                    ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                                    : 'bg-zinc-400'
-                                }`}
-                                title={isOnline ? 'متصل' : 'غير متصل'}
-                              />
-                              <span className="text-xs font-bold text-[#252824]">
-                                {player.name}
-                              </span>
-                              {player.isHost && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#14543D] text-white">
-                                  <Crown className="w-3 h-3" /> المضيف
-                                </span>
-                              )}
-                              {isSelf && (
-                                <span className="text-[10px] font-bold text-[#14543D]">
-                                  (أنت)
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Host management options */}
-                            {isHost && !player.isHost && (
-                              <div className="flex items-center gap-1">
-                                {/* Move team select */}
-                                <select
-                                  value={team.id}
-                                  onChange={(e) =>
-                                    assignPlayerTeam(
-                                      currentRoom.code,
-                                      player.id,
-                                      e.target.value
-                                    )
-                                  }
-                                  className="text-[11px] font-bold bg-[#FFFFFF] border border-[#E5E8DD] rounded px-1.5 py-1 text-[#252824] outline-none"
-                                >
-                                  {currentRoom.teams.map((t) => (
-                                    <option key={t.id} value={t.id}>
-                                      نقل إلى {t.name}
-                                    </option>
-                                  ))}
-                                </select>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    hostKickPlayer(
-                                      currentRoom.code,
-                                      currentRoom.hostId,
-                                      player.id
-                                    )
-                                  }
-                                  title="استبعاد اللاعب"
-                                  className="p-1 text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
-                                >
-                                  <UserX className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
+                    {isPickedByTeam2 && (
+                      <span
+                        className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
+                        style={{ backgroundColor: team2.color }}
+                      >
+                        {team2.name} ✓
+                      </span>
                     )}
+
+                    {/* Action Hint */}
+                    {isPickedByMyTeam ? (
+                      <span className="text-[10px] text-emerald-700 font-bold inline-flex items-center gap-0.5">
+                        <Check className="w-3 h-3" /> تم الاختيار
+                      </span>
+                    ) : !isPickedByTeam1 && !isPickedByTeam2 ? (
+                      <span
+                        className={`text-[10px] font-bold ${
+                          isMyTeamFull ? 'text-[#777B73]/50' : 'text-[#14543D]'
+                        }`}
+                      >
+                        {isMyTeamFull ? 'اكتملت فئاتك' : '+ اختيار لفريقك'}
+                      </span>
+                    ) : null}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
 
-        {/* START GAME BAR (Host Authority) */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-          <div>
-            <div className="font-display font-bold text-base text-[#252824]">
-              {isHost ? 'جاهزون لبدء المنافسة والتحدي؟' : 'بانتظار المضيف لبدء المباراة...'}
+        {/* 5 CONDITIONS VALIDATION & START CHALLENGE BUTTON */}
+        <div className="bg-[#FFFFFF] border-2 border-[#14543D]/30 rounded-3xl p-6 md:p-8 space-y-5 shadow-sm">
+          {/* Checklist header */}
+          <div className="space-y-1">
+            <h3 className="font-display text-base font-bold text-[#252824]">
+              شروط بدء التحدي (5 شروط ملزمة):
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-bold pt-1">
+              {/* 1. Host in */}
+              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>1. المضيف متصل</span>
+              </div>
+
+              {/* 2. Opponent in */}
+              <div
+                className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  hasOpponent
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-amber-50 text-amber-800 border-amber-200 animate-pulse'
+                }`}
+              >
+                {hasOpponent ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                )}
+                <span>2. المنافس متصل</span>
+              </div>
+
+              {/* 3. Team 1 Picks */}
+              <div
+                className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  team1Picks.length === 3
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-[#F3F5E9] text-[#777B73] border-[#E5E8DD]'
+                }`}
+              >
+                {team1Picks.length === 3 ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <Layers className="w-3.5 h-3.5 text-[#777B73] shrink-0" />
+                )}
+                <span>3. فئات المضيف ({team1Picks.length}/3)</span>
+              </div>
+
+              {/* 4. Team 2 Picks */}
+              <div
+                className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  team2Picks.length === 3
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-[#F3F5E9] text-[#777B73] border-[#E5E8DD]'
+                }`}
+              >
+                {team2Picks.length === 3 ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <Layers className="w-3.5 h-3.5 text-[#777B73] shrink-0" />
+                )}
+                <span>4. فئات المنافس ({team2Picks.length}/3)</span>
+              </div>
+
+              {/* 5. Realtime sync */}
+              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>5. التزامن متصل</span>
+              </div>
             </div>
-            <p className="text-xs text-[#777B73]">
-              {isHost
-                ? 'سيتم اختيار 3 تصنيفات فرعية لكل فريق بشكل متوازن ثم بدء البورد فوراً لجميع الأجهزة المتصلة.'
-                : 'ستبدأ شاشة الأسئلة تلقائياً بمجرد إطلاق المضيف للمباراة.'}
-            </p>
-            {isHost && playersList.length < 2 && (
-              <p className="text-[11px] text-[#F07842] font-bold mt-1">
-                💡 تنبيه: أنت وحدك في الغرفة حالياً. شارك الرمز أو رابط الدعوة مع صديقك، أو اضغط للبدء للتجربة.
-              </p>
-            )}
           </div>
 
-          {isHost ? (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={handleHostStartGameAuto}
-              className="px-8 py-3.5 text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] active:scale-[0.99] rounded-2xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm shrink-0"
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>جاري إعداد البورد وبدء المباراة...</span>
-                </div>
-              ) : (
-                <>
-                  <Play className="w-5 h-5 text-[#F07842] fill-current" />
-                  <span>بدء التحدي الآن 🔥</span>
-                </>
-              )}
-            </button>
-          ) : (
-            <div className="flex items-center gap-2 text-xs font-bold text-[#14543D] bg-[#EAF2EE] px-4 py-2.5 rounded-xl border border-[#14543D]/20">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#14543D] animate-ping" />
-              <span>الغرفة جاهزة، بانتظار إشارة البدء...</span>
+          {/* Action button row */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#E5E8DD]">
+            <div className="text-xs text-[#777B73] text-center sm:text-right">
+              {!hasOpponent
+                ? 'بانتظار انضمام المنافس لتفعيل إمكانية بدء التحدي.'
+                : !isCategoriesComplete
+                ? `اختار ${team1.name} (${team1Picks.length}/3) واختار ${team2.name} (${team2Picks.length}/3).`
+                : 'تم استيفاء جميع الشروط! الغرفة جاهزة لانطلاق المباراة الآن.'}
             </div>
-          )}
+
+            {isHost ? (
+              <button
+                type="button"
+                disabled={!isRoomReadyToStart || loading}
+                onClick={handleHostStartGameClick}
+                className={`px-8 py-4 text-base font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shrink-0 ${
+                  isRoomReadyToStart && !loading
+                    ? 'bg-[#14543D] text-[#FFFFFF] hover:bg-[#0E3D2C] cursor-pointer shadow-lg active:scale-95 animate-pulse'
+                    : 'bg-zinc-200 text-zinc-500 border border-zinc-300 cursor-not-allowed opacity-75'
+                }`}
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>جاري إطلاق المباراة...</span>
+                  </div>
+                ) : !hasOpponent ? (
+                  <>
+                    <Clock className="w-5 h-5 text-zinc-400" />
+                    <span>بانتظار دخول المنافس...</span>
+                  </>
+                ) : team1Picks.length < 3 ? (
+                  <>
+                    <Layers className="w-5 h-5 text-zinc-400" />
+                    <span>اخترت {team1Picks.length} من 3 فئات لفريقك</span>
+                  </>
+                ) : team2Picks.length < 3 ? (
+                  <>
+                    <Clock className="w-5 h-5 text-zinc-400" />
+                    <span>بانتظار إكمال فئات المنافس ({team2Picks.length}/3)</span>
+                  </>
+                ) : (
+                  <>
+                    <Flame className="w-5 h-5 text-[#F07842]" />
+                    <span>بدء التحدي الآن 🔥</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 text-xs font-bold text-[#14543D] bg-[#EAF2EE] px-5 py-3 rounded-xl border border-[#14543D]/20">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#14543D] animate-ping" />
+                <span>
+                  {isRoomReadyToStart
+                    ? 'الغرفة جاهزة! بانتظار إشارة بدء التحدي من المضيف 🚀'
+                    : 'بانتظار استيفاء الشروط واكتمال الفئات من الفريقين...'}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
