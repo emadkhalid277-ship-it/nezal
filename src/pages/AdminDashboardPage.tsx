@@ -3808,7 +3808,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
       {/* SECTION 7: PLAYER & CATEGORY ANALYTICS DASHBOARD */}
       {adminTab === 'player_analytics' && (
-        <AdminPlayerAnalytics />
+        <AdminPlayerAnalytics isAdmin={isAdmin} subcategories={subcategories} />
       )}
 
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}
