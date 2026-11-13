@@ -111,9 +111,44 @@ service cloud.firestore {
 
     // 10. سجل المباريات والتقدم (userGameMatches)
     match /userGameMatches/{matchId} {
-      allow get, list: if true;
-      allow create, update: if isSignedIn();
+      allow get: if isValidId(matchId) && (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid));
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(matchId) && incoming().userId == request.auth.uid;
+      allow update, delete: if isValidId(matchId) && (isAdmin() || (isSignedIn() && existing().userId == request.auth.uid));
+    }
+
+    // 11. نظام الأصدقاء والحضور والدعوات والإشعارات
+    // (ملاحظة: النسخة الكاملة والصارمة لقواعد الأمان موجودة في ملف firestore.rules داخل المشروع)
+    match /playerProfiles/{userId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
       allow delete: if isAdmin();
+    }
+    match /userBlocks/{blockId} {
+      allow get: if isSignedIn() && (blockId.matches('^' + request.auth.uid + '_.*') || blockId.matches('.*_' + request.auth.uid + '$'));
+      allow list: if isSignedIn() && resource.data.blockerUid == request.auth.uid;
+      allow create: if isSignedIn() && incoming().blockerUid == request.auth.uid;
+      allow delete: if isSignedIn() && existing().blockerUid == request.auth.uid;
+    }
+    match /friendRequests/{requestId} {
+      allow get, list: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow create: if isSignedIn() && incoming().fromUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+    }
+    match /friendships/{pairId} {
+      allow get, list: if isSignedIn() && (resource.data.user1 == request.auth.uid || resource.data.user2 == request.auth.uid);
+      allow create: if isSignedIn() && (incoming().user1 == request.auth.uid || incoming().user2 == request.auth.uid);
+      allow delete: if isSignedIn() && (existing().user1 == request.auth.uid || existing().user2 == request.auth.uid);
+    }
+    match /gameInvites/{inviteId} {
+      allow get, list: if isSignedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
+      allow create: if isSignedIn() && incoming().fromUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+    }
+    match /notifications/{notifId} {
+      allow get, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().actorUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
   }
 }

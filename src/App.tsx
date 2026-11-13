@@ -49,9 +49,6 @@ const CategorySelectionPage = lazy(() =>
     default: m.CategorySelectionPage,
   }))
 );
-const TeamSetupPage = lazy(() =>
-  import('./pages/TeamSetupPage').then((m) => ({ default: m.TeamSetupPage }))
-);
 const GameBoardPage = lazy(() =>
   import('./pages/GameBoardPage').then((m) => ({ default: m.GameBoardPage }))
 );
@@ -81,6 +78,11 @@ const MyMatchesPage = lazy(() =>
     default: m.MyMatchesPage,
   }))
 );
+const FriendsPage = lazy(() =>
+  import('./pages/FriendsPage').then((m) => ({
+    default: m.FriendsPage,
+  }))
+);
 import { ResumeMatchModal } from './components/ResumeMatchModal';
 import { UserGameMatch } from './types/match';
 import {
@@ -91,6 +93,16 @@ import {
   generateMatchId,
 } from './services/matchService';
 import { soundFX } from './services/soundEffects';
+import {
+  PRESENCE_HEARTBEAT_INTERVAL_MS,
+  markPresenceOfflineNow,
+  refreshCachedAuthToken,
+  sendOfflineKeepaliveBeacon,
+  sendPresenceHeartbeat,
+  setExplicitPresence,
+  syncPublicPlayerProfile,
+} from './services/presenceService';
+import { PresenceStatus } from './types/social';
 
 function PageFallback() {
   return (
@@ -151,6 +163,7 @@ const VALID_PAGES: PageView[] = [
   'my_lists',
   'online_multiplayer',
   'my_matches',
+  'friends',
 ];
 
 interface SavedGameSession {
@@ -246,6 +259,21 @@ export default function App() {
       return null;
     }
   });
+
+  const [initialJoinRole, setInitialJoinRole] = useState<'player' | 'spectator'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('role') === 'spectator' ? 'spectator' : 'player';
+    } catch {
+      return 'player';
+    }
+  });
+  const [autoJoinNonce, setAutoJoinNonce] = useState<number>(0);
+
+  const [onlineActivity, setOnlineActivity] = useState<{
+    status: 'online' | 'in_lobby' | 'in_match';
+    roomCode: string | null;
+  }>({ status: 'online', roomCode: null });
 
   const [activePage, setActivePage] = useState<PageView>(() => {
     try {
@@ -688,6 +716,10 @@ export default function App() {
       setIsAdmin(adminStatus);
       setAuthLoading(false);
 
+      if (currentUser) {
+        syncPublicPlayerProfile(currentUser).catch(() => {});
+      }
+
       if (adminStatus && currentUser) {
         // Run migration/cleanup at most once per session in background without blocking initial render
         const migrationKey = 'nizal_admin_cleanup_done_v1';
@@ -748,6 +780,85 @@ export default function App() {
     loadSubcategories,
     loadContactSettings,
   ]);
+
+  // Global Hybrid Real-time Presence Lifecycle
+  // Uses explicit state transitions + tab-close keepalive beacon + network status + heartbeat safety net
+  const effectivePresenceStatus: Exclude<PresenceStatus, 'offline'> = useMemo(() => {
+    if (activePage === 'online_multiplayer') {
+      return onlineActivity.status;
+    }
+    if (activePage === 'board') {
+      return 'in_match';
+    }
+    return 'online';
+  }, [activePage, onlineActivity.status]);
+
+  const effectivePresenceRoomCode =
+    activePage === 'online_multiplayer' ? onlineActivity.roomCode : null;
+
+  useEffect(() => {
+    if (!user) return;
+    void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
+  }, [user, effectivePresenceStatus, effectivePresenceRoomCode]);
+
+  useEffect(() => {
+    if (!user) return;
+    void refreshCachedAuthToken(user);
+
+    const handlePageExit = () => {
+      sendOfflineKeepaliveBeacon(user.uid);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
+      }
+    };
+    const handleNetworkOffline = () => {
+      void markPresenceOfflineNow(user.uid);
+    };
+    const handleNetworkOnline = () => {
+      void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
+    };
+
+    window.addEventListener('pagehide', handlePageExit);
+    window.addEventListener('beforeunload', handlePageExit);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('offline', handleNetworkOffline);
+    window.addEventListener('online', handleNetworkOnline);
+
+    const heartbeatTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void sendPresenceHeartbeat(user);
+      }
+    }, PRESENCE_HEARTBEAT_INTERVAL_MS);
+
+    return () => {
+      window.removeEventListener('pagehide', handlePageExit);
+      window.removeEventListener('beforeunload', handlePageExit);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('offline', handleNetworkOffline);
+      window.removeEventListener('online', handleNetworkOnline);
+      window.clearInterval(heartbeatTimer);
+    };
+  }, [user, effectivePresenceStatus, effectivePresenceRoomCode]);
+
+  const handlePresenceActivityChange = useCallback(
+    (status: 'online' | 'in_lobby' | 'in_match', roomCode?: string | null) => {
+      setOnlineActivity({ status, roomCode: roomCode || null });
+    },
+    []
+  );
+
+  const handleJoinRoomFromInvite = useCallback(
+    (roomCode: string, role: 'player' | 'spectator') => {
+      setInitialRoomCode(roomCode.trim().toUpperCase());
+      setInitialJoinRole(role);
+      setAutoJoinNonce((n) => n + 1);
+      setActivePage('online_multiplayer');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    []
+  );
 
   const approvedQuestions = useMemo(
     () => allQuestions.filter((q) => q.status !== 'rejected'),
@@ -874,10 +985,11 @@ export default function App() {
       'online_multiplayer',
       'my_matches',
       'my_lists',
+      'friends',
     ];
 
     if (!user && protectedPages.includes(page)) {
-      if (isGameLocked && (page === 'board' || page === 'categories')) {
+      if (isGameLocked && (page === 'board' || page === 'categories' || page === 'setup')) {
         // Allow ongoing active game session to continue without interruption
       } else {
         setPendingPlayTarget(page);
@@ -1257,6 +1369,7 @@ export default function App() {
         isAdmin={isAdmin}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
+        onJoinRoomFromInvite={handleJoinRoomFromInvite}
       />
 
       <main className="flex-1">
@@ -1276,7 +1389,7 @@ export default function App() {
               />
             )}
 
-            {activePage === 'categories' && (
+            {(activePage === 'categories' || activePage === 'setup') && (
               <CategorySelectionPage
                 teams={teams}
                 onUpdateTeams={handleUpdateTeams}
@@ -1288,36 +1401,18 @@ export default function App() {
                 subcategories={activeSubcategories}
                 approvedQuestions={approvedQuestions}
                 initialMainCategoryId={initialMainCategoryId}
+                initialSection={activePage === 'setup' ? 'teams' : 'categories'}
+                timerDuration={timerDuration}
+                onUpdateTimer={setTimerDuration}
+                approvedQuestionsCount={approvedQuestions.length}
+                isAdmin={isAdmin}
+                onSeedQuestions={handleSeedFoundationalPack}
+                seeding={seeding}
                 isGameLocked={isGameLocked}
                 onBackToHome={() => handleNavigate('home')}
                 onConfirmSelection={() => handleNavigate('setup')}
                 onStartGameDirectly={handleStartGameFromSetup}
                 onGoToBoard={() => handleNavigate('board')}
-              />
-            )}
-
-            {activePage === 'setup' && (
-              <TeamSetupPage
-                teams={teams}
-                timerDuration={timerDuration}
-                teamSubcategoryIds={teamSubcategoryIds}
-                subcategories={activeSubcategories}
-                isAllTeamsSelectionComplete={isAllTeamsSelectionComplete}
-                isGameLocked={isGameLocked}
-                onUpdateTeams={handleUpdateTeams}
-                onUpdateTimer={setTimerDuration}
-                onStartGame={handleStartGameFromSetup}
-                onGoToBoard={() => handleNavigate('board')}
-                onBackToCategories={(teamIdx) => {
-                  if (typeof teamIdx === 'number') {
-                    setSelectingTeamIndex(teamIdx);
-                  }
-                  handleNavigate('categories');
-                }}
-                approvedQuestionsCount={approvedQuestions.length}
-                isAdmin={isAdmin}
-                onSeedQuestions={handleSeedFoundationalPack}
-                seeding={seeding}
               />
             )}
 
@@ -1406,6 +1501,16 @@ export default function App() {
               />
             )}
 
+            {activePage === 'friends' && (
+              <FriendsPage
+                user={user}
+                activeOnlineRoomCode={onlineActivity.roomCode}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                onNavigateHome={() => handleNavigate('home')}
+                onEnterRoom={handleJoinRoomFromInvite}
+              />
+            )}
+
             {activePage === 'online_multiplayer' && (
               <OnlineMultiplayerPage
                 user={user}
@@ -1416,6 +1521,9 @@ export default function App() {
                 onNavigate={handleNavigate}
                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
                 initialRoomCode={initialRoomCode}
+                initialJoinRole={initialJoinRole}
+                autoJoinNonce={autoJoinNonce}
+                onPresenceActivityChange={handlePresenceActivityChange}
               />
             )}
 

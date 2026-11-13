@@ -508,6 +508,115 @@
         "publishedQuestionId": { "type": "string" }
       },
       "required": ["id", "userId", "questionText", "correctAnswer", "mainCategoryName", "subcategoryName", "points", "status", "submittedAt"]
+    },
+    "PlayerProfile": {
+      "title": "PlayerProfile",
+      "description": "Public non-PII player directory and realtime presence state.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "displayNameLower": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 1000 },
+        "acceptsInvites": { "type": "boolean" },
+        "presenceStatus": { "type": "string", "enum": ["online", "offline", "in_lobby", "in_match"] },
+        "isExplicitlyOnline": { "type": "boolean" },
+        "currentRoomCode": { "type": "string", "maxLength": 16 },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "lastHeartbeat": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "displayName", "displayNameLower", "acceptsInvites", "presenceStatus", "isExplicitlyOnline", "lastHeartbeat"]
+    },
+    "UserBlock": {
+      "title": "UserBlock",
+      "description": "User blocking record preventing friend requests and invites.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "blockerUid": { "type": "string" },
+        "blockedUid": { "type": "string" },
+        "blockedName": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "blockerUid", "blockedUid", "createdAt"]
+    },
+    "FriendRequest": {
+      "title": "FriendRequest",
+      "description": "Friend request sent from one player to another.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromUid": { "type": "string" },
+        "fromName": { "type": "string" },
+        "fromPhotoURL": { "type": "string" },
+        "toUid": { "type": "string" },
+        "toName": { "type": "string" },
+        "toPhotoURL": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "cancelled"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "fromUid", "toUid", "status", "createdAt", "updatedAt"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Mutual verified friendship link between two players.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user1": { "type": "string" },
+        "user2": { "type": "string" },
+        "user1Name": { "type": "string" },
+        "user1PhotoURL": { "type": "string" },
+        "user2Name": { "type": "string" },
+        "user2PhotoURL": { "type": "string" },
+        "requestId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "user1", "user2", "requestId", "createdBy", "createdAt"]
+    },
+    "GameInvite": {
+      "title": "GameInvite",
+      "description": "Play or spectator invitation to an online multiplayer room.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromUid": { "type": "string" },
+        "fromName": { "type": "string" },
+        "fromPhotoURL": { "type": "string" },
+        "toUid": { "type": "string" },
+        "toName": { "type": "string" },
+        "roomCode": { "type": "string" },
+        "inviteType": { "type": "string", "enum": ["play", "spectate"] },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "cancelled", "expired"] },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "fromUid", "toUid", "roomCode", "inviteType", "status", "createdAt", "expiresAt", "updatedAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "Real-time notification center entry for a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "actorName": { "type": "string" },
+        "type": { "type": "string", "enum": ["friend_request", "friend_accepted", "play_invite", "spectate_invite", "invite_cancelled", "invite_expired"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "relatedId": { "type": "string" },
+        "roomCode": { "type": "string" },
+        "inviteType": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "actorUid", "type", "title", "message", "isRead", "createdAt"]
     }
   },
   "firestore": {
@@ -558,6 +667,30 @@
     "/userGameMatches/{matchId}": {
       "schema": { "$ref": "#/entities/GameSession" },
       "description": "User match progress and historical matches."
+    },
+    "/playerProfiles/{userId}": {
+      "schema": { "$ref": "#/entities/PlayerProfile" },
+      "description": "Public non-PII player directory and realtime presence state."
+    },
+    "/userBlocks/{blockId}": {
+      "schema": { "$ref": "#/entities/UserBlock" },
+      "description": "Blocking rules between users."
+    },
+    "/friendRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/FriendRequest" },
+      "description": "Pending and historical friend requests."
+    },
+    "/friendships/{pairId}": {
+      "schema": { "$ref": "#/entities/Friendship" },
+      "description": "Verified mutual friendships."
+    },
+    "/gameInvites/{inviteId}": {
+      "schema": { "$ref": "#/entities/GameInvite" },
+      "description": "Play and spectator invitations for online rooms."
+    },
+    "/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/UserNotification" },
+      "description": "Real-time notification center entries per user."
     }
   }
 }

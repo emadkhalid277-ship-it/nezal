@@ -345,7 +345,11 @@ export async function fetchRawMatchCollectionsForAdmin(): Promise<RawMatchCollec
 
     getDocs(collection(db, 'gameSessions'))
       .then((snap) => {
-        snap.forEach((d) => result.gameSessions.push({ id: d.id, data: d.data() }));
+        snap.forEach((d) => {
+          const data = d.data();
+          if (d.id.startsWith('soc_') || data?.socialDocType) return;
+          result.gameSessions.push({ id: d.id, data });
+        });
       })
       .catch((err) => console.warn('Admin analytics: could not read gameSessions:', err)),
 

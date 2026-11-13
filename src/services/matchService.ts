@@ -117,9 +117,10 @@ export async function fetchAllMatchesForUser(
       const qLegacy = query(legacyCol, where('userId', '==', userId));
       const snapLegacy = await getDocs(qLegacy);
       snapLegacy.forEach((d) => {
-        // If this match is already in userGameMatches, skip duplicate
-        if (matchesMap.has(d.id)) return;
+        // If this match is already in userGameMatches or is a social doc, skip
+        if (matchesMap.has(d.id) || d.id.startsWith('soc_')) return;
         const data = d.data();
+        if (data?.socialDocType) return;
         const teams = Array.isArray(data.teams) ? data.teams : [];
         const matchTitle =
           data.matchTitle ||

@@ -21,6 +21,10 @@ import {
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import firebaseConfig from '../../firebase-applet-config.json';
+import {
+  markPresenceOfflineNow,
+  syncPublicPlayerProfile,
+} from '../services/presenceService';
 
 const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
 
@@ -140,19 +144,26 @@ export async function syncUserProfile(user: User): Promise<UserProfileData> {
         lastLoginAt: serverTimestamp(),
       };
       await setDoc(userRef, newProfile);
+      syncPublicPlayerProfile(user, {
+        displayName: newProfile.displayName || undefined,
+      }).catch(() => {});
       return newProfile;
     } else {
       const data = existingSnap.data() as UserProfileData;
+      const mergedDisplayName = user.displayName || data.displayName || 'لاعب نِزال';
       await setDoc(
         userRef,
         {
-          displayName: user.displayName || data.displayName || 'لاعب نِزال',
+          displayName: mergedDisplayName,
           photoURL: user.photoURL || data.photoURL || '',
           lastLoginAt: serverTimestamp(),
           role: data.role === 'admin' || isAdminUser ? 'admin' : 'user',
         },
         { merge: true }
       );
+      syncPublicPlayerProfile(user, {
+        displayName: mergedDisplayName,
+      }).catch(() => {});
       return {
         ...data,
         role: data.role === 'admin' || isAdminUser ? 'admin' : 'user',
@@ -219,5 +230,9 @@ export async function resetUserPassword(email: string): Promise<void> {
 }
 
 export async function signOutUser(): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (uid) {
+    await markPresenceOfflineNow(uid).catch(() => {});
+  }
   await signOut(auth);
 }

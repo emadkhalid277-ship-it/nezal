@@ -117,14 +117,7 @@ export const Footer: React.FC<FooterProps> = ({
               onClick={() => goTo('categories')}
               className="hover:text-[#14543D] transition-colors cursor-pointer"
             >
-              اختيار الفئات
-            </button>
-            <button
-              type="button"
-              onClick={() => goTo('setup')}
-              className="hover:text-[#14543D] transition-colors cursor-pointer"
-            >
-              إعداد الفرق
+              إعداد اللعبة
             </button>
             <button
               type="button"

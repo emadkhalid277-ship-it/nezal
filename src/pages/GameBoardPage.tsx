@@ -202,6 +202,9 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   const isSubmittingRef = useRef(false);
   const judgmentTimeoutRef = useRef<number | null>(null);
   const prevTimeLeftRef = useRef<number>(timeLeft);
+  const prevTeamScoresRef = useRef<Record<string, number>>(
+    Object.fromEntries(teams.map((t) => [t.id, t.score]))
+  );
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() =>
     soundFX.isEnabled()
   );
@@ -209,6 +212,25 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   useEffect(() => {
     return soundFX.subscribe(setSoundEnabled);
   }, []);
+
+  useEffect(() => {
+    const prevScores = prevTeamScoresRef.current;
+    let scoredTeamIdx = -1;
+    teams.forEach((team, idx) => {
+      const prevScore = prevScores[team.id];
+      if (typeof prevScore === 'number' && team.score > prevScore && scoredTeamIdx === -1) {
+        scoredTeamIdx = idx;
+      }
+    });
+
+    prevTeamScoresRef.current = Object.fromEntries(
+      teams.map((t) => [t.id, t.score])
+    );
+
+    if (scoredTeamIdx >= 0) {
+      soundFX.playTeamScore(scoredTeamIdx);
+    }
+  }, [teams]);
 
   useEffect(() => {
     return () => {

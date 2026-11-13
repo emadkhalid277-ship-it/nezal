@@ -446,5 +446,292 @@ service cloud.firestore {
       allow update: if isValidId(matchId) && (isAdmin() || (isSignedIn() && existing().userId == request.auth.uid));
       allow delete: if isValidId(matchId) && (isAdmin() || (isSignedIn() && existing().userId == request.auth.uid));
     }
+
+    // =========================================================================
+    // SOCIAL SYSTEM (Friends, Presence, Blocking, Invites, Notifications)
+    // =========================================================================
+
+    function isNumberVal(val) {
+      return val is int || val is float;
+    }
+
+    function isNotBlockedBetween(uidA, uidB) {
+      return !exists(/databases/$(database)/documents/userBlocks/$(uidA + '_' + uidB)) &&
+        !exists(/databases/$(database)/documents/userBlocks/$(uidB + '_' + uidA));
+    }
+
+    function isValidPlayerProfile(data, targetUid) {
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'displayNameLower',
+          'acceptsInvites',
+          'presenceStatus',
+          'isExplicitlyOnline',
+          'lastHeartbeat'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'displayNameLower',
+          'photoURL',
+          'acceptsInvites',
+          'presenceStatus',
+          'isExplicitlyOnline',
+          'currentRoomCode',
+          'sessionId',
+          'lastHeartbeat',
+          'updatedAt'
+        ]) &&
+        data.uid == targetUid &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.displayNameLower is string && data.displayNameLower.size() >= 1 && data.displayNameLower.size() <= 100 &&
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+        data.acceptsInvites is bool &&
+        data.presenceStatus in ['online', 'offline', 'in_lobby', 'in_match'] &&
+        data.isExplicitlyOnline is bool &&
+        (!('currentRoomCode' in data) || data.currentRoomCode == null || (data.currentRoomCode is string && data.currentRoomCode.size() <= 16)) &&
+        (!('sessionId' in data) || data.sessionId == null || (data.sessionId is string && data.sessionId.size() <= 128)) &&
+        isNumberVal(data.lastHeartbeat) &&
+        (!('updatedAt' in data) || isNumberVal(data.updatedAt) || data.updatedAt is timestamp);
+    }
+
+    // Public non-PII Player Profiles & Realtime Presence
+    match /playerProfiles/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidPlayerProfile(incoming(), userId);
+      allow delete: if isAdmin();
+    }
+
+    // User Blocks (blockerUid_blockedUid)
+    match /userBlocks/{blockId} {
+      allow get: if isSignedIn() && isValidId(blockId) && (
+        blockId.matches('^' + request.auth.uid + '_.*') ||
+        blockId.matches('.*_' + request.auth.uid + '$')
+      );
+      allow list: if isSignedIn() && resource.data.blockerUid == request.auth.uid;
+      allow create: if isSignedIn() &&
+        isValidId(blockId) &&
+        incoming().keys().hasAll(['id', 'blockerUid', 'blockedUid', 'createdAt']) &&
+        incoming().keys().hasOnly(['id', 'blockerUid', 'blockedUid', 'blockedName', 'blockedPhotoURL', 'createdAt']) &&
+        incoming().id == blockId &&
+        incoming().blockerUid == request.auth.uid &&
+        isValidId(incoming().blockedUid) &&
+        incoming().blockedUid != request.auth.uid &&
+        blockId == request.auth.uid + '_' + incoming().blockedUid &&
+        isNumberVal(incoming().createdAt);
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(blockId) && existing().blockerUid == request.auth.uid;
+    }
+
+    // Friend Requests (fromUid_toUid)
+    match /friendRequests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid
+      );
+      allow create: if isSignedIn() &&
+        isValidId(requestId) &&
+        incoming().keys().hasAll(['id', 'fromUid', 'toUid', 'status', 'createdAt', 'updatedAt']) &&
+        incoming().keys().hasOnly(['id', 'fromUid', 'fromName', 'fromPhotoURL', 'toUid', 'toName', 'toPhotoURL', 'status', 'createdAt', 'updatedAt']) &&
+        incoming().id == requestId &&
+        incoming().fromUid == request.auth.uid &&
+        isValidId(incoming().toUid) &&
+        incoming().toUid != request.auth.uid &&
+        requestId == incoming().fromUid + '_' + incoming().toUid &&
+        incoming().status == 'pending' &&
+        isNumberVal(incoming().createdAt) &&
+        isNumberVal(incoming().updatedAt) &&
+        isNotBlockedBetween(incoming().fromUid, incoming().toUid);
+
+      allow update: if isSignedIn() &&
+        isValidId(requestId) &&
+        incoming().id == existing().id &&
+        incoming().fromUid == existing().fromUid &&
+        incoming().toUid == existing().toUid &&
+        isNumberVal(incoming().updatedAt) &&
+        (
+          // Only recipient can accept or reject a pending request
+          (
+            existing().toUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            incoming().status in ['accepted', 'rejected']
+          ) ||
+          // Only sender can cancel a pending request
+          (
+            existing().fromUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            incoming().status == 'cancelled'
+          ) ||
+          // Sender may re-send after rejection, cancellation, or prior unfriend if not blocked
+          (
+            existing().fromUid == request.auth.uid &&
+            existing().status in ['rejected', 'cancelled', 'accepted'] &&
+            incoming().status == 'pending' &&
+            isNotBlockedBetween(existing().fromUid, existing().toUid)
+          ) ||
+          // Either user may mark an accepted request as cancelled when unfriending or blocking
+          (
+            (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid) &&
+            existing().status == 'accepted' &&
+            incoming().status == 'cancelled'
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(requestId) && (
+        existing().fromUid == request.auth.uid ||
+        existing().toUid == request.auth.uid
+      );
+    }
+
+    // Verified Mutual Friendships (sorted minUid_maxUid)
+    match /friendships/{pairId} {
+      allow get: if isSignedIn() && isValidId(pairId) && (
+        resource.data.user1 == request.auth.uid ||
+        resource.data.user2 == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.user1 == request.auth.uid ||
+        resource.data.user2 == request.auth.uid
+      );
+      allow create: if isSignedIn() &&
+        isValidId(pairId) &&
+        incoming().keys().hasAll(['id', 'user1', 'user2', 'requestId', 'createdBy', 'createdAt']) &&
+        incoming().keys().hasOnly(['id', 'user1', 'user2', 'user1Name', 'user1PhotoURL', 'user2Name', 'user2PhotoURL', 'requestId', 'createdBy', 'createdAt']) &&
+        incoming().id == pairId &&
+        isValidId(incoming().user1) &&
+        isValidId(incoming().user2) &&
+        incoming().user1 < incoming().user2 &&
+        pairId == incoming().user1 + '_' + incoming().user2 &&
+        (incoming().user1 == request.auth.uid || incoming().user2 == request.auth.uid) &&
+        incoming().createdBy == request.auth.uid &&
+        isNumberVal(incoming().createdAt) &&
+        isValidId(incoming().requestId) &&
+        exists(/databases/$(database)/documents/friendRequests/$(incoming().requestId)) &&
+        get(/databases/$(database)/documents/friendRequests/$(incoming().requestId)).data.toUid == request.auth.uid &&
+        get(/databases/$(database)/documents/friendRequests/$(incoming().requestId)).data.status == 'pending' &&
+        (
+          (
+            get(/databases/$(database)/documents/friendRequests/$(incoming().requestId)).data.fromUid == incoming().user1 &&
+            get(/databases/$(database)/documents/friendRequests/$(incoming().requestId)).data.toUid == incoming().user2
+          ) ||
+          (
+            get(/databases/$(database)/documents/friendRequests/$(incoming().requestId)).data.fromUid == incoming().user2 &&
+            get(/databases/$(database)/documents/friendRequests/$(incoming().requestId)).data.toUid == incoming().user1
+          )
+        ) &&
+        getAfter(/databases/$(database)/documents/friendRequests/$(incoming().requestId)).data.status == 'accepted' &&
+        isNotBlockedBetween(incoming().user1, incoming().user2);
+
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(pairId) && (
+        existing().user1 == request.auth.uid ||
+        existing().user2 == request.auth.uid
+      );
+    }
+
+    // Game Invites (Play & Spectator invitations)
+    match /gameInvites/{inviteId} {
+      allow get: if isSignedIn() && isValidId(inviteId) && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid
+      );
+      allow create: if isSignedIn() &&
+        isValidId(inviteId) &&
+        incoming().keys().hasAll(['id', 'fromUid', 'toUid', 'roomCode', 'inviteType', 'status', 'createdAt', 'expiresAt', 'updatedAt']) &&
+        incoming().keys().hasOnly(['id', 'fromUid', 'fromName', 'fromPhotoURL', 'toUid', 'toName', 'roomCode', 'inviteType', 'status', 'createdAt', 'expiresAt', 'updatedAt']) &&
+        incoming().id == inviteId &&
+        incoming().fromUid == request.auth.uid &&
+        isValidId(incoming().toUid) &&
+        incoming().toUid != request.auth.uid &&
+        incoming().roomCode is string && incoming().roomCode.size() >= 4 && incoming().roomCode.size() <= 16 &&
+        incoming().inviteType in ['play', 'spectate'] &&
+        inviteId == incoming().fromUid + '_' + incoming().toUid + '_' + incoming().roomCode + '_' + incoming().inviteType &&
+        incoming().status == 'pending' &&
+        isNumberVal(incoming().createdAt) &&
+        isNumberVal(incoming().expiresAt) &&
+        isNumberVal(incoming().updatedAt) &&
+        isNotBlockedBetween(incoming().fromUid, incoming().toUid) &&
+        (
+          !exists(/databases/$(database)/documents/playerProfiles/$(incoming().toUid)) ||
+          get(/databases/$(database)/documents/playerProfiles/$(incoming().toUid)).data.acceptsInvites != false
+        );
+
+      allow update: if isSignedIn() &&
+        isValidId(inviteId) &&
+        incoming().id == existing().id &&
+        incoming().fromUid == existing().fromUid &&
+        incoming().toUid == existing().toUid &&
+        incoming().roomCode == existing().roomCode &&
+        incoming().inviteType == existing().inviteType &&
+        isNumberVal(incoming().updatedAt) &&
+        (
+          // Recipient can accept, reject, or mark expired while pending
+          (
+            existing().toUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            incoming().status in ['accepted', 'rejected', 'expired']
+          ) ||
+          // Sender can cancel or expire while pending
+          (
+            existing().fromUid == request.auth.uid &&
+            existing().status == 'pending' &&
+            incoming().status in ['cancelled', 'expired']
+          ) ||
+          // Sender can re-issue a previously resolved/expired/cancelled invite
+          (
+            existing().fromUid == request.auth.uid &&
+            existing().status in ['rejected', 'cancelled', 'expired', 'accepted'] &&
+            incoming().status == 'pending' &&
+            isNotBlockedBetween(existing().fromUid, existing().toUid) &&
+            (
+              !exists(/databases/$(database)/documents/playerProfiles/$(existing().toUid)) ||
+              get(/databases/$(database)/documents/playerProfiles/$(existing().toUid)).data.acceptsInvites != false
+            )
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(inviteId) && (
+        existing().fromUid == request.auth.uid ||
+        existing().toUid == request.auth.uid
+      );
+    }
+
+    // Notifications Center
+    match /notifications/{notifId} {
+      allow get: if isSignedIn() && isValidId(notifId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        isValidId(notifId) &&
+        incoming().keys().hasAll(['id', 'userId', 'actorUid', 'type', 'title', 'message', 'isRead', 'createdAt']) &&
+        incoming().keys().hasOnly(['id', 'userId', 'actorUid', 'actorName', 'type', 'title', 'message', 'relatedId', 'roomCode', 'inviteType', 'isRead', 'createdAt', 'expiresAt']) &&
+        incoming().id == notifId &&
+        incoming().actorUid == request.auth.uid &&
+        isValidId(incoming().userId) &&
+        incoming().userId != request.auth.uid &&
+        incoming().type in ['friend_request', 'friend_accepted', 'play_invite', 'spectate_invite', 'invite_cancelled', 'invite_expired'] &&
+        incoming().isRead == false &&
+        isNumberVal(incoming().createdAt) &&
+        isNotBlockedBetween(incoming().actorUid, incoming().userId);
+      allow update: if isSignedIn() &&
+        isValidId(notifId) &&
+        existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['isRead']) &&
+        incoming().isRead is bool;
+      allow delete: if isSignedIn() && isValidId(notifId) && existing().userId == request.auth.uid;
+    }
   }
 }

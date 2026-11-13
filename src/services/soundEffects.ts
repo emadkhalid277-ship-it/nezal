@@ -238,6 +238,46 @@ class SoundEffectsManager {
   }
 
   /**
+   * 1.ب. أصوات فريدة ومميزة لكل فريق عند تسجيل نقطة في لوحة اللعبة (بدون موسيقى)
+   */
+  public playTeamScore(teamIndex: number): void {
+    if (!this.enabled) return;
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const slot = ((Math.floor(teamIndex) % 4) + 4) % 4;
+
+    if (slot === 0) {
+      // Team 1: Crisp High Arena Desk Bell + Sparkle Ping (جرس فوز عالي وصافٍ)
+      this.playNoiseBurst(ctx, now, 0.025, 'highpass', 3400, 5600, 0.06);
+      this.playTone(ctx, 'sine', 1175, 1175, now, 0.36, 0.24);
+      this.playTone(ctx, 'sine', 2350, 2350, now, 0.2, 0.07);
+      this.playTone(ctx, 'sine', 1568, 1568, now + 0.075, 0.28, 0.16);
+    } else if (slot === 1) {
+      // Team 2: Energetic Double Woodblock & Bright Pop (نقرة خشبية مزدوجة سريعة)
+      this.playTone(ctx, 'triangle', 540, 980, now, 0.08, 0.24);
+      this.playNoiseBurst(ctx, now, 0.03, 'bandpass', 1800, 3200, 0.08, 1.8);
+      this.playTone(ctx, 'sine', 1318, 1318, now + 0.075, 0.34, 0.24);
+      this.playTone(ctx, 'sine', 2636, 2636, now + 0.075, 0.16, 0.06);
+    } else if (slot === 2) {
+      // Team 3: Warm Deep Resonant Chime + Crisp Snap (رنّة عميقة دافئة مع نقرة حادة)
+      this.playNoiseBurst(ctx, now, 0.03, 'bandpass', 2400, 4200, 0.07, 1.5);
+      this.playTone(ctx, 'sine', 659, 659, now, 0.38, 0.25);
+      this.playTone(ctx, 'triangle', 988, 988, now + 0.085, 0.32, 0.16);
+      this.playTone(ctx, 'sine', 1976, 1976, now + 0.085, 0.16, 0.05);
+    } else {
+      // Team 4: Rapid Triple Counter Click-Ping (نقرة عدّاد ثلاثية متسارعة)
+      this.playNoiseBurst(ctx, now, 0.02, 'highpass', 2800, 4500, 0.08);
+      this.playTone(ctx, 'sine', 880, 920, now, 0.09, 0.19);
+      this.playNoiseBurst(ctx, now + 0.055, 0.02, 'highpass', 3000, 4800, 0.08);
+      this.playTone(ctx, 'sine', 1109, 1140, now + 0.055, 0.1, 0.2);
+      this.playTone(ctx, 'sine', 1480, 1480, now + 0.11, 0.34, 0.24);
+      this.playTone(ctx, 'sine', 2960, 2960, now + 0.11, 0.16, 0.06);
+    }
+  }
+
+  /**
    * 2. أصوات متنوعة عند الإجابة الخاطئة (4 تنويعات بدون موسيقى)
    */
   public playWrong(): void {

@@ -64,15 +64,19 @@ import {
   hostStartGame,
   hostUpdateTeams,
   joinOnlineRoom,
+  joinOnlineRoomAsSpectator,
   leaveOnlineRoom,
+  leaveOnlineRoomAsSpectator,
   playerSendOnlineRequest,
   savePlayerName,
   subscribeToOnlineRoom,
   toggleOnlineSubcategoryPick,
   updateOnlinePlayerPresence,
+  updateOnlineSpectatorPresence,
 } from '../services/multiplayerService';
 import { TEAM_COLOR_OPTIONS, DEFAULT_SUBCATEGORIES } from '../data/categoriesAndSeed';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
+import { InviteFriendsModal } from '../components/InviteFriendsModal';
 import { saveMatchProgressToFirestore } from '../services/matchService';
 import { soundFX } from '../services/soundEffects';
 
@@ -85,6 +89,12 @@ interface OnlineMultiplayerPageProps {
   onNavigate?: (page: PageView) => void;
   onOpenAuthModal?: () => void;
   initialRoomCode?: string | null;
+  initialJoinRole?: 'player' | 'spectator';
+  autoJoinNonce?: number;
+  onPresenceActivityChange?: (
+    status: 'online' | 'in_lobby' | 'in_match',
+    roomCode?: string | null
+  ) => void;
 }
 
 const POINT_TIERS: PointValue[] = [100, 200, 300, 400, 500];
@@ -98,6 +108,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   onNavigate,
   onOpenAuthModal,
   initialRoomCode,
+  initialJoinRole = 'player',
+  autoJoinNonce = 0,
+  onPresenceActivityChange,
 }) => {
   // Local profile & session
   const [playerProfile, setPlayerProfile] = useState(() =>
@@ -139,6 +152,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const [categoryFilterMainId, setCategoryFilterMainId] = useState<string>('all');
   const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
   const [isTogglingSubId, setIsTogglingSubId] = useState<string | null>(null);
+  const [joinRole, setJoinRole] = useState<'player' | 'spectator'>(initialJoinRole);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
 
   // Question Timer State (synced from openedAt)
   const [modalTimeLeft, setModalTimeLeft] = useState<number>(60);
@@ -157,6 +172,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     isAnswerRevealed: boolean;
     lastActionAt: number;
     totalScore: number;
+    teamScores: number[];
   } | null>(null);
 
   useEffect(() => {
@@ -176,9 +192,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   useEffect(() => {
     if (initialRoomCode && initialRoomCode.trim()) {
       setRoomCodeInput(initialRoomCode.trim().toUpperCase());
+      setJoinRole(initialJoinRole || 'player');
       setEntryMode('join');
     }
-  }, [initialRoomCode]);
+  }, [initialRoomCode, initialJoinRole]);
 
   // Adjust custom teams array when teamCount changes
   useEffect(() => {
@@ -261,10 +278,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       return;
     }
 
-    const totalScore = (currentRoom.teams || []).reduce(
-      (sum, t) => sum + (t.score || 0),
-      0
-    );
+    const teamScores = (currentRoom.teams || []).map((t) => t.score || 0);
+    const totalScore = teamScores.reduce((sum, s) => sum + s, 0);
     const currentSnapshot = {
       code: currentRoom.code,
       status: currentRoom.status,
@@ -272,6 +287,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       isAnswerRevealed: Boolean(currentRoom.activeQuestion?.isAnswerRevealed),
       lastActionAt: currentRoom.lastActionAt || 0,
       totalScore,
+      teamScores,
     };
 
     const prev = prevRoomSyncRef.current;
@@ -315,9 +331,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     }
 
     // 5. Scoring / Wrong / Buzz-in Feedback
-    if (currentSnapshot.lastActionAt !== prev.lastActionAt) {
+    const scoringTeamIdx = teamScores.findIndex(
+      (score, idx) => score > (prev.teamScores[idx] ?? 0)
+    );
+    if (scoringTeamIdx >= 0 && !(!wasFinished && isNowFinished)) {
+      soundFX.playTeamScore(scoringTeamIdx);
+    } else if (currentSnapshot.lastActionAt !== prev.lastActionAt) {
       const msg = currentRoom.lastActionMessage || '';
-      if (currentSnapshot.totalScore > prev.totalScore) {
+      if (currentSnapshot.totalScore > prev.totalScore && !(!wasFinished && isNowFinished)) {
         soundFX.playCorrect();
       } else if (
         msg.includes('تم تخطي السؤال') ||
@@ -344,8 +365,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   useEffect(() => {
     if (!currentRoom) return;
 
+    const isRoomSpectator =
+      currentRoom.hostId !== playerProfile.id &&
+      !currentRoom.players?.[playerProfile.id] &&
+      Boolean(currentRoom.spectators?.[playerProfile.id]);
+
     const ping = () => {
-      updateOnlinePlayerPresence(currentRoom.code, playerProfile.id, 'online');
+      if (isRoomSpectator) {
+        updateOnlineSpectatorPresence(currentRoom.code, playerProfile.id, 'online');
+      } else {
+        updateOnlinePlayerPresence(currentRoom.code, playerProfile.id, 'online');
+      }
     };
 
     ping(); // Immediate ping on entry
@@ -355,7 +385,85 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     return () => {
       window.clearInterval(interval);
     };
-  }, [currentRoom?.code, playerProfile.id]);
+  }, [currentRoom?.code, currentRoom?.hostId, playerProfile.id]);
+
+  // Notify parent app of global presence activity transitions (in_lobby / in_match / online)
+  useEffect(() => {
+    if (!onPresenceActivityChange) return;
+    if (!currentRoom) {
+      onPresenceActivityChange('online', null);
+      return;
+    }
+    const isPlayingNow =
+      currentRoom.status === 'playing' || currentRoom.status === 'in_game';
+    const isEndedNow =
+      currentRoom.status === 'finished' || currentRoom.status === 'completed';
+
+    if (isPlayingNow) {
+      onPresenceActivityChange('in_match', currentRoom.code);
+    } else if (isEndedNow) {
+      onPresenceActivityChange('online', null);
+    } else {
+      onPresenceActivityChange('in_lobby', currentRoom.code);
+    }
+  }, [currentRoom?.code, currentRoom?.status, onPresenceActivityChange]);
+
+  // Auto-join room when triggered from accepted Friend Invite or Notification Center
+  useEffect(() => {
+    if (!user || !autoJoinNonce || !initialRoomCode) return;
+    const cleanCode = initialRoomCode.trim().toUpperCase();
+    if (!cleanCode) return;
+
+    let cancelled = false;
+    const displayName =
+      playerNameInput.trim() ||
+      user.displayName ||
+      user.email?.split('@')[0] ||
+      'لاعب نِزال';
+
+    setLoading(true);
+    setErrorMsg(null);
+    savePlayerName(displayName);
+
+    const runAutoJoin = async () => {
+      try {
+        if (initialJoinRole === 'spectator') {
+          const { room } = await joinOnlineRoomAsSpectator({
+            code: cleanCode,
+            spectatorName: displayName,
+            user,
+          });
+          if (cancelled) return;
+          setPlayerProfile(getOrCreatePlayerProfile(user, displayName));
+          setCurrentRoom(room);
+          connectToRoomStream(room.code);
+        } else {
+          const { room } = await joinOnlineRoom({
+            code: cleanCode,
+            playerName: displayName,
+            user,
+          });
+          if (cancelled) return;
+          setPlayerProfile(getOrCreatePlayerProfile(user, displayName));
+          setCurrentRoom(room);
+          connectToRoomStream(room.code);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setErrorMsg(err?.message || 'تعذر الدخول إلى الغرفة تلقائياً.');
+          setEntryMode('join');
+          setRoomCodeInput(cleanCode);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void runAutoJoin();
+    return () => {
+      cancelled = true;
+    };
+  }, [autoJoinNonce]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -365,6 +473,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       }
       if (heartbeatRef.current) {
         window.clearInterval(heartbeatRef.current);
+      }
+      if (onPresenceActivityChange) {
+        onPresenceActivityChange('online', null);
       }
     };
   }, []);
@@ -461,10 +572,13 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         }
         setCurrentRoom(updatedRoom);
 
-        // Auto-save progress to user's match history
+        // Auto-save progress to user's match history (only for active players, never spectators)
         if (
           user &&
-          (updatedRoom.status === 'in_game' || updatedRoom.status === 'finished')
+          updatedRoom.players?.[playerProfile.id] &&
+          (updatedRoom.status === 'playing' ||
+            updatedRoom.status === 'in_game' ||
+            updatedRoom.status === 'finished')
         ) {
           const sorted = [...updatedRoom.teams].sort((a, b) => b.score - a.score);
           const playersList = Object.values(updatedRoom.players || {});
@@ -589,15 +703,25 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     savePlayerName(name);
 
     try {
-      const { room } = await joinOnlineRoom({
-        code,
-        playerName: name,
-        user,
-      });
-
-      setPlayerProfile(getOrCreatePlayerProfile(user, name));
-      setCurrentRoom(room);
-      connectToRoomStream(room.code);
+      if (joinRole === 'spectator') {
+        const { room } = await joinOnlineRoomAsSpectator({
+          code,
+          spectatorName: name,
+          user,
+        });
+        setPlayerProfile(getOrCreatePlayerProfile(user, name));
+        setCurrentRoom(room);
+        connectToRoomStream(room.code);
+      } else {
+        const { room } = await joinOnlineRoom({
+          code,
+          playerName: name,
+          user,
+        });
+        setPlayerProfile(getOrCreatePlayerProfile(user, name));
+        setCurrentRoom(room);
+        connectToRoomStream(room.code);
+      }
     } catch (err: any) {
       console.error('Failed to join room:', err);
       setErrorMsg(err.message || 'تعذر الانضمام إلى الغرفة. تحقق من صحة الرمز.');
@@ -609,16 +733,28 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // 3. Handle Leave Room
   const handleLeaveRoom = async () => {
     if (!currentRoom) return;
+    const isCurrentlySpectator =
+      currentRoom.hostId !== playerProfile.id &&
+      !currentRoom.players?.[playerProfile.id] &&
+      Boolean(currentRoom.spectators?.[playerProfile.id]);
+
     try {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
-      await leaveOnlineRoom(currentRoom.code, playerProfile.id);
+      if (isCurrentlySpectator) {
+        await leaveOnlineRoomAsSpectator(currentRoom.code, playerProfile.id);
+      } else {
+        await leaveOnlineRoom(currentRoom.code, playerProfile.id);
+      }
     } catch {
       // ignore
     } finally {
       setCurrentRoom(null);
+      if (onPresenceActivityChange) {
+        onPresenceActivityChange('online', null);
+      }
     }
   };
 
@@ -865,11 +1001,23 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   }, [currentRoom]);
 
   const myPlayer = currentRoom?.players ? currentRoom.players[playerProfile.id] : undefined;
-  const myTeamId =
-    myPlayer?.teamId ||
-    (isHost ? currentRoom?.teams[0]?.id : currentRoom?.teams[1]?.id);
+  const isSpectator = Boolean(
+    currentRoom &&
+      !isHost &&
+      !myPlayer &&
+      currentRoom.spectators?.[playerProfile.id]
+  );
+  const spectatorsList = useMemo(() => {
+    return currentRoom?.spectators ? Object.values(currentRoom.spectators) : [];
+  }, [currentRoom?.spectators]);
+  const myTeamId = isSpectator
+    ? null
+    : myPlayer?.teamId ||
+      (isHost ? currentRoom?.teams[0]?.id : currentRoom?.teams[1]?.id);
 
-  const myTeam = currentRoom?.teams.find((t) => t.id === myTeamId) || currentRoom?.teams[0];
+  const myTeam = isSpectator
+    ? null
+    : currentRoom?.teams.find((t) => t.id === myTeamId) || currentRoom?.teams[0];
   const team1 = currentRoom?.teams[0] || { id: 'team_1', name: 'فريق 1', color: '#14543D', score: 0 };
   const team2 = currentRoom?.teams[1] || { id: 'team_2', name: 'فريق 2', color: '#F07842', score: 0 };
 
@@ -1267,6 +1415,39 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               />
             </div>
 
+            {/* Join Role: Player vs Spectator */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-[#252824]">
+                طريقة الدخول للغرفة:
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setJoinRole('player')}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                    joinRole === 'player'
+                      ? 'border-[#14543D] bg-[#EAF2EE] text-[#14543D]'
+                      : 'border-[#E5E8DD] text-[#777B73] hover:bg-[#F3F5E9]'
+                  }`}
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>دخول كلاعب</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJoinRole('spectator')}
+                  className={`py-2.5 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                    joinRole === 'spectator'
+                      ? 'border-[#14543D] bg-[#EAF2EE] text-[#14543D]'
+                      : 'border-[#E5E8DD] text-[#777B73] hover:bg-[#F3F5E9]'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>دخول كمشاهد (للعرض فقط)</span>
+                </button>
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading || roomCodeInput.length < 5}
@@ -1279,8 +1460,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 </div>
               ) : (
                 <>
-                  <Play className="w-5 h-5 fill-current" />
-                  <span>دخول الغرفة</span>
+                  {joinRole === 'spectator' ? (
+                    <Eye className="w-5 h-5" />
+                  ) : (
+                    <Play className="w-5 h-5 fill-current" />
+                  )}
+                  <span>
+                    {joinRole === 'spectator' ? 'دخول للمشاهدة' : 'دخول الغرفة'}
+                  </span>
                 </>
               )}
             </button>
@@ -1344,8 +1531,21 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </div>
         )}
 
+        {/* Spectator Read-Only Banner */}
+        {isSpectator && (
+          <div className="p-4 rounded-2xl bg-[#EAF2EE] border border-[#14543D]/25 text-[#14543D] flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-bold">
+              <Eye className="w-5 h-5 text-[#F07842] shrink-0" />
+              <span>أنت تشاهد هذه الغرفة بوضع المشاهد (للعرض فقط — لا يمكنك اختيار الفئات أو التحكم باللعبة).</span>
+            </div>
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#FFFFFF] border border-[#14543D]/15 tabular-nums">
+              المشاهدون: {spectatorsList.length}
+            </span>
+          </div>
+        )}
+
         {/* Host Offline Alert / Succession */}
-        {isHostOffline && !isHost && (
+        {isHostOffline && !isHost && !isSpectator && (
           <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-bold">
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
@@ -1365,7 +1565,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-6">
             <div>
-              <div className="flex items-center gap-2 text-xs text-[#777B73]">
+              <div className="flex items-center gap-2 text-xs text-[#777B73] flex-wrap">
                 <Radio className="w-3.5 h-3.5 text-[#14543D] animate-pulse" />
                 <span>غرفة اللعب عن بُعد</span>
                 <span>•</span>
@@ -1373,23 +1573,46 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   المضيف: {currentRoom.hostName}
                 </span>
                 <span>•</span>
-                <span>
-                  أنت في: <strong style={{ color: myTeam?.color }}>{myTeam?.name}</strong>
-                </span>
+                {isSpectator ? (
+                  <span className="font-bold text-[#F07842]">مشاهد (للعرض فقط)</span>
+                ) : (
+                  <span>
+                    أنت في: <strong style={{ color: myTeam?.color }}>{myTeam?.name}</strong>
+                  </span>
+                )}
+                {spectatorsList.length > 0 && (
+                  <>
+                    <span>•</span>
+                    <span className="inline-flex items-center gap-1 text-[#14543D] font-bold tabular-nums">
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>{spectatorsList.length} مشاهد</span>
+                    </span>
+                  </>
+                )}
               </div>
               <h1 className="font-display text-2xl font-bold text-[#252824]">
                 صالة التحدي واختيار الفئات
               </h1>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {!isSpectator && (
+                <button
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="px-4 py-2 text-xs font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Users className="w-4 h-4 text-[#F07842]" />
+                  <span>دعوة أصدقاء</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleLeaveRoom}
                 className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <LogOut className="w-4 h-4" />
-                <span>مغادرة الغرفة</span>
+                <span>{isSpectator ? 'مغادرة المشاهدة' : 'مغادرة الغرفة'}</span>
               </button>
             </div>
           </div>
@@ -1679,7 +1902,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </div>
         </div>
 
-        {/* INTERACTIVE CATEGORY SELECTION BROWSER */}
+        {/* INTERACTIVE CATEGORY SELECTION BROWSER (Hidden for Spectators) */}
+        {!isSpectator && (
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
             <div>
@@ -1935,6 +2159,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             ))}
           </div>
         </div>
+        )}
 
         {/* 5 CONDITIONS VALIDATION & START CHALLENGE BUTTON */}
         <div className="bg-[#FFFFFF] border-2 border-[#14543D]/30 rounded-3xl p-6 md:p-8 space-y-5 shadow-sm">
@@ -2054,6 +2279,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   </>
                 )}
               </button>
+            ) : isSpectator ? (
+              <div className="flex items-center gap-2 text-xs font-bold text-[#14543D] bg-[#EAF2EE] px-5 py-3 rounded-xl border border-[#14543D]/20">
+                <Eye className="w-4 h-4 text-[#F07842]" />
+                <span>
+                  {isRoomReadyToStart
+                    ? 'الغرفة جاهزة! بانتظار بدء المباراة من المضيف للمشاهدة المباشرة'
+                    : 'تتابع الآن تجهيز الفريقين واختيار الفئات بوضع المشاهدة...'}
+                </span>
+              </div>
             ) : (
               <div className="flex items-center gap-2 text-xs font-bold text-[#14543D] bg-[#EAF2EE] px-5 py-3 rounded-xl border border-[#14543D]/20">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#14543D] animate-ping" />
@@ -2066,6 +2300,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             )}
           </div>
         </div>
+
+        <InviteFriendsModal
+          isOpen={isInviteModalOpen}
+          onClose={() => setIsInviteModalOpen(false)}
+          user={user}
+          roomCode={currentRoom.code}
+          canInviteToPlay={!hasOpponent || playersList.length < (currentRoom.maxPlayers || 16)}
+        />
       </div>
     );
   }
@@ -2087,15 +2329,28 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         {/* TOP STATUS BAR: Teams Scores & Turn Indicator */}
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 md:p-6 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#E5E8DD] pb-4">
-            <div className="flex items-center gap-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#F07842] animate-pulse" />
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#F07842]" />
               <span className="text-xs font-bold text-[#14543D]">
                 غرفة: <span className="font-mono">{currentRoom.code}</span>
               </span>
               <span className="text-xs text-[#777B73]">•</span>
               <span className="text-xs text-[#777B73]">
-                {isHost ? 'أنت المضيف 👑' : `أنت متصل كـ ${playerProfile.name}`}
+                {isHost
+                  ? 'أنت المضيف 👑'
+                  : isSpectator
+                  ? 'وضع المشاهدة (للعرض فقط)'
+                  : `أنت متصل كـ ${playerProfile.name}`}
               </span>
+              {spectatorsList.length > 0 && (
+                <>
+                  <span className="text-xs text-[#777B73]">•</span>
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-[#14543D] tabular-nums">
+                    <Eye className="w-3.5 h-3.5 text-[#F07842]" />
+                    <span>{spectatorsList.length} مشاهد</span>
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Turn badge */}
@@ -2111,8 +2366,19 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               )}
             </div>
 
-            {/* Sound & Host Controls */}
-            <div className="flex items-center gap-2">
+            {/* Sound, Invite & Host Controls */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {!isSpectator && (
+                <button
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-[#14543D] text-white hover:bg-[#0E3D2C] cursor-pointer flex items-center gap-1.5"
+                >
+                  <Eye className="w-3.5 h-3.5 text-[#F07842]" />
+                  <span>دعوة للمشاهدة</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => soundFX.toggle()}
@@ -2143,6 +2409,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   className="px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer"
                 >
                   إنهاء المباراة
+                </button>
+              )}
+
+              {isSpectator && (
+                <button
+                  type="button"
+                  onClick={handleLeaveRoom}
+                  className="px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer flex items-center gap-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>مغادرة المشاهدة</span>
                 </button>
               )}
             </div>
@@ -2392,6 +2669,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     </div>
                   )}
                 </div>
+              ) : isSpectator ? (
+                <div className="pt-2 text-center text-xs font-bold text-[#14543D] bg-[#EAF2EE] py-3 px-4 rounded-xl border border-[#14543D]/15">
+                  تتابع السؤال الآن بوضع المشاهد (للعرض فقط — يتم تحديث الإجابة والنقاط مباشرة).
+                </div>
               ) : (
                 /* Non-Host Player Interactive Buttons */
                 <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
@@ -2418,6 +2699,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             </div>
           </div>
         )}
+
+        <InviteFriendsModal
+          isOpen={isInviteModalOpen}
+          onClose={() => setIsInviteModalOpen(false)}
+          user={user}
+          roomCode={currentRoom.code}
+          canInviteToPlay={false}
+        />
       </div>
     );
   }
@@ -2501,6 +2790,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 العودة لصالة الانتظار
               </button>
             </>
+          ) : isSpectator ? (
+            <div className="text-xs font-bold text-[#777B73]">
+              انتهت المباراة — كنت تشاهد هذه المواجهة كمشاهد.
+            </div>
           ) : (
             <div className="text-xs font-bold text-[#777B73]">
               بانتظار المضيف لإعادة بدء جولة جديدة أو العودة للانتظار.
@@ -2513,7 +2806,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             className="px-6 py-3.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold cursor-pointer flex items-center gap-2"
           >
             <LogOut className="w-4 h-4" />
-            <span>مغادرة الغرفة</span>
+            <span>{isSpectator ? 'مغادرة المشاهدة' : 'مغادرة الغرفة'}</span>
           </button>
         </div>
       </div>

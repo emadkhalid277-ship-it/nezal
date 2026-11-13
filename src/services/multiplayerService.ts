@@ -13,6 +13,7 @@ import {
   OnlineGameRoom,
   PlayerRequest,
   RoomPlayer,
+  RoomSpectator,
   RoomStatus,
   RoomTeam,
 } from '../types/multiplayer';
@@ -184,6 +185,7 @@ export async function createOnlineRoom(params: CreateRoomParams): Promise<Online
     players: {
       [playerProfile.id]: hostPlayer,
     },
+    spectators: {},
     selectedSubcategoryIds: [],
     teamSubcategoryIds: {
       [teams[0].id]: [],
@@ -957,5 +959,88 @@ export async function playerSendOnlineRequest(
     });
   } catch (err) {
     console.error('Error sending player request:', err);
+  }
+}
+
+// 20. Join an existing Room strictly as a Spectator (read-only, does not count as a player)
+export async function joinOnlineRoomAsSpectator(params: {
+  code: string;
+  spectatorName: string;
+  user?: User | null;
+}): Promise<{ room: OnlineGameRoom; spectator: RoomSpectator }> {
+  const cleanCode = params.code.trim().toUpperCase();
+  const profile = getOrCreatePlayerProfile(params.user, params.spectatorName);
+  const roomRef = getRoomDoc(cleanCode);
+
+  const snap = await getDoc(roomRef);
+  if (!snap.exists()) {
+    throw new Error('رمز الغرفة غير صحيح أو أن الغرفة غير موجودة');
+  }
+
+  const room = snap.data() as OnlineGameRoom;
+  if (room.status === 'finished' || room.status === 'completed') {
+    throw new Error('المباراة في هذه الغرفة قد انتهت بالفعل');
+  }
+
+  const now = Date.now();
+  const existingSpectator = room.spectators ? room.spectators[profile.id] : undefined;
+  const spectator: RoomSpectator = {
+    id: profile.id,
+    name: profile.name,
+    userId: params.user?.uid || null,
+    joinedAt: existingSpectator ? existingSpectator.joinedAt : now,
+    lastSeen: now,
+    connectionStatus: 'online',
+  };
+
+  await updateDoc(roomRef, {
+    [`spectators.${profile.id}`]: spectator,
+    updatedAt: now,
+  });
+
+  return {
+    room: {
+      ...room,
+      spectators: {
+        ...(room.spectators || {}),
+        [profile.id]: spectator,
+      },
+    },
+    spectator,
+  };
+}
+
+// 21. Update Spectator Presence
+export async function updateOnlineSpectatorPresence(
+  code: string,
+  spectatorId: string,
+  status: 'online' | 'offline'
+): Promise<void> {
+  const cleanCode = code.trim().toUpperCase();
+  const roomRef = getRoomDoc(cleanCode);
+  try {
+    await updateDoc(roomRef, {
+      [`spectators.${spectatorId}.lastSeen`]: Date.now(),
+      [`spectators.${spectatorId}.connectionStatus`]: status,
+    });
+  } catch {
+    // silence background heartbeat errors
+  }
+}
+
+// 22. Leave Room as Spectator
+export async function leaveOnlineRoomAsSpectator(
+  code: string,
+  spectatorId: string
+): Promise<void> {
+  const cleanCode = code.trim().toUpperCase();
+  const roomRef = getRoomDoc(cleanCode);
+  try {
+    await updateDoc(roomRef, {
+      [`spectators.${spectatorId}`]: deleteField(),
+      updatedAt: Date.now(),
+    });
+  } catch {
+    // ignore
   }
 }

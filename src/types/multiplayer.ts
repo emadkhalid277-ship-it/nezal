@@ -24,6 +24,15 @@ export interface RoomPlayer {
   avatarColor?: string;
 }
 
+export interface RoomSpectator {
+  id: string;
+  name: string;
+  userId?: string | null;
+  joinedAt: number;
+  lastSeen: number;
+  connectionStatus: PlayerConnectionStatus;
+}
+
 export interface RoomTeam {
   id: string;
   name: string;
@@ -70,6 +79,7 @@ export interface OnlineGameRoom {
   timerDuration: number;
   teams: RoomTeam[];
   players: Record<string, RoomPlayer>;
+  spectators?: Record<string, RoomSpectator>;
   selectedSubcategoryIds: string[];
   teamSubcategoryIds: Record<string, string[]>;
   activeTeamIndex: number;

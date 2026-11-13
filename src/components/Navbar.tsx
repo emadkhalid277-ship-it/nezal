@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown, Bookmark, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown, Bookmark, Trophy, Volume2, VolumeX, Users } from 'lucide-react';
 import { PageView } from '../types/game';
 import { User } from 'firebase/auth';
 import { soundFX } from '../services/soundEffects';
+import { NotificationsCenter } from './NotificationsCenter';
 
 interface NavbarProps {
   brandName: string;
@@ -15,6 +16,7 @@ interface NavbarProps {
   isAdmin?: boolean;
   onOpenAuth?: () => void;
   onLogout?: () => void;
+  onJoinRoomFromInvite?: (roomCode: string, role: 'player' | 'spectator') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -28,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isAdmin = false,
   onOpenAuth,
   onLogout,
+  onJoinRoomFromInvite,
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -52,25 +55,21 @@ export const Navbar: React.FC<NavbarProps> = ({
     {
       id: 'categories',
       label: isGameLocked
-        ? `الفئات (${selectedSubcategoriesCount} - مقفلة)`
+        ? `إعداد اللعبة (${selectedSubcategoriesCount} - مقفلة)`
         : selectedSubcategoriesCount > 0
-        ? `اختر الفئات (${selectedSubcategoriesCount})`
-        : 'اختر الفئات',
-      locked: isGameLocked,
-    },
-    {
-      id: 'setup',
-      label: isGameLocked ? 'الفرق (مقفلة)' : 'سوّ فريقك',
+        ? `إعداد اللعبة (${selectedSubcategoriesCount})`
+        : 'إعداد اللعبة',
       locked: isGameLocked,
     },
     { id: 'my_matches' as PageView, label: 'مبارياتي' },
+    { id: 'friends' as PageView, label: 'الأصدقاء' },
     { id: 'my_lists' as PageView, label: 'قائمتي الخاصة' },
     { id: 'contact', label: 'تواصل معنا' },
     ...(isAdmin ? [{ id: 'admin' as PageView, label: 'لوحة المشرف' }] : []),
   ];
 
   const handleSelect = (page: PageView) => {
-    if ((page === 'my_lists' || page === 'my_matches') && !user) {
+    if ((page === 'my_lists' || page === 'my_matches' || page === 'friends') && !user) {
       if (onOpenAuth) onOpenAuth();
       setMobileOpen(false);
       return;
@@ -129,7 +128,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="hidden md:flex items-center gap-6 text-sm font-medium"
         >
           {navLinks.map((link) => {
-            const isActive = activePage === link.id;
+            const isActive =
+              activePage === link.id ||
+              (link.id === 'categories' && activePage === 'setup');
             return (
               <button
                 key={link.id}
@@ -177,6 +178,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               <VolumeX className="w-4 h-4" />
             )}
           </button>
+
+          {/* Notifications Center (Bell with live unread count) */}
+          {user && onJoinRoomFromInvite && (
+            <NotificationsCenter
+              user={user}
+              onNavigate={handleSelect}
+              onJoinRoomFromInvite={onJoinRoomFromInvite}
+            />
+          )}
 
           {/* User Profile / Login Button */}
           {user ? (
@@ -238,6 +248,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     <Trophy className="w-4 h-4 text-[#F07842]" />
                     <span>سجل مبارياتي</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelect('friends')}
+                    className="w-full text-right flex items-center gap-2 px-3 py-2 text-xs font-bold text-[#14543D] hover:bg-[#EAF2EE] rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Users className="w-4 h-4 text-[#F07842]" />
+                    <span>الأصدقاء</span>
                   </button>
 
                   {isAdmin && (
@@ -348,7 +367,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {navLinks.map((link) => {
-            const isActive = activePage === link.id;
+            const isActive =
+              activePage === link.id ||
+              (link.id === 'categories' && activePage === 'setup');
             return (
               <button
                 key={link.id}

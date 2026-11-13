@@ -8,7 +8,8 @@ export type PageView =
   | 'contact'
   | 'my_lists'
   | 'online_multiplayer'
-  | 'my_matches';
+  | 'my_matches'
+  | 'friends';
 
 export type MainCategoryName = string;
 
