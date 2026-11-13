@@ -39,6 +39,7 @@ export interface SubcategoryItem {
   description: string;
   sortOrder: number;
   isActive: boolean;
+  isComingSoon?: boolean;
   isDeleted?: boolean;
   imageUrl?: string;
   authorId?: string;
@@ -57,6 +58,7 @@ export interface MainCategoryMeta {
   imageUrl: string;
   sortOrder: number;
   isActive: boolean;
+  isComingSoon?: boolean;
   isDeleted?: boolean;
   iconName: MainCategoryIconName;
   updatedBy?: string;

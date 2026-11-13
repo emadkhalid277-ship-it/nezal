@@ -44,6 +44,10 @@
           "type": "boolean",
           "description": "Whether the main category is visible to players in new games"
         },
+        "isComingSoon": {
+          "type": "boolean",
+          "description": "Whether the main category is displayed with a Coming Soon badge and temporarily unplayable"
+        },
         "isDeleted": {
           "type": "boolean",
           "description": "Whether a built-in main category was deleted by the administrator"
@@ -139,6 +143,10 @@
         "isActive": {
           "type": "boolean",
           "description": "Whether the subcategory is visible for selection"
+        },
+        "isComingSoon": {
+          "type": "boolean",
+          "description": "Whether the subcategory is marked Coming Soon and temporarily unplayable"
         },
         "isDeleted": {
           "type": "boolean",

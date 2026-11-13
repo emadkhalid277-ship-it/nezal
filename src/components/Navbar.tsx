@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown, Bookmark, Trophy } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, User as UserIcon, LogOut, ShieldCheck, ChevronDown, Bookmark, Trophy, Volume2, VolumeX } from 'lucide-react';
 import { PageView } from '../types/game';
 import { User } from 'firebase/auth';
+import { soundFX } from '../services/soundEffects';
 
 interface NavbarProps {
   brandName: string;
@@ -30,6 +31,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => soundFX.isEnabled());
+
+  useEffect(() => {
+    return soundFX.subscribe(setSoundEnabled);
+  }, []);
 
   const navLinks: {
     id: PageView;
@@ -151,8 +157,27 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: User Auth & Primary CTA Action */}
+        {/* Zone 3: User Auth, Sound Toggle & Primary CTA Action */}
         <div className="flex items-center gap-2.5 shrink-0">
+          {/* Sound Effects Toggle */}
+          <button
+            type="button"
+            onClick={() => soundFX.toggle()}
+            title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
+            aria-label={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
+            className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+              soundEnabled
+                ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
+                : 'bg-[#F3F5E9] border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
+            }`}
+          >
+            {soundEnabled ? (
+              <Volume2 className="w-4 h-4" />
+            ) : (
+              <VolumeX className="w-4 h-4" />
+            )}
+          </button>
+
           {/* User Profile / Login Button */}
           {user ? (
             <div className="relative">

@@ -66,6 +66,7 @@ service cloud.firestore {
           'imageUrl',
           'sortOrder',
           'isActive',
+          'isComingSoon',
           'isDeleted',
           'accentColor',
           'bgTint',
@@ -81,6 +82,7 @@ service cloud.firestore {
         data.imageUrl is string && data.imageUrl.size() <= 500000 &&
         data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 10000 &&
         data.isActive is bool &&
+        (!('isComingSoon' in data) || data.isComingSoon is bool) &&
         (!('isDeleted' in data) || data.isDeleted is bool) &&
         (!('accentColor' in data) || (data.accentColor is string && data.accentColor.size() >= 4 && data.accentColor.size() <= 20)) &&
         (!('bgTint' in data) || (data.bgTint is string && data.bgTint.size() >= 4 && data.bgTint.size() <= 20)) &&
@@ -110,6 +112,7 @@ service cloud.firestore {
           'description',
           'sortOrder',
           'isActive',
+          'isComingSoon',
           'isDeleted',
           'imageUrl',
           'authorId',
@@ -123,6 +126,7 @@ service cloud.firestore {
         data.description is string && data.description.size() <= 240 &&
         data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 10000 &&
         data.isActive is bool &&
+        (!('isComingSoon' in data) || data.isComingSoon is bool) &&
         (!('isDeleted' in data) || data.isDeleted is bool) &&
         (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500000)) &&
         data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
@@ -308,6 +312,7 @@ service cloud.firestore {
           'imageUrl',
           'sortOrder',
           'isActive',
+          'isComingSoon',
           'isDeleted',
           'accentColor',
           'bgTint',
@@ -349,6 +354,7 @@ service cloud.firestore {
           'description',
           'sortOrder',
           'isActive',
+          'isComingSoon',
           'isDeleted',
           'imageUrl',
           'updatedAt'

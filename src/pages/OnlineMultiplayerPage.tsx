@@ -20,6 +20,7 @@ import {
   UserCheck,
   UserX,
   Volume2,
+  VolumeX,
   Radio,
   Eye,
   BellRing,
@@ -73,6 +74,7 @@ import {
 import { TEAM_COLOR_OPTIONS, DEFAULT_SUBCATEGORIES } from '../data/categoriesAndSeed';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
 import { saveMatchProgressToFirestore } from '../services/matchService';
+import { soundFX } from '../services/soundEffects';
 
 interface OnlineMultiplayerPageProps {
   user: User | null;
@@ -140,10 +142,26 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
   // Question Timer State (synced from openedAt)
   const [modalTimeLeft, setModalTimeLeft] = useState<number>(60);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() =>
+    soundFX.isEnabled()
+  );
 
-  // Ref to active subscription
+  // Ref to active subscription & previous room state for live SFX triggers
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const heartbeatRef = useRef<number | null>(null);
+  const prevModalTimeLeftRef = useRef<number>(60);
+  const prevRoomSyncRef = useRef<{
+    code: string;
+    status: string;
+    openedAt: number | null;
+    isAnswerRevealed: boolean;
+    lastActionAt: number;
+    totalScore: number;
+  } | null>(null);
+
+  useEffect(() => {
+    return soundFX.subscribe(setSoundEnabled);
+  }, []);
 
   // Sync player profile with user changes
   useEffect(() => {
@@ -200,6 +218,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // Active question countdown timer (anchored to room.activeQuestion.openedAt)
   useEffect(() => {
     if (!currentRoom?.activeQuestion) {
+      prevModalTimeLeftRef.current = currentRoom?.timerDuration || 60;
       return;
     }
     const qDuration = currentRoom.timerDuration || 60;
@@ -215,6 +234,102 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     const interval = window.setInterval(updateTimer, 500);
     return () => window.clearInterval(interval);
   }, [currentRoom?.activeQuestion, currentRoom?.timerDuration]);
+
+  // Timer tick & time-up sound effects for Online Multiplayer
+  useEffect(() => {
+    const q = currentRoom?.activeQuestion;
+    if (!q || q.isAnswerRevealed) {
+      prevModalTimeLeftRef.current = modalTimeLeft;
+      return;
+    }
+    if (prevModalTimeLeftRef.current > 0 && modalTimeLeft === 0) {
+      soundFX.playTimeUp();
+    } else if (
+      prevModalTimeLeftRef.current !== modalTimeLeft &&
+      modalTimeLeft > 0 &&
+      modalTimeLeft <= 5
+    ) {
+      soundFX.playTimerTick();
+    }
+    prevModalTimeLeftRef.current = modalTimeLeft;
+  }, [modalTimeLeft, currentRoom?.activeQuestion]);
+
+  // Synchronized real-time sound effects across all connected devices in the room
+  useEffect(() => {
+    if (!currentRoom) {
+      prevRoomSyncRef.current = null;
+      return;
+    }
+
+    const totalScore = (currentRoom.teams || []).reduce(
+      (sum, t) => sum + (t.score || 0),
+      0
+    );
+    const currentSnapshot = {
+      code: currentRoom.code,
+      status: currentRoom.status,
+      openedAt: currentRoom.activeQuestion?.openedAt || null,
+      isAnswerRevealed: Boolean(currentRoom.activeQuestion?.isAnswerRevealed),
+      lastActionAt: currentRoom.lastActionAt || 0,
+      totalScore,
+    };
+
+    const prev = prevRoomSyncRef.current;
+    prevRoomSyncRef.current = currentSnapshot;
+
+    // Skip firing SFX on initial room entry/load
+    if (!prev || prev.code !== currentSnapshot.code) {
+      return;
+    }
+
+    // 1. Challenge Started
+    const wasPlaying = prev.status === 'playing' || prev.status === 'in_game';
+    const isNowPlaying =
+      currentSnapshot.status === 'playing' ||
+      currentSnapshot.status === 'in_game';
+    if (!wasPlaying && isNowPlaying) {
+      soundFX.playChallengeStart();
+    }
+
+    // 2. Match Finished / Winner Announced
+    const wasFinished =
+      prev.status === 'finished' || prev.status === 'completed';
+    const isNowFinished =
+      currentSnapshot.status === 'finished' ||
+      currentSnapshot.status === 'completed';
+    if (!wasFinished && isNowFinished) {
+      soundFX.playMatchWin();
+    }
+
+    // 3. New Question Tile Opened
+    if (
+      currentSnapshot.openedAt &&
+      currentSnapshot.openedAt !== prev.openedAt
+    ) {
+      soundFX.playTileOpen();
+    }
+
+    // 4. Answer Revealed
+    if (!prev.isAnswerRevealed && currentSnapshot.isAnswerRevealed) {
+      soundFX.playAnswerReveal();
+    }
+
+    // 5. Scoring / Wrong / Buzz-in Feedback
+    if (currentSnapshot.lastActionAt !== prev.lastActionAt) {
+      const msg = currentRoom.lastActionMessage || '';
+      if (currentSnapshot.totalScore > prev.totalScore) {
+        soundFX.playCorrect();
+      } else if (
+        msg.includes('تم تخطي السؤال') ||
+        msg.includes('بدون نقاط') ||
+        msg.includes('إجابة خاطئة')
+      ) {
+        soundFX.playWrong();
+      } else if (msg.includes('رفع يده') || msg.includes('يطلب كشف')) {
+        soundFX.playBuzzIn();
+      }
+    }
+  }, [currentRoom]);
 
   // Toast notifications on lastActionMessage
   useEffect(() => {
@@ -305,6 +420,31 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           visibleMainCategoryNames.has(s.mainCategory))
     );
   }, [subcategories, mainCategories]);
+
+  const comingSoonMainIds = useMemo(
+    () => new Set(mainCategories.filter((m) => m.isComingSoon).map((m) => m.id)),
+    [mainCategories]
+  );
+  const comingSoonMainNames = useMemo(
+    () => new Set(mainCategories.filter((m) => m.isComingSoon).map((m) => m.name)),
+    [mainCategories]
+  );
+
+  const isSubComingSoon = (sub: SubcategoryItem) =>
+    Boolean(
+      sub.isComingSoon ||
+        (sub.mainCategoryId && comingSoonMainIds.has(sub.mainCategoryId)) ||
+        comingSoonMainNames.has(sub.mainCategory)
+    );
+
+  const triggerComingSoonAlert = () => {
+    const msg = 'هذه الفئة قادمة قريباً، ترقبوا!';
+    setErrorMsg(msg);
+    setToastNotification(msg);
+    window.setTimeout(() => {
+      setToastNotification((prev) => (prev === msg ? null : prev));
+    }, 3200);
+  };
 
   // Connect to room stream
   const connectToRoomStream = (roomCode: string) => {
@@ -502,6 +642,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // 5. Player Toggles Category Pick (Each team picks 3 subcategories)
   const handleToggleCategoryPick = async (subcategoryId: string) => {
     if (!currentRoom) return;
+    const matchedSub = activeSubcategories.find((s) => s.id === subcategoryId);
+    const matchedMain = mainCategories.find(
+      (m) => m.id === subcategoryId || m.name === subcategoryId
+    );
+    if ((matchedSub && isSubComingSoon(matchedSub)) || matchedMain?.isComingSoon) {
+      triggerComingSoonAlert();
+      return;
+    }
     if (
       currentRoom.status === 'playing' ||
       currentRoom.status === 'in_game' ||
@@ -757,6 +905,31 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       return true;
     });
   }, [activeSubcategories, categoryFilterMainId, categorySearchQuery, mainCategories]);
+
+  // Coming Soon main categories with 0 subcategories (e.g., ولا كلمة) displayed in online lobby picker
+  const filteredComingSoonMainCards = useMemo(() => {
+    const q = categorySearchQuery.trim().toLowerCase();
+    return mainCategories.filter((m) => {
+      if (!m.isActive || m.isDeleted || !m.isComingSoon) return false;
+      const hasSubs = activeSubcategories.some(
+        (s) => s.mainCategoryId === m.id || s.mainCategory === m.name
+      );
+      if (hasSubs) return false;
+      if (
+        categoryFilterMainId !== 'all' &&
+        categoryFilterMainId !== m.id &&
+        categoryFilterMainId !== m.name
+      ) {
+        return false;
+      }
+      if (q) {
+        const matchesName = m.name.toLowerCase().includes(q);
+        const matchesDesc = (m.description || m.tagline || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesDesc) return false;
+      }
+      return true;
+    });
+  }, [mainCategories, activeSubcategories, categoryFilterMainId, categorySearchQuery]);
 
   const activeTurnTeam = useMemo(() => {
     if (!currentRoom || currentRoom.teams.length === 0) return null;
@@ -1573,31 +1746,87 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               </button>
               {mainCategories
                 .filter((m) => m.isActive && !m.isDeleted)
-                .map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setCategoryFilterMainId(m.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-                      categoryFilterMainId === m.id
-                        ? 'bg-[#14543D] text-white shadow-xs'
-                        : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
-                    }`}
-                  >
-                    {m.name}
-                  </button>
-                ))}
+                .map((m) => {
+                  const isSelected = categoryFilterMainId === m.id;
+                  const isComingSoon = Boolean(m.isComingSoon);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setCategoryFilterMainId(m.id);
+                        if (isComingSoon) {
+                          triggerComingSoonAlert();
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-[#14543D] text-white shadow-xs'
+                          : isComingSoon
+                          ? 'bg-[#FEF2EC]/70 text-[#252824] border border-[#F07842]/35 hover:bg-[#FEF2EC]'
+                          : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
+                      }`}
+                    >
+                      <span>{m.name}</span>
+                      {isComingSoon && (
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            isSelected
+                              ? 'bg-[#F07842] text-white'
+                              : 'bg-[#F07842]/15 text-[#D9602B]'
+                          }`}
+                        >
+                          قريباً
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
             </div>
           </div>
 
           {/* Subcategories Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[380px] overflow-y-auto p-1">
             {filteredSubcategories.map((sub) => {
+              const comingSoon = isSubComingSoon(sub);
               const isPickedByTeam1 = team1Picks.includes(sub.id);
               const isPickedByTeam2 = team2Picks.includes(sub.id);
               const isPickedByMyTeam = myTeamPicks.includes(sub.id);
               const isMyTeamFull = myTeamPicks.length >= 3;
               const isToggling = isTogglingSubId === sub.id;
+
+              if (comingSoon) {
+                return (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    aria-disabled="true"
+                    onClick={() => triggerComingSoonAlert()}
+                    className="p-3 rounded-2xl border-2 border-dashed border-[#D4D9CC] bg-[#F3F5E9]/85 text-right transition-all cursor-not-allowed relative flex flex-col justify-between min-h-[100px] select-none opacity-85 hover:border-[#F07842]/60"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-[10px] text-[#777B73] font-bold line-clamp-1">
+                          {sub.mainCategory || 'تصنيف'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-[#F07842] text-white text-[10px] font-bold inline-flex items-center gap-1 shadow-xs">
+                          <Clock className="w-2.5 h-2.5" />
+                          <span>قريباً</span>
+                        </span>
+                      </div>
+
+                      <div className="font-display text-xs font-bold text-[#252824] line-clamp-2">
+                        {sub.name}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between text-[10px] font-bold text-[#D9602B]">
+                      <span>غير متاحة حالياً</span>
+                      <Lock className="w-3 h-3 text-[#777B73]" />
+                    </div>
+                  </button>
+                );
+              }
 
               return (
                 <button
@@ -1664,6 +1893,46 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 </button>
               );
             })}
+
+            {filteredComingSoonMainCards.map((mainCat) => (
+              <button
+                key={mainCat.id}
+                type="button"
+                aria-disabled="true"
+                onClick={() => triggerComingSoonAlert()}
+                className="p-3 rounded-2xl border-2 border-dashed border-[#D4D9CC] bg-[#F3F5E9]/85 text-right transition-all cursor-not-allowed relative flex flex-col justify-between min-h-[100px] select-none opacity-90 hover:border-[#F07842]/70 overflow-hidden"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {mainCat.imageUrl ? (
+                      <img
+                        src={mainCat.imageUrl}
+                        alt={mainCat.name}
+                        className="w-7 h-7 rounded-lg object-cover grayscale-[45%] brightness-75 border border-[#E5E8DD] shrink-0"
+                      />
+                    ) : null}
+                    <span className="font-display text-xs font-bold text-[#252824] truncate">
+                      {mainCat.name}
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md bg-[#F07842] text-white text-[10px] font-bold inline-flex items-center gap-1 shrink-0 shadow-xs">
+                    <Clock className="w-2.5 h-2.5" />
+                    <span>قريباً</span>
+                  </span>
+                </div>
+
+                {(mainCat.description || mainCat.tagline) && (
+                  <p className="text-[10px] text-[#777B73] line-clamp-1 mb-1">
+                    {mainCat.description || mainCat.tagline}
+                  </p>
+                )}
+
+                <div className="pt-1 flex items-center justify-between text-[10px] font-bold text-[#D9602B]">
+                  <span>غير متاحة حالياً</span>
+                  <Lock className="w-3 h-3 text-[#777B73]" />
+                </div>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1842,9 +2111,32 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               )}
             </div>
 
-            {/* Host Controls */}
-            {isHost && (
-              <div className="flex items-center gap-2">
+            {/* Sound & Host Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => soundFX.toggle()}
+                title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 border transition-colors ${
+                  soundEnabled
+                    ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
+                    : 'bg-[#F3F5E9] border-[#E5E8DD] text-[#777B73]'
+                }`}
+              >
+                {soundEnabled ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>الأصوات</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5" />
+                    <span>مكتوم</span>
+                  </>
+                )}
+              </button>
+
+              {isHost && (
                 <button
                   type="button"
                   onClick={() => hostFinishGame(currentRoom.code, currentRoom.hostId)}
@@ -1852,8 +2144,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 >
                   إنهاء المباراة
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Teams Scores Cards */}

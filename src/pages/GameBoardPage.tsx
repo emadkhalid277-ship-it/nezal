@@ -15,6 +15,8 @@ import {
   ZoomIn,
   X,
   Lock,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import {
   MainCategoryMeta,
@@ -26,6 +28,7 @@ import {
 import { MAIN_CATEGORIES } from '../data/categoriesAndSeed';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { matchesSubcategoryQuestion } from '../services/questionService';
+import { soundFX } from '../services/soundEffects';
 
 interface OrderedTeamSelectionItem {
   subcategoryId: string;
@@ -198,6 +201,14 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
   const isSubmittingRef = useRef(false);
   const judgmentTimeoutRef = useRef<number | null>(null);
+  const prevTimeLeftRef = useRef<number>(timeLeft);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() =>
+    soundFX.isEnabled()
+  );
+
+  useEffect(() => {
+    return soundFX.subscribe(setSoundEnabled);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -287,8 +298,21 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   // Countdown timer effect
   useEffect(() => {
     if (!activeSelection || timerPaused || answerRevealed || feedbackBanner) {
+      prevTimeLeftRef.current = timeLeft;
       return;
     }
+
+    if (prevTimeLeftRef.current > 0 && timeLeft === 0) {
+      soundFX.playTimeUp();
+    } else if (
+      prevTimeLeftRef.current !== timeLeft &&
+      timeLeft > 0 &&
+      timeLeft <= 5
+    ) {
+      soundFX.playTimerTick();
+    }
+    prevTimeLeftRef.current = timeLeft;
+
     if (timeLeft <= 0) return;
 
     const interval = window.setInterval(() => {
@@ -476,6 +500,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     const q = getQuestionForSlot(subcategoryName, points, subcategoryId);
     if (!q) return;
 
+    soundFX.playTileOpen();
     isSubmittingRef.current = false;
     setPinnedTileQuestions((prev) =>
       prev[tileKey] === q.id ? prev : { ...prev, [tileKey]: q.id }
@@ -490,6 +515,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     });
     setAnswerRevealed(false);
     setTimeLeft(timerDuration);
+    prevTimeLeftRef.current = timerDuration;
     setTimerPaused(false);
     setFeedbackBanner(null);
   };
@@ -514,6 +540,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     const capturedTeamIndex = safeTeamIndex;
     const currentTeam = teams[capturedTeamIndex];
 
+    soundFX.playCorrect();
     setFeedbackBanner({
       type: 'correct',
       text: `صح عليكم يا ${currentTeam?.name || 'أبطال'}! كسبتوا +${capturedSelection.points} نقطة!`,
@@ -541,6 +568,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     isSubmittingRef.current = true;
     const capturedSelection = activeSelection;
 
+    soundFX.playWrong();
     setFeedbackBanner({
       type: 'wrong',
       text: 'إجابتكم غلط! راحت النقاط وينتقل الدور للفريق اللي بعده.',
@@ -595,6 +623,29 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
               الأعمدة: {boardColumns.length} · المتبقي: {remainingPlayableTiles}{' '}
               / {playableTilesCount > 0 ? playableTilesCount : totalTiles}
             </span>
+
+            <button
+              type="button"
+              onClick={() => soundFX.toggle()}
+              title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border ${
+                soundEnabled
+                  ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
+                  : 'bg-[#F3F5E9] border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
+              }`}
+            >
+              {soundEnabled ? (
+                <>
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>الأصوات مفعّلة</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-3.5 h-3.5" />
+                  <span>الأصوات مكتومة</span>
+                </>
+              )}
+            </button>
 
             {isGameLocked ? (
               <>
@@ -1052,7 +1103,10 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                 <div className="pt-2 flex flex-col items-center gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setAnswerRevealed(true)}
+                    onClick={() => {
+                      soundFX.playAnswerReveal();
+                      setAnswerRevealed(true);
+                    }}
                     className="px-8 py-3.5 text-sm sm:text-base font-bold text-white bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center gap-2.5 shadow-sm cursor-pointer"
                   >
                     <Eye className="w-4 h-4 text-[#F07842]" />

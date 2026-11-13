@@ -28,6 +28,7 @@ import {
   LayoutGrid,
   Inbox,
   BarChart3,
+  Clock,
 } from 'lucide-react';
 import { AdminPlayerAnalytics } from '../components/AdminPlayerAnalytics';
 import {
@@ -194,6 +195,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [mainFormImageUrl, setMainFormImageUrl] = useState('');
   const [mainFormSortOrder, setMainFormSortOrder] = useState<number>(1);
   const [mainFormIsActive, setMainFormIsActive] = useState<boolean>(true);
+  const [mainFormIsComingSoon, setMainFormIsComingSoon] = useState<boolean>(false);
   const [mainFormIconName, setMainFormIconName] =
     useState<MainCategoryIconName>('compass');
 
@@ -222,6 +224,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [subFormDescription, setSubFormDescription] = useState('');
   const [subFormSortOrder, setSubFormSortOrder] = useState<number>(1);
   const [subFormIsActive, setSubFormIsActive] = useState<boolean>(true);
+  const [subFormIsComingSoon, setSubFormIsComingSoon] = useState<boolean>(false);
   const [subFormImageUrl, setSubFormImageUrl] = useState<string>('');
 
   // Safe Delete Subcategory Confirmation Modal State
@@ -687,6 +690,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setMainFormImageUrl('');
     setMainFormSortOrder(nextOrder);
     setMainFormIsActive(true);
+    setMainFormIsComingSoon(false);
     setMainFormIconName('compass');
     setMainModalOpen(true);
   };
@@ -698,6 +702,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setMainFormImageUrl(mainCat.imageUrl || '');
     setMainFormSortOrder(mainCat.sortOrder);
     setMainFormIsActive(mainCat.isActive);
+    setMainFormIsComingSoon(Boolean(mainCat.isComingSoon));
     setMainFormIconName(mainCat.iconName || 'compass');
     setMainModalOpen(true);
   };
@@ -728,6 +733,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           imageUrl: mainFormImageUrl,
           sortOrder: Number(mainFormSortOrder) || 1,
           isActive: mainFormIsActive,
+          isComingSoon: mainFormIsComingSoon,
           iconName: mainFormIconName,
           accentColor: editingMainCategory?.accentColor || '#14543D',
           bgTint: editingMainCategory?.bgTint || '#EAF2EE',
@@ -770,6 +776,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           imageUrl: mainCat.imageUrl,
           sortOrder: mainCat.sortOrder,
           isActive: !mainCat.isActive,
+          isComingSoon: mainCat.isComingSoon,
           iconName: mainCat.iconName,
           accentColor: mainCat.accentColor,
           bgTint: mainCat.bgTint,
@@ -783,6 +790,45 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         !mainCat.isActive
           ? `تم إظهار الفئة الرئيسية «${mainCat.name}» في الموقع.`
           : `تم إخفاء الفئة الرئيسية «${mainCat.name}» عن الألعاب الجديدة.`
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleMainCategoryComingSoon = async (mainCat: MainCategoryMeta) => {
+    if (!user) return;
+    const nextComingSoon = !mainCat.isComingSoon;
+    setActionLoading(true);
+    setStatusBanner(null);
+    try {
+      await saveMainCategoryToFirestore(
+        {
+          id: mainCat.id,
+          name: mainCat.name,
+          description: mainCat.description,
+          tagline: mainCat.tagline,
+          imageUrl: mainCat.imageUrl,
+          sortOrder: mainCat.sortOrder,
+          isActive: nextComingSoon ? mainCat.isActive : true,
+          isComingSoon: nextComingSoon,
+          iconName: mainCat.iconName,
+          accentColor: mainCat.accentColor,
+          bgTint: mainCat.bgTint,
+          borderTint: mainCat.borderTint,
+        },
+        user.uid,
+        mainCat
+      );
+      await onRefreshMainCategories();
+      setStatusBanner(
+        nextComingSoon
+          ? `تم تحويل الفئة «${mainCat.name}» إلى وضع «قريباً» مع الاحتفاظ بكافة بياناتها وأسئلتها.`
+          : `تم تفعيل الفئة «${mainCat.name}» وإتاحتها للعب في الموقع بنجاح!`
+      );
+    } catch (err) {
+      setStatusBanner(
+        `تعذر تحديث حالة «قريباً» للفئة: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
       );
     } finally {
       setActionLoading(false);
@@ -931,6 +977,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setSubFormDescription('');
     setSubFormSortOrder(nextOrder);
     setSubFormIsActive(true);
+    setSubFormIsComingSoon(false);
     setSubFormImageUrl('');
     setSubModalOpen(true);
   };
@@ -947,6 +994,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setSubFormDescription(sub.description);
     setSubFormSortOrder(sub.sortOrder);
     setSubFormIsActive(sub.isActive);
+    setSubFormIsComingSoon(Boolean(sub.isComingSoon));
     setSubFormImageUrl(sub.imageUrl || '');
     setSubModalOpen(true);
   };
@@ -975,6 +1023,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           description: subFormDescription.trim(),
           sortOrder: Number(subFormSortOrder) || 1,
           isActive: subFormIsActive,
+          isComingSoon: subFormIsComingSoon,
           imageUrl: subFormImageUrl,
         },
         user.uid,
@@ -1010,6 +1059,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           description: sub.description,
           sortOrder: sub.sortOrder,
           isActive: !sub.isActive,
+          isComingSoon: sub.isComingSoon,
           imageUrl: sub.imageUrl,
         },
         user.uid
@@ -1019,6 +1069,36 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         !sub.isActive
           ? `تم إظهار الفئة الفرعية «${sub.name}» للاعبين.`
           : `تم إخفاء الفئة الفرعية «${sub.name}» عن الألعاب الجديدة.`
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleSubcategoryComingSoon = async (sub: SubcategoryItem) => {
+    if (!user) return;
+    const nextComingSoon = !sub.isComingSoon;
+    setActionLoading(true);
+    try {
+      await saveSubcategoryToFirestore(
+        {
+          id: sub.id,
+          name: sub.name,
+          mainCategoryId: sub.mainCategoryId,
+          mainCategory: sub.mainCategory,
+          description: sub.description,
+          sortOrder: sub.sortOrder,
+          isActive: nextComingSoon ? sub.isActive : true,
+          isComingSoon: nextComingSoon,
+          imageUrl: sub.imageUrl,
+        },
+        user.uid
+      );
+      await onRefreshSubcategories();
+      setStatusBanner(
+        nextComingSoon
+          ? `تم تحويل الفئة الفرعية «${sub.name}» إلى وضع «قريباً» مع حفظ كافة أسئلتها.`
+          : `تم تفعيل الفئة الفرعية «${sub.name}» وإتاحتها للعب.`
       );
     } finally {
       setActionLoading(false);
@@ -1043,6 +1123,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           description: sub.description,
           sortOrder: newOrder,
           isActive: sub.isActive,
+          isComingSoon: sub.isComingSoon,
           imageUrl: sub.imageUrl,
         },
         user.uid
@@ -1978,7 +2059,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <div
                     key={mainCat.id}
                     className={`bg-[#FFFFFF] border-2 rounded-2xl p-4 flex flex-col justify-between space-y-4 transition-all ${
-                      mainCat.isActive
+                      mainCat.isComingSoon
+                        ? 'border-[#F07842]/60 bg-[#FEF2EC]/25'
+                        : mainCat.isActive
                         ? 'border-[#E5E8DD]'
                         : 'border-dashed border-rose-300 bg-[#FFFFFF]/80 opacity-80'
                     }`}
@@ -1986,7 +2069,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <div className="space-y-3.5">
                       {/* Top Status & Order Bar */}
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="px-2 py-0.5 rounded-md bg-[#F3F5E9] border border-[#E5E8DD] font-mono text-xs font-bold text-[#252824]">
                             ترتيب #{mainCat.sortOrder}
                           </span>
@@ -1999,6 +2082,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           >
                             {mainCat.isActive ? 'ظاهرة' : 'مخفية'}
                           </span>
+                          {mainCat.isComingSoon && (
+                            <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#F07842] text-white inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              <span>قريباً</span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1">
@@ -2050,14 +2139,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             mainCategory={mainCat.name}
                             imageUrl={mainCat.imageUrl}
                             isMainCategory
+                            className={mainCat.isComingSoon ? 'grayscale-[45%] brightness-75' : ''}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/30 to-transparent" />
                         </div>
 
                         <div className="absolute top-3 inset-x-3 flex items-center justify-between z-10">
-                          <span className="px-2.5 py-1 rounded-lg bg-[#252824]/75 backdrop-blur-xs text-white font-mono text-[11px] font-bold">
-                            {subsInMain.length} فئات فرعية
-                          </span>
+                          {mainCat.isComingSoon ? (
+                            <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[11px] font-bold inline-flex items-center gap-1 shadow-md">
+                              <Clock className="w-3 h-3" />
+                              <span>قريباً</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-lg bg-[#252824]/75 backdrop-blur-xs text-white font-mono text-[11px] font-bold">
+                              {subsInMain.length} فئات فرعية
+                            </span>
+                          )}
                           <span
                             className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                               hasImg
@@ -2126,6 +2223,29 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
                         </button>
                       </div>
+
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => handleToggleMainCategoryComingSoon(mainCat)}
+                        className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border ${
+                          mainCat.isComingSoon
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-[#FEF2EC] hover:bg-[#FDE4D7] text-[#D9602B] border-[#F07842]/30'
+                        }`}
+                      >
+                        {mainCat.isComingSoon ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>تفعيل الفئة وإتاحتها للعب الآن</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3.5 h-3.5 text-[#F07842]" />
+                            <span>تعطيل مؤقت بشارة «قريباً»</span>
+                          </>
+                        )}
+                      </button>
 
                       <div className="flex items-center justify-between gap-2">
                         <button
@@ -2262,6 +2382,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               <h3 className="font-display text-base font-bold text-[#252824]">
                                 {mainCat.name}
                               </h3>
+                              {mainCat.isComingSoon && (
+                                <span className="text-[10px] font-bold text-white bg-[#F07842] px-2 py-0.5 rounded">
+                                  قريباً
+                                </span>
+                              )}
                               {!mainCat.isActive && (
                                 <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
                                   قسم مخفي
@@ -2319,6 +2444,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                       <span className="font-display text-sm font-bold text-[#252824] truncate">
                                         {sub.name}
                                       </span>
+                                      {sub.isComingSoon && (
+                                        <span className="text-[10px] font-bold text-white bg-[#F07842] px-2 py-0.5 rounded">
+                                          قريباً
+                                        </span>
+                                      )}
                                       {!sub.isActive && (
                                         <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
                                           مخفية
@@ -2335,6 +2465,25 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 </div>
 
                                 <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={actionLoading}
+                                    onClick={() =>
+                                      handleToggleSubcategoryComingSoon(sub)
+                                    }
+                                    title={
+                                      sub.isComingSoon
+                                        ? 'تفعيل الفئة وإزالة شارة قريباً'
+                                        : 'تعطيل مؤقت بشارة قريباً'
+                                    }
+                                    className={`p-1.5 rounded-lg cursor-pointer ${
+                                      sub.isComingSoon
+                                        ? 'bg-[#FEF2EC] text-[#F07842] hover:bg-[#FDE4D7]'
+                                        : 'text-[#777B73] hover:text-[#F07842] hover:bg-[#FEF2EC]'
+                                    }`}
+                                  >
+                                    <Clock className="w-3.5 h-3.5" />
+                                  </button>
                                   <button
                                     type="button"
                                     disabled={actionLoading}
@@ -3782,6 +3931,24 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       ))}
                     </select>
                   </div>
+
+                  <label className="flex items-start gap-2.5 p-3 rounded-xl bg-[#FEF2EC]/70 border border-[#F07842]/30 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mainFormIsComingSoon}
+                      onChange={(e) => setMainFormIsComingSoon(e.target.checked)}
+                      className="mt-0.5 accent-[#F07842]"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-[#F07842]" />
+                        <span>تفعيل وضع «قريباً» (تعطيل مؤقت دون حذف)</span>
+                      </div>
+                      <p className="text-[11px] text-[#777B73]">
+                        تظهر البطاقة في الموقع بشارة «قريباً» ويُمنع اختيارها في المباريات مع بقاء جميع الأسئلة والصور محفوظة.
+                      </p>
+                    </div>
+                  </label>
                 </div>
 
                 {/* Left Column (Category Image + Live Card Preview) */}
@@ -3797,14 +3964,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         mainCategory={mainFormName || 'اسم الفئة'}
                         imageUrl={mainFormImageUrl}
                         isMainCategory
+                        className={mainFormIsComingSoon ? 'grayscale-[45%] brightness-75' : ''}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/30 to-transparent" />
                     </div>
 
                     <div className="absolute top-3 inset-x-3 flex items-center justify-between z-10">
-                      <span className="px-2 py-0.5 rounded-md bg-[#252824]/75 text-white font-mono text-[10px] font-bold">
-                        معاينة البطاقة
-                      </span>
+                      {mainFormIsComingSoon ? (
+                        <span className="px-2.5 py-0.5 rounded-md bg-[#F07842] text-white text-[10px] font-bold inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>قريباً</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-[#252824]/75 text-white font-mono text-[10px] font-bold">
+                          معاينة البطاقة
+                        </span>
+                      )}
                       <span
                         className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                           mainFormIsActive
@@ -3929,14 +4104,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   mainCategory={previewMainCategory.name}
                   imageUrl={previewMainCategory.imageUrl}
                   isMainCategory
+                  className={previewMainCategory.isComingSoon ? 'grayscale-[45%] brightness-75' : ''}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/30 to-transparent" />
               </div>
 
               <div className="absolute top-3.5 inset-x-3.5 flex items-center justify-between z-10">
-                <span className="px-2.5 py-1 rounded-lg bg-[#252824]/75 backdrop-blur-xs text-white font-mono text-[11px] font-bold">
-                  {getSubcategoriesForMain(previewMainCategory).length} فئات
-                </span>
+                {previewMainCategory.isComingSoon ? (
+                  <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[11px] font-bold inline-flex items-center gap-1 shadow-md">
+                    <Clock className="w-3 h-3" />
+                    <span>قريباً</span>
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg bg-[#252824]/75 backdrop-blur-xs text-white font-mono text-[11px] font-bold">
+                    {getSubcategoriesForMain(previewMainCategory).length} فئات
+                  </span>
+                )}
               </div>
 
               <div className="relative z-10 p-5 w-full space-y-1">
@@ -3947,6 +4130,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   {previewMainCategory.description ||
                     previewMainCategory.tagline}
                 </p>
+                {previewMainCategory.isComingSoon && (
+                  <p className="text-[11px] font-bold text-[#FFB088]">
+                    غير متاحة حالياً · قادمة قريباً
+                  </p>
+                )}
               </div>
             </div>
 
@@ -4209,6 +4397,24 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </select>
                 </div>
               </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-[#FEF2EC]/70 border border-[#F07842]/30 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={subFormIsComingSoon}
+                  onChange={(e) => setSubFormIsComingSoon(e.target.checked)}
+                  className="mt-0.5 accent-[#F07842]"
+                />
+                <div className="space-y-0.5">
+                  <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[#F07842]" />
+                    <span>تفعيل وضع «قريباً» لهذه الفئة الفرعية</span>
+                  </div>
+                  <p className="text-[11px] text-[#777B73]">
+                    تظهر بشارة «قريباً» وتُمنع من اللعب مؤقتاً مع الحفاظ على جميع أسئلتها وصورتها.
+                  </p>
+                </div>
+              </label>
 
               {/* Subcategory Image Upload in Modal */}
               <div className="space-y-2 pt-1">

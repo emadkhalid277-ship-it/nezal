@@ -112,6 +112,17 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   const [isTeamSetupModalOpen, setIsTeamSetupModalOpen] = useState(false);
   const [navError, setNavError] = useState<string | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [comingSoonToast, setComingSoonToast] = useState<string | null>(null);
+
+  const COMING_SOON_MESSAGE = 'هذه الفئة قادمة قريباً، ترقبوا!';
+
+  const triggerComingSoonMessage = () => {
+    setValidationMessage(COMING_SOON_MESSAGE);
+    setComingSoonToast(COMING_SOON_MESSAGE);
+    window.setTimeout(() => {
+      setComingSoonToast((prev) => (prev === COMING_SOON_MESSAGE ? null : prev));
+    }, 3200);
+  };
 
   const handleReturnToBoard = () => {
     setNavError(null);
@@ -152,6 +163,22 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     () => new Set(visibleMainCategories.map((m) => m.name)),
     [visibleMainCategories]
   );
+
+  const comingSoonMainIds = useMemo(
+    () => new Set(visibleMainCategories.filter((m) => m.isComingSoon).map((m) => m.id)),
+    [visibleMainCategories]
+  );
+  const comingSoonMainNames = useMemo(
+    () => new Set(visibleMainCategories.filter((m) => m.isComingSoon).map((m) => m.name)),
+    [visibleMainCategories]
+  );
+
+  const isSubComingSoon = (sub: SubcategoryItem) =>
+    Boolean(
+      sub.isComingSoon ||
+        (sub.mainCategoryId && comingSoonMainIds.has(sub.mainCategoryId)) ||
+        comingSoonMainNames.has(sub.mainCategory)
+    );
 
   const activeSubcategories = useMemo(
     () =>
@@ -240,6 +267,31 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     }
     return list;
   }, [activeSubcategories, selectedMainFilter, searchQuery]);
+
+  // Coming Soon Main Categories that currently have 0 subcategories (e.g. ولا كلمة) still appear as a styled Coming Soon card
+  const filteredComingSoonMainCards = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return visibleMainCategories.filter((mc) => {
+      if (!mc.isComingSoon) return false;
+      const hasActiveSubs = activeSubcategories.some(
+        (s) => s.mainCategoryId === mc.id || s.mainCategory === mc.name
+      );
+      if (hasActiveSubs) return false;
+      if (
+        selectedMainFilter !== 'all' &&
+        selectedMainFilter !== mc.id &&
+        selectedMainFilter !== mc.name
+      ) {
+        return false;
+      }
+      if (q) {
+        const matchesName = mc.name.toLowerCase().includes(q);
+        const matchesDesc = (mc.description || mc.tagline || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesDesc) return false;
+      }
+      return true;
+    });
+  }, [visibleMainCategories, activeSubcategories, selectedMainFilter, searchQuery]);
 
   const questionCountBySubMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -344,6 +396,10 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
 
   // Toggle subcategory card selection
   const handleToggleSubcategory = (sub: SubcategoryItem) => {
+    if (isSubComingSoon(sub)) {
+      triggerComingSoonMessage();
+      return;
+    }
     if (isGameLocked) {
       setValidationMessage(
         'إعدادات الفئات مقفلة للقراءة فقط طوال فترة الجولة، ولا يمكن تعديل أو تبديل أي فئة أثناء اللعب.'
@@ -752,6 +808,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               const isSelected =
                 selectedMainFilter === mainCat.id ||
                 selectedMainFilter === mainCat.name;
+              const isComingSoon = Boolean(mainCat.isComingSoon);
               const subsCount =
                 mainCategoryCounts.totalMap.get(mainCat.id) ??
                 mainCategoryCounts.totalMap.get(mainCat.name) ??
@@ -765,15 +822,32 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 <button
                   key={mainCat.id}
                   type="button"
-                  onClick={() => setSelectedMainFilter(mainCat.id)}
+                  onClick={() => {
+                    setSelectedMainFilter(mainCat.id);
+                    if (isComingSoon) {
+                      triggerComingSoonMessage();
+                    }
+                  }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all flex items-center gap-1.5 cursor-pointer ${
                     isSelected
                       ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
+                      : isComingSoon
+                      ? 'bg-[#FEF2EC]/70 hover:bg-[#FEF2EC] text-[#252824] border-[#F07842]/35'
                       : 'bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] border-[#E5E8DD]'
                   }`}
                 >
                   <span>{mainCat.name}</span>
-                  {selectedInMain > 0 ? (
+                  {isComingSoon ? (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                        isSelected
+                          ? 'bg-[#F07842] text-white'
+                          : 'bg-[#F07842]/15 text-[#D9602B] border border-[#F07842]/30'
+                      }`}
+                    >
+                      قريباً
+                    </span>
+                  ) : selectedInMain > 0 ? (
                     <span className="px-1.5 py-0.2 rounded font-mono text-[10px] font-bold bg-[#F07842] text-white">
                       {selectedInMain}
                     </span>
@@ -805,10 +879,13 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
           </div>
         )}
 
-        {/* Validation Warning Banner */}
+        {/* Validation / Coming Soon Warning Banner */}
         {validationMessage && (
           <div className="p-3.5 rounded-xl bg-[#FEF2EC] border-2 border-[#F07842] text-xs font-bold text-[#D9602B] flex items-center justify-between gap-3">
-            <span>{validationMessage}</span>
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#F07842] shrink-0" />
+              <span>{validationMessage}</span>
+            </div>
             <button
               type="button"
               onClick={() => setValidationMessage(null)}
@@ -820,9 +897,22 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
         )}
       </div>
 
+      {/* Floating Toast for Coming Soon Clicks */}
+      {comingSoonToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#252824] text-[#FFFFFF] px-5 py-3 rounded-2xl shadow-xl border-2 border-[#F07842] text-xs sm:text-sm font-bold flex items-center gap-2.5 animate-in fade-in"
+        >
+          <Clock className="w-4 h-4 text-[#F07842] shrink-0" />
+          <span>{comingSoonToast}</span>
+        </div>
+      )}
+
       {/* 2. SUBCATEGORY CARDS GRID (Direct Display of Illustrated Cards) */}
       <section aria-label="بطاقات الفئات الفرعية">
-        {filteredSubcategories.length === 0 ? (
+        {filteredSubcategories.length === 0 &&
+        filteredComingSoonMainCards.length === 0 ? (
           <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl py-16 text-center text-sm text-[#777B73] space-y-2">
             <p>لا توجد فئات مطابقة للبحث أو التصنيف المحدد.</p>
             <button
@@ -844,11 +934,54 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 Boolean(ownerInfo) && ownerInfo?.team.id === currentTeam?.id;
               const isLockedByOtherTeam =
                 Boolean(ownerInfo) && ownerInfo?.team.id !== currentTeam?.id;
+              const comingSoon = isSubComingSoon(sub);
               const qCount = getQuestionCountForSub(sub);
               const ownerTeamName = ownerInfo
                 ? ownerInfo.team.name?.trim() ||
                   `الفريق ${ownerInfo.teamIndex + 1}`
                 : '';
+
+              if (comingSoon) {
+                return (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    aria-disabled="true"
+                    onClick={() => triggerComingSoonMessage()}
+                    aria-label={`${sub.name} - قريباً، هذه الفئة غير متاحة حالياً`}
+                    className="group relative aspect-square w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] text-right flex flex-col justify-end select-none opacity-90 hover:border-[#F07842]/70 transition-all duration-300 cursor-not-allowed shadow-xs"
+                  >
+                    <div className="absolute inset-0">
+                      <CategoryCardArtwork
+                        name={sub.name}
+                        mainCategory={sub.mainCategory}
+                        imageUrl={sub.imageUrl}
+                        className="w-full h-full object-cover grayscale-[45%] brightness-75 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#1A1E1B]/95 via-[#1A1E1B]/60 to-[#1A1E1B]/30 backdrop-blur-[1px]" />
+                    </div>
+
+                    <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
+                      <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-md border border-white/25">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>قريباً</span>
+                      </span>
+                      <span className="w-6 h-6 rounded-lg bg-[#252824]/75 border border-white/20 text-[#F3F5E9]/85 flex items-center justify-center">
+                        <Lock className="w-3 h-3" />
+                      </span>
+                    </div>
+
+                    <div className="relative z-10 p-3 sm:p-3.5 w-full space-y-1">
+                      <h3 className="font-display text-xs sm:text-sm md:text-base font-bold text-[#FFFFFF] leading-snug line-clamp-2 drop-shadow-xs">
+                        {sub.name}
+                      </h3>
+                      <div className="text-[10px] sm:text-[11px] font-bold text-[#FFB088]">
+                        غير متاحة حالياً · قادمة قريباً
+                      </div>
+                    </div>
+                  </button>
+                );
+              }
 
               return (
                 <button
@@ -962,6 +1095,53 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 </button>
               );
             })}
+
+            {/* Coming Soon Main Categories (e.g. ولا كلمة) displayed directly with a distinct Coming Soon card */}
+            {filteredComingSoonMainCards.map((mainCat) => (
+              <button
+                key={mainCat.id}
+                type="button"
+                aria-disabled="true"
+                onClick={() => triggerComingSoonMessage()}
+                aria-label={`${mainCat.name} - قريباً، هذه الفئة غير متاحة حالياً`}
+                className="group relative aspect-square w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] text-right flex flex-col justify-end select-none opacity-90 hover:border-[#F07842]/75 transition-all duration-300 cursor-not-allowed shadow-xs"
+              >
+                <div className="absolute inset-0">
+                  <CategoryCardArtwork
+                    name={mainCat.name}
+                    mainCategory={mainCat.name}
+                    imageUrl={mainCat.imageUrl}
+                    isMainCategory
+                    className="w-full h-full object-cover grayscale-[45%] brightness-75 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#1A1E1B]/95 via-[#1A1E1B]/60 to-[#1A1E1B]/30 backdrop-blur-[1px]" />
+                </div>
+
+                <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
+                  <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-md border border-white/25">
+                    <Clock className="w-3 h-3 shrink-0" />
+                    <span>قريباً</span>
+                  </span>
+                  <span className="w-6 h-6 rounded-lg bg-[#252824]/75 border border-white/20 text-[#F3F5E9]/85 flex items-center justify-center">
+                    <Lock className="w-3 h-3" />
+                  </span>
+                </div>
+
+                <div className="relative z-10 p-3 sm:p-3.5 w-full space-y-1">
+                  <h3 className="font-display text-xs sm:text-sm md:text-base font-bold text-[#FFFFFF] leading-snug line-clamp-2 drop-shadow-xs">
+                    {mainCat.name}
+                  </h3>
+                  {(mainCat.description || mainCat.tagline) && (
+                    <p className="text-[10px] text-[#F3F5E9]/75 line-clamp-1">
+                      {mainCat.description || mainCat.tagline}
+                    </p>
+                  )}
+                  <div className="text-[10px] sm:text-[11px] font-bold text-[#FFB088]">
+                    غير متاحة حالياً · قادمة قريباً
+                  </div>
+                </div>
+              </button>
+            ))}
           </div>
         )}
       </section>

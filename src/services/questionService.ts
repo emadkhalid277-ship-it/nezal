@@ -270,6 +270,7 @@ function mapDocToSubcategory(
     description: String(data.description || ''),
     sortOrder: Number(data.sortOrder ?? 1),
     isActive: data.isActive !== false,
+    isComingSoon: data.isComingSoon === true,
     isDeleted: data.isDeleted === true,
     imageUrl: typeof data.imageUrl === 'string' ? data.imageUrl : '',
     authorId: String(data.authorId || ''),
@@ -503,6 +504,14 @@ export async function fetchMainCategoriesFromFirestore(
         typeof data.isActive === 'boolean'
           ? data.isActive
           : existingDef?.isActive ?? true;
+      const resolvedIsComingSoon =
+        typeof data.isComingSoon === 'boolean'
+          ? data.isComingSoon
+          : Boolean(
+              existingDef?.isComingSoon ||
+                docId === 'main-1793867682734-xevr' ||
+                resolvedName === 'ولا كلمة'
+            );
 
       const validIcons: MainCategoryIconName[] = [
         'compass',
@@ -528,6 +537,7 @@ export async function fetchMainCategoriesFromFirestore(
         imageUrl: resolvedImageUrl,
         sortOrder: resolvedSortOrder,
         isActive: resolvedIsActive,
+        isComingSoon: resolvedIsComingSoon,
         isDeleted: false,
         accentColor:
           typeof data.accentColor === 'string' && data.accentColor.trim()
@@ -563,6 +573,7 @@ export interface UpsertMainCategoryPayload {
   imageUrl: string;
   sortOrder: number;
   isActive: boolean;
+  isComingSoon?: boolean;
   accentColor?: string;
   bgTint?: string;
   borderTint?: string;
@@ -597,6 +608,10 @@ export async function saveMainCategoryToFirestore(
     imageUrl: cleanImageUrl,
     sortOrder: cleanSortOrder,
     isActive: Boolean(payload.isActive),
+    isComingSoon:
+      payload.isComingSoon !== undefined
+        ? Boolean(payload.isComingSoon)
+        : Boolean(previousMainCat?.isComingSoon),
     isDeleted: false,
     accentColor: (
       payload.accentColor ||
@@ -702,6 +717,7 @@ export async function saveMainCategoryImageToFirestore(
       imageUrl,
       sortOrder: mainCat.sortOrder,
       isActive: mainCat.isActive,
+      isComingSoon: mainCat.isComingSoon,
       accentColor: mainCat.accentColor,
       bgTint: mainCat.bgTint,
       borderTint: mainCat.borderTint,
@@ -1095,6 +1111,7 @@ export interface UpsertSubcategoryPayload {
   description: string;
   sortOrder: number;
   isActive: boolean;
+  isComingSoon?: boolean;
   imageUrl?: string;
 }
 
@@ -1130,6 +1147,10 @@ export async function saveSubcategoryToFirestore(
         description: (payload.description || '').trim().slice(0, 240),
         sortOrder: Math.max(0, Math.min(10000, Math.round(payload.sortOrder))),
         isActive: payload.isActive,
+        isComingSoon:
+          payload.isComingSoon !== undefined
+            ? Boolean(payload.isComingSoon)
+            : existingData.isComingSoon === true,
         isDeleted: false,
         imageUrl: resolvedImageUrl,
         updatedAt: serverTimestamp(),
@@ -1143,6 +1164,7 @@ export async function saveSubcategoryToFirestore(
         description: (payload.description || '').trim().slice(0, 240),
         sortOrder: Math.max(0, Math.min(10000, Math.round(payload.sortOrder))),
         isActive: payload.isActive,
+        isComingSoon: Boolean(payload.isComingSoon),
         isDeleted: false,
         imageUrl: (payload.imageUrl || '').trim().slice(0, 500000),
         authorId: authorId.slice(0, 128),

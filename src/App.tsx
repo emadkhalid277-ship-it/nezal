@@ -90,6 +90,7 @@ import {
   markMatchCompleted,
   generateMatchId,
 } from './services/matchService';
+import { soundFX } from './services/soundEffects';
 
 function PageFallback() {
   return (
@@ -411,15 +412,35 @@ export default function App() {
     );
   }, [subcategories, mainCategories]);
 
-  // Keep teamSubcategoryIds synchronized and deduplicated whenever teams or activeSubcategories change
+  // Playable subcategories exclude any Coming Soon main categories or subcategories
+  const playableSubcategories = useMemo(() => {
+    const comingSoonMainIds = new Set(
+      mainCategories
+        .filter((m) => m.isComingSoon)
+        .map((m) => m.id)
+    );
+    const comingSoonMainNames = new Set(
+      mainCategories
+        .filter((m) => m.isComingSoon)
+        .map((m) => m.name)
+    );
+    return activeSubcategories.filter(
+      (s) =>
+        !s.isComingSoon &&
+        !(s.mainCategoryId && comingSoonMainIds.has(s.mainCategoryId)) &&
+        !comingSoonMainNames.has(s.mainCategory)
+    );
+  }, [activeSubcategories, mainCategories]);
+
+  // Keep teamSubcategoryIds synchronized and deduplicated whenever teams or playableSubcategories change
   useEffect(() => {
-    if (!categoriesLoaded || activeSubcategories.length === 0) return;
+    if (!categoriesLoaded || playableSubcategories.length === 0) return;
 
     setTeamSubcategoryIds((prev) => {
       const sanitized = sanitizeTeamSubcategoryPicks(
         prev,
         teams,
-        activeSubcategories
+        playableSubcategories
       );
       const prevKeys = Object.keys(prev);
       const nextKeys = Object.keys(sanitized);
@@ -433,7 +454,7 @@ export default function App() {
         );
       return isSame ? prev : sanitized;
     });
-  }, [categoriesLoaded, activeSubcategories, teams]);
+  }, [categoriesLoaded, playableSubcategories, teams]);
 
   // Ordered flat list of selected subcategories across all teams (6 for 2 teams, 9 for 3 teams, 12 for 4 teams)
   const orderedTeamSelections = useMemo(() => {
@@ -1070,6 +1091,7 @@ export default function App() {
       isGameLocked: true,
     });
 
+    soundFX.playChallengeStart();
     setActivePage('board');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1141,6 +1163,7 @@ export default function App() {
         userId: user?.uid || null,
       }).catch(() => {});
 
+      soundFX.playMatchWin();
       setActivePage('results');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1199,6 +1222,7 @@ export default function App() {
         userId: user?.uid || null,
       }).catch(() => {});
 
+      soundFX.playMatchWin();
       setActivePage('results');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1314,7 +1338,10 @@ export default function App() {
                 onAwardPoints={handleAwardPoints}
                 onMarkTileUsedNoPoints={handleMarkTileUsedNoPoints}
                 onSelectTurn={setActiveTeamIndex}
-                onFinishGame={() => handleNavigate('results')}
+                onFinishGame={() => {
+                  soundFX.playMatchWin();
+                  handleNavigate('results');
+                }}
                 onResetBoard={handleResetBoard}
                 onGoToCategories={() => handleNavigate('categories')}
                 onGoToSetup={() => handleNavigate('setup')}
@@ -1336,6 +1363,7 @@ export default function App() {
                 usedCount={usedTileKeys.length}
                 onPlayAgainSameTeams={() => {
                   handleResetBoard();
+                  soundFX.playChallengeStart();
                   handleNavigate('board');
                 }}
                 onEditTeamsNewGame={() => {
