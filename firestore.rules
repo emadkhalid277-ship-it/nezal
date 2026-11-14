@@ -177,6 +177,56 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidPointStealSettings(data) {
+      return data.keys().hasAll([
+          'id',
+          'enabled',
+          'stealTimerSeconds',
+          'modeScope',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'enabled',
+          'stealTimerSeconds',
+          'modeScope',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.id == 'point_steal' &&
+        data.enabled is bool &&
+        data.stealTimerSeconds is int &&
+        data.stealTimerSeconds >= 5 &&
+        data.stealTimerSeconds <= 90 &&
+        data.modeScope is string &&
+        data.modeScope in ['all', 'local_only', 'online_only'] &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidQuestionDedupSettings(data) {
+      return data.keys().hasAll([
+          'id',
+          'allowRepeatAfterExhaustion',
+          'trackSpectators',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'allowRepeatAfterExhaustion',
+          'trackSpectators',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.id == 'question_dedup' &&
+        data.allowRepeatAfterExhaustion is bool &&
+        data.trackSpectators is bool &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.updatedAt is timestamp;
+    }
+
     function isValidDifficulty(diff) {
       return diff is string &&
         diff.size() >= 2 &&
@@ -222,9 +272,13 @@ service cloud.firestore {
           'explanation',
           'source',
           'status',
+          'mediaType',
           'imageUrl',
           'imageStoragePath',
           'imageDescription',
+          'audioUrl',
+          'audioStoragePath',
+          'audioMaxPlays',
           'authorId',
           'createdAt',
           'reviewedAt'
@@ -245,6 +299,10 @@ service cloud.firestore {
         data.source is string && data.source.size() <= 300 &&
         data.status is string && data.status.size() >= 6 && data.status.size() <= 12 &&
         data.status in ['approved', 'pending', 'rejected'] &&
+        (!('mediaType' in data) || (
+          data.mediaType is string &&
+          data.mediaType in ['text', 'image', 'audio']
+        )) &&
         (!('imageUrl' in data) || (
           data.imageUrl is string &&
           data.imageUrl.size() <= 2000 &&
@@ -257,6 +315,19 @@ service cloud.firestore {
         (!('imageDescription' in data) || (
           data.imageDescription is string &&
           data.imageDescription.size() <= 300
+        )) &&
+        (!('audioUrl' in data) || (
+          data.audioUrl is string &&
+          data.audioUrl.size() <= 2000 &&
+          (data.audioUrl.size() == 0 || data.audioUrl.matches('^https?://.*'))
+        )) &&
+        (!('audioStoragePath' in data) || (
+          data.audioStoragePath is string &&
+          data.audioStoragePath.size() <= 500
+        )) &&
+        (!('audioMaxPlays' in data) || (
+          data.audioMaxPlays == null ||
+          (data.audioMaxPlays is int && data.audioMaxPlays >= 1 && data.audioMaxPlays <= 20)
         )) &&
         data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
         (data.createdAt is timestamp || (data.createdAt is string && data.createdAt.size() <= 64)) &&
@@ -364,14 +435,18 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && isValidId(subcategoryId) && isAdmin();
     }
 
-    // Platform Settings collection (e.g., /settings/contact)
+    // Platform Settings collection (e.g., /settings/contact, /settings/point_steal, /settings/question_dedup)
     match /settings/{settingId} {
       allow get: if isValidId(settingId);
       allow list: if true;
 
       allow create: if isVerifiedUser() &&
         isValidId(settingId) &&
-        isValidContactSettings(incoming()) &&
+        (
+          (settingId == 'point_steal' && isValidPointStealSettings(incoming())) ||
+          (settingId == 'question_dedup' && isValidQuestionDedupSettings(incoming())) ||
+          (settingId != 'point_steal' && settingId != 'question_dedup' && isValidContactSettings(incoming()))
+        ) &&
         incoming().id == settingId &&
         incoming().updatedBy == request.auth.uid &&
         incoming().updatedAt == request.time &&
@@ -379,7 +454,11 @@ service cloud.firestore {
 
       allow update: if isVerifiedUser() &&
         isValidId(settingId) &&
-        isValidContactSettings(incoming()) &&
+        (
+          (settingId == 'point_steal' && isValidPointStealSettings(incoming())) ||
+          (settingId == 'question_dedup' && isValidQuestionDedupSettings(incoming())) ||
+          (settingId != 'point_steal' && settingId != 'question_dedup' && isValidContactSettings(incoming()))
+        ) &&
         incoming().id == existing().id &&
         incoming().updatedBy == request.auth.uid &&
         incoming().updatedAt == request.time &&
@@ -732,6 +811,91 @@ service cloud.firestore {
         incoming().diff(existing()).affectedKeys().hasOnly(['isRead']) &&
         incoming().isRead is bool;
       allow delete: if isSignedIn() && isValidId(notifId) && existing().userId == request.auth.uid;
+    }
+
+    // =========================================================================
+    // PER-PLAYER SEEN QUESTION HISTORY (Prevent Question Repetition per UID)
+    // =========================================================================
+
+    function isValidSeenRecordId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 256;
+    }
+
+    function isValidUserSeenQuestion(data) {
+      return data.keys().hasAll([
+          'id',
+          'userId',
+          'questionId',
+          'subcategoryId',
+          'category',
+          'firstSeenAtMs',
+          'lastSeenAtMs',
+          'seenCount',
+          'mode',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'userId',
+          'questionId',
+          'subcategoryId',
+          'category',
+          'firstSeenAtMs',
+          'lastSeenAtMs',
+          'seenCount',
+          'mode',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidSeenRecordId(data.id) &&
+        isValidId(data.userId) &&
+        isValidId(data.questionId) &&
+        data.subcategoryId is string && data.subcategoryId.size() <= 128 &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 80 &&
+        isNumberVal(data.firstSeenAtMs) && data.firstSeenAtMs > 0 &&
+        isNumberVal(data.lastSeenAtMs) && data.lastSeenAtMs >= data.firstSeenAtMs &&
+        data.seenCount is int && data.seenCount >= 1 && data.seenCount <= 100000 &&
+        data.mode in ['local', 'online'] &&
+        (data.createdAt is timestamp || isNumberVal(data.createdAt)) &&
+        (data.updatedAt is timestamp || isNumberVal(data.updatedAt));
+    }
+
+    match /userSeenQuestions/{recordId} {
+      allow get: if isSignedIn() && isValidSeenRecordId(recordId) && (
+        isAdmin() ||
+        recordId.matches('^' + request.auth.uid + '__.*') ||
+        (resource != null && resource.data.userId == request.auth.uid)
+      );
+
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+        isValidSeenRecordId(recordId) &&
+        isValidUserSeenQuestion(incoming()) &&
+        incoming().id == recordId &&
+        incoming().userId == request.auth.uid &&
+        recordId == request.auth.uid + '__' + incoming().questionId &&
+        incoming().seenCount == 1;
+
+      allow update: if isSignedIn() &&
+        isValidSeenRecordId(recordId) &&
+        isValidUserSeenQuestion(incoming()) &&
+        existing().userId == request.auth.uid &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().questionId == existing().questionId &&
+        incoming().firstSeenAtMs == existing().firstSeenAtMs &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().seenCount >= existing().seenCount &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'lastSeenAtMs',
+          'seenCount',
+          'mode',
+          'updatedAt'
+        ]);
+
+      allow delete: if isAdmin() && isValidSeenRecordId(recordId);
     }
   }
 }

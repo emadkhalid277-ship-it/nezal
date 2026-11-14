@@ -17,18 +17,30 @@ import {
   Lock,
   Volume2,
   VolumeX,
+  ShieldAlert,
+  RefreshCw,
 } from 'lucide-react';
 import {
   MainCategoryMeta,
   PointValue,
+  QuestionDedupSettings,
   SubcategoryItem,
   TeamConfig,
   TriviaQuestion,
 } from '../types/game';
 import { MAIN_CATEGORIES } from '../data/categoriesAndSeed';
 import { CategoryIcon } from '../components/CategoryIcon';
-import { matchesSubcategoryQuestion } from '../services/questionService';
+import { QuestionAudioPlayer } from '../components/QuestionAudioPlayer';
+import {
+  inferQuestionMediaType,
+  matchesSubcategoryQuestion,
+} from '../services/questionService';
 import { soundFX } from '../services/soundEffects';
+import {
+  DEFAULT_QUESTION_DEDUP_SETTINGS,
+  selectNextQuestionForSlot,
+  SlotSelectionResult,
+} from '../utils/questionDedupLogic';
 
 interface OrderedTeamSelectionItem {
   subcategoryId: string;
@@ -52,6 +64,16 @@ interface GameBoardPageProps {
   timerDuration: number;
   approvedQuestions: TriviaQuestion[];
   isGameLocked?: boolean;
+  userId?: string | null;
+  seenQuestionIds?: Set<string>;
+  questionDedupSettings?: QuestionDedupSettings;
+  onRecordQuestionSeen?: (params: {
+    questionId: string;
+    category: string;
+    subcategoryId?: string;
+    mode: 'local' | 'online';
+    displayKey?: string;
+  }) => Promise<void> | void;
   onAwardPoints: (
     teamIndex: number,
     points: number,
@@ -86,6 +108,7 @@ interface ActiveSelectionState {
   mainCategoryName: string;
   points: PointValue;
   question: TriviaQuestion;
+  isRepeatedFallback?: boolean;
 }
 
 export const GameBoardPage: React.FC<GameBoardPageProps> = ({
@@ -101,6 +124,10 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   timerDuration,
   approvedQuestions,
   isGameLocked = false,
+  userId = null,
+  seenQuestionIds,
+  questionDedupSettings = DEFAULT_QUESTION_DEDUP_SETTINGS,
+  onRecordQuestionSeen,
   onAwardPoints,
   onMarkTileUsedNoPoints,
   onSelectTurn,
@@ -188,11 +215,34 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
   const [imageLoadFailed, setImageLoadFailed] = useState<boolean>(false);
+  const [imageRetryNonce, setImageRetryNonce] = useState<number>(0);
+  const [mediaAudioReady, setMediaAudioReady] = useState<boolean>(true);
+  const [audioPlaysUsed, setAudioPlaysUsed] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(ACTIVE_MODAL_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed?.audioPlaysUsed === 'number') {
+          return Math.max(0, parsed.audioPlaysUsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 0;
+  });
 
   useEffect(() => {
     setZoomedImageUrl(null);
     setImageLoadFailed(false);
-  }, [activeSelection?.question?.id, activeSelection?.question?.imageUrl]);
+    setImageRetryNonce(0);
+    const mType = inferQuestionMediaType(activeSelection?.question);
+    setMediaAudioReady(mType !== 'audio');
+  }, [
+    activeSelection?.question?.id,
+    activeSelection?.question?.imageUrl,
+    activeSelection?.question?.audioUrl,
+  ]);
 
   const [feedbackBanner, setFeedbackBanner] = useState<{
     type: 'correct' | 'wrong';
@@ -278,6 +328,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
             answerRevealed,
             timeLeft,
             timerPaused,
+            audioPlaysUsed,
           })
         );
         onActiveQuestionChange?.({
@@ -289,8 +340,12 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
           questionId: activeSelection.question.id,
           questionText: activeSelection.question.questionText,
           correctAnswer: activeSelection.question.correctAnswer,
+          mediaType: inferQuestionMediaType(activeSelection.question),
           imageUrl: activeSelection.question.imageUrl,
           imageDescription: activeSelection.question.imageDescription,
+          audioUrl: activeSelection.question.audioUrl,
+          audioMaxPlays: activeSelection.question.audioMaxPlays ?? null,
+          audioPlaysUsed,
           explanation: activeSelection.question.explanation,
           answerRevealed,
           timeLeft,
@@ -305,6 +360,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     answerRevealed,
     timeLeft,
     timerPaused,
+    audioPlaysUsed,
     onActiveQuestionChange,
   ]);
 
@@ -317,9 +373,19 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     }
   }, [activeSelection, usedTileKeys]);
 
-  // Countdown timer effect
+  const activeMediaType = inferQuestionMediaType(activeSelection?.question);
+  const isWaitingForAudioReady =
+    Boolean(activeSelection) && activeMediaType === 'audio' && !mediaAudioReady;
+
+  // Primary countdown timer effect (paused automatically while audio is loading/failed)
   useEffect(() => {
-    if (!activeSelection || timerPaused || answerRevealed || feedbackBanner) {
+    if (
+      !activeSelection ||
+      timerPaused ||
+      isWaitingForAudioReady ||
+      answerRevealed ||
+      feedbackBanner
+    ) {
       prevTimeLeftRef.current = timeLeft;
       return;
     }
@@ -342,7 +408,14 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [activeSelection, timerPaused, answerRevealed, feedbackBanner, timeLeft]);
+  }, [
+    activeSelection,
+    timerPaused,
+    isWaitingForAudioReady,
+    answerRevealed,
+    feedbackBanner,
+    timeLeft,
+  ]);
 
   // Resolve visual styling for each selected subcategory from its parent Main Category & selecting team
   const boardColumns = useMemo(() => {
@@ -420,15 +493,18 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     return map;
   }, [approvedQuestions]);
 
-  // Find an available approved question for a subcategory + point tier without repeating questions in the same round
-  const getQuestionForSlot = (
+  const [exhaustionAlert, setExhaustionAlert] = useState<string | null>(null);
+
+  // Find an available approved question for a subcategory + point tier while excluding seen history per UID
+  const getSlotSelection = (
     subcategoryName: string,
     points: PointValue,
     subcategoryId?: string
-  ): TriviaQuestion | null => {
+  ): SlotSelectionResult => {
     const tileKey = `${subcategoryName}__${points}`;
 
-    let matching = (subcategoryId && questionsBySlotMap.get(`${subcategoryId}__${points}`)) ||
+    let matching =
+      (subcategoryId && questionsBySlotMap.get(`${subcategoryId}__${points}`)) ||
       questionsBySlotMap.get(`${subcategoryName}__${points}`);
 
     if (!matching || matching.length === 0) {
@@ -442,73 +518,70 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
           ) && q.points === points
       );
     }
-    if (!matching || matching.length === 0) return null;
 
-    // 1. If a question was already pinned to this tile in this round and hasn't been used by another tile, return it
-    const pinnedId = pinnedTileQuestions[tileKey];
-    if (pinnedId) {
-      const pinnedQ = matching.find((q) => q.id === pinnedId);
-      if (pinnedQ && !roundUsedQuestionIds.includes(pinnedQ.id)) {
-        return pinnedQ;
-      }
-    }
-
-    // 2. Exclude any question already used in the CURRENT round (strict no-repeat within the same round)
-    // Also exclude questions already pinned to other tiles on the board
-    const pinnedByOtherTiles = new Set(
-      Object.entries(pinnedTileQuestions)
-        .filter(([k]) => k !== tileKey)
-        .map(([, v]) => v)
-    );
-
-    const availableForThisRound = matching.filter(
-      (q) =>
-        !roundUsedQuestionIds.includes(q.id) && !pinnedByOtherTiles.has(q.id)
-    );
-
-    if (availableForThisRound.length === 0) {
-      // Fallback if all were pinned by other tiles: any not used in this round
-      const notUsedInRound = matching.filter(
-        (q) => !roundUsedQuestionIds.includes(q.id)
-      );
-      if (notUsedInRound.length === 0) return null;
-      return notUsedInRound[0];
-    }
-
-    // 3. Prefer questions not used in previous rounds of the session either
-    const freshAcrossSession = availableForThisRound.filter(
-      (q) => !usedQuestionIds.includes(q.id)
-    );
-    if (freshAcrossSession.length > 0) {
-      return freshAcrossSession[0];
-    }
-
-    // 4. If all matching questions were used in earlier rounds, cycle cleanly for this new round
-    return availableForThisRound[0];
+    return selectNextQuestionForSlot({
+      candidates: matching || [],
+      tileKey,
+      pinnedTileQuestions,
+      currentlyOpenTileKey: activeSelection?.tileKey || null,
+      roundUsedQuestionIds,
+      sessionUsedQuestionIds: usedQuestionIds,
+      userSeenQuestionIds: seenQuestionIds || new Set<string>(),
+      allowRepeatAfterExhaustion: Boolean(
+        questionDedupSettings?.allowRepeatAfterExhaustion
+      ),
+    });
   };
 
-  // Count how many tiles on this board are actually playable (either already used in this round or have an available question)
-  const playableTilesCount = useMemo(() => {
-    let count = 0;
-    for (const col of boardColumns) {
-      for (const pts of POINT_TIERS) {
-        const tileKey = `${col.subName}__${pts}`;
-        if (usedTileKeys.includes(tileKey)) {
-          count++;
-        } else if (getQuestionForSlot(col.subName, pts, col.subId)) {
-          count++;
+  // Count how many tiles on this board are actually playable and detect exhausted categories
+  const { playableTilesCount, exhaustedColumnNames, exhaustedSubKeySet } =
+    useMemo(() => {
+      let count = 0;
+      const exhaustedNames: string[] = [];
+      const exhaustedKeys = new Set<string>();
+
+      for (const col of boardColumns) {
+        let colPlayableUnused = 0;
+        let colHasExhaustedUnused = false;
+        const colKey = col.subId || col.subName;
+
+        for (const pts of POINT_TIERS) {
+          const tileKey = `${col.subName}__${pts}`;
+          if (usedTileKeys.includes(tileKey)) {
+            count++;
+          } else {
+            const slot = getSlotSelection(col.subName, pts, col.subId);
+            if (slot.question) {
+              count++;
+              colPlayableUnused++;
+            } else if (slot.isExhausted) {
+              colHasExhaustedUnused = true;
+            }
+          }
+        }
+
+        if (colPlayableUnused === 0 && colHasExhaustedUnused) {
+          exhaustedNames.push(col.subName);
+          exhaustedKeys.add(colKey);
         }
       }
-    }
-    return count;
-  }, [
-    boardColumns,
-    usedTileKeys,
-    approvedQuestions,
-    roundUsedQuestionIds,
-    usedQuestionIds,
-    pinnedTileQuestions,
-  ]);
+
+      return {
+        playableTilesCount: count,
+        exhaustedColumnNames: exhaustedNames,
+        exhaustedSubKeySet: exhaustedKeys,
+      };
+    }, [
+      boardColumns,
+      usedTileKeys,
+      approvedQuestions,
+      roundUsedQuestionIds,
+      usedQuestionIds,
+      pinnedTileQuestions,
+      seenQuestionIds,
+      questionDedupSettings?.allowRepeatAfterExhaustion,
+      activeSelection?.tileKey,
+    ]);
 
   const handleTileClick = (
     subcategoryName: string,
@@ -519,9 +592,18 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     const tileKey = `${subcategoryName}__${points}`;
     if (usedTileKeys.includes(tileKey)) return;
 
-    const q = getQuestionForSlot(subcategoryName, points, subcategoryId);
-    if (!q) return;
+    const slot = getSlotSelection(subcategoryName, points, subcategoryId);
+    if (!slot.question) {
+      if (slot.isExhausted) {
+        setExhaustionAlert(
+          `خلصت الأسئلة الجديدة في هذي الفئة (${subcategoryName} - ${points} نقطة).`
+        );
+      }
+      return;
+    }
 
+    const q = slot.question;
+    setExhaustionAlert(null);
     soundFX.playTileOpen();
     isSubmittingRef.current = false;
     setPinnedTileQuestions((prev) =>
@@ -534,11 +616,14 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
       mainCategoryName,
       points,
       question: q,
+      isRepeatedFallback: slot.isRepeatedFallback,
     });
     setAnswerRevealed(false);
     setTimeLeft(timerDuration);
     prevTimeLeftRef.current = timerDuration;
     setTimerPaused(false);
+    setAudioPlaysUsed(0);
+    setMediaAudioReady(inferQuestionMediaType(q) !== 'audio');
     setFeedbackBanner(null);
   };
 
@@ -554,7 +639,9 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   const activeTeam = teams[safeTeamIndex] || teams[0];
 
   const handleCorrectAnswer = () => {
-    if (!activeSelection || feedbackBanner || isSubmittingRef.current) return;
+    if (!activeSelection || feedbackBanner || isSubmittingRef.current) {
+      return;
+    }
     if (usedTileKeys.includes(activeSelection.tileKey)) return;
 
     isSubmittingRef.current = true;
@@ -584,7 +671,9 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   };
 
   const handleWrongAnswer = () => {
-    if (!activeSelection || feedbackBanner || isSubmittingRef.current) return;
+    if (!activeSelection || feedbackBanner || isSubmittingRef.current) {
+      return;
+    }
     if (usedTileKeys.includes(activeSelection.tileKey)) return;
 
     isSubmittingRef.current = true;
@@ -609,8 +698,48 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     }, 850);
   };
 
+  // Record displayed question to persistent UID seen-history ONLY after it actually renders to the player
+  useEffect(() => {
+    if (!activeSelection?.question?.id || !userId || !onRecordQuestionSeen) {
+      return;
+    }
+    void onRecordQuestionSeen({
+      questionId: activeSelection.question.id,
+      category:
+        activeSelection.subcategoryName ||
+        activeSelection.question.category ||
+        'عام',
+      subcategoryId:
+        activeSelection.subcategoryId ||
+        activeSelection.question.subcategoryId ||
+        '',
+      mode: 'local',
+      displayKey: `local_${activeSelection.tileKey}_${activeSelection.question.id}`,
+    });
+  }, [
+    activeSelection?.question?.id,
+    activeSelection?.tileKey,
+    activeSelection?.subcategoryName,
+    activeSelection?.subcategoryId,
+    activeSelection?.question?.category,
+    activeSelection?.question?.subcategoryId,
+    userId,
+    onRecordQuestionSeen,
+  ]);
+
   const handleCloseModalWithoutScoring = () => {
-    if (feedbackBanner || isSubmittingRef.current) return;
+    if (feedbackBanner || isSubmittingRef.current) {
+      return;
+    }
+    const closingTileKey = activeSelection?.tileKey;
+    if (closingTileKey) {
+      setPinnedTileQuestions((prev) => {
+        if (!prev[closingTileKey]) return prev;
+        const copy = { ...prev };
+        delete copy[closingTileKey];
+        return copy;
+      });
+    }
     setActiveSelection(null);
     setFeedbackBanner(null);
   };
@@ -829,6 +958,31 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
         </div>
       )}
 
+      {/* Exhaustion Notice Banner if all new questions in one or more categories were already seen */}
+      {(exhaustionAlert ||
+        (exhaustedColumnNames.length > 0 &&
+          !questionDedupSettings?.allowRepeatAfterExhaustion)) && (
+        <div
+          role="status"
+          className="bg-[#FFF7ED] border border-[#F07842]/40 rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 text-xs"
+        >
+          <div className="flex items-center gap-2 text-[#252824] font-semibold">
+            <ShieldAlert className="w-4 h-4 text-[#F07842] shrink-0" />
+            <span>
+              {exhaustionAlert ||
+                `خلصت الأسئلة الجديدة في هذي الفئة: ${exhaustedColumnNames.join('، ')} — لن يتم تكرار الأسئلة التي شاهدتها سابقاً.`}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onGoToCategories}
+            className="px-3.5 py-1.5 rounded-lg bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold cursor-pointer"
+          >
+            تغيير الفئات
+          </button>
+        </div>
+      )}
+
       {/* 2. DYNAMIC SUBCATEGORIES GAME BOARD (Responsive across Mobile, Tablet, Laptop & Large TV) */}
       {boardColumns.length === 0 ? (
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center space-y-4">
@@ -859,7 +1013,11 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
           <div className="overflow-x-auto pb-2">
             <div className="flex items-stretch gap-3 w-full min-w-max">
-              {boardColumns.map((col) => (
+              {boardColumns.map((col) => {
+                const isColExhausted = exhaustedSubKeySet.has(
+                  col.subId || col.subName
+                );
+                return (
                 <div
                   key={col.subId || col.subName}
                   className="w-[150px] sm:w-[170px] flex-1 min-w-[145px] sm:min-w-[160px] flex flex-col gap-2.5"
@@ -887,18 +1045,24 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                       {col.subName}
                     </h2>
 
-                    {col.teamName && (
-                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FFFFFF]/80 border border-[#E5E8DD] text-[10px] font-bold text-[#252824] max-w-full">
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{
-                            backgroundColor: col.teamColor || '#14543D',
-                          }}
-                        />
-                        <span className="truncate max-w-[105px]">
-                          {col.teamName}
-                        </span>
+                    {isColExhausted && !questionDedupSettings?.allowRepeatAfterExhaustion ? (
+                      <div className="text-[10px] font-bold text-[#F07842] leading-tight">
+                        خلصت الأسئلة الجديدة في هذي الفئة
                       </div>
+                    ) : (
+                      col.teamName && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FFFFFF]/80 border border-[#E5E8DD] text-[10px] font-bold text-[#252824] max-w-full">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{
+                              backgroundColor: col.teamColor || '#14543D',
+                            }}
+                          />
+                          <span className="truncate max-w-[105px]">
+                            {col.teamName}
+                          </span>
+                        </div>
+                      )
                     )}
                   </div>
 
@@ -906,9 +1070,11 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                   {POINT_TIERS.map((pts) => {
                     const tileKey = `${col.subName}__${pts}`;
                     const isUsed = usedTileKeys.includes(tileKey);
-                    const availableQ = isUsed
+                    const slot = isUsed
                       ? null
-                      : getQuestionForSlot(col.subName, pts, col.subId);
+                      : getSlotSelection(col.subName, pts, col.subId);
+                    const availableQ = slot?.question || null;
+                    const isTileExhausted = Boolean(slot && !slot.question && slot.isExhausted);
                     const isDisabled = isUsed || !availableQ;
 
                     return (
@@ -924,9 +1090,16 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                             col.subId
                           )
                         }
+                        title={
+                          isTileExhausted
+                            ? 'خلصت الأسئلة الجديدة في هذي الفئة'
+                            : undefined
+                        }
                         aria-label={
                           isUsed
                             ? `${col.subName} ${pts} نقطة - تم استخدامه`
+                            : isTileExhausted
+                            ? `${col.subName} ${pts} نقطة - خلصت الأسئلة الجديدة في هذي الفئة`
                             : !availableQ
                             ? `${col.subName} ${pts} نقطة - غير متوفر`
                             : `${col.subName} ${pts} نقطة`
@@ -935,7 +1108,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                           isUsed
                             ? 'bg-[#F3F5E9]/70 border-[#E5E8DD] text-[#777B73]/45 cursor-not-allowed'
                             : !availableQ
-                            ? 'bg-[#F3F5E9]/40 border-dashed border-[#E5E8DD] text-[#777B73]/50 cursor-not-allowed text-xs font-sans'
+                            ? 'bg-[#F3F5E9]/40 border-dashed border-[#E5E8DD] text-[#777B73]/65 cursor-not-allowed text-xs font-sans'
                             : 'bg-[#F3F5E9] hover:bg-[#F07842] text-[#14543D] hover:text-white border-[#E5E8DD] hover:border-[#F07842] cursor-pointer active:scale-[0.98]'
                         }`}
                       >
@@ -948,6 +1121,10 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                               مُستخدم
                             </span>
                           </div>
+                        ) : isTileExhausted ? (
+                          <span className="text-[10px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
+                            خلصت الأسئلة الجديدة
+                          </span>
                         ) : !availableQ ? (
                           <span className="text-[11px] font-sans font-normal">
                             غير متوفر
@@ -959,7 +1136,8 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                     );
                   })}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -990,10 +1168,15 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                   {activeSelection.points} نقطة
                 </span>
                 <span className="text-xs text-white/80 flex items-center gap-1">
-                  {activeSelection.question.imageUrl ? (
+                  {activeMediaType === 'audio' ? (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5 text-[#F07842]" />
+                      <span>({activeSelection.question.difficulty} · سؤال صوتي)</span>
+                    </>
+                  ) : activeMediaType === 'image' ? (
                     <>
                       <ImageIcon className="w-3.5 h-3.5 text-[#F07842]" />
-                      <span>({activeSelection.question.difficulty} · سؤال مصوّر)</span>
+                      <span>({activeSelection.question.difficulty} · سؤال صورة)</span>
                     </>
                   ) : (
                     <span>({activeSelection.question.difficulty} · سؤال مباشر)</span>
@@ -1049,7 +1232,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
             {/* Active Team Banner */}
             <div className="bg-[#F3F5E9] border-b border-[#E5E8DD] px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs shrink-0">
-              <div>
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[#777B73]">السؤال موجه إلى: </span>
                 <strong
                   className="font-bold"
@@ -1070,6 +1253,12 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
             {/* Scrollable Question Body — Direct Question (Text-only or Illustrated) */}
             <div className="p-5 sm:p-6 md:p-8 space-y-5 overflow-y-auto flex-1">
+              {activeSelection.isRepeatedFallback && (
+                <div className="bg-[#FFF7ED] border border-[#F07842]/30 rounded-xl px-4 py-2.5 text-xs font-semibold text-[#252824]">
+                  خلصت الأسئلة الجديدة في هذي الفئة — تم عرض سؤال سابق تلقائياً حسب إعدادات المنصة.
+                </div>
+              )}
+
               <div className="bg-[#F3F5E9]/60 border border-[#E5E8DD] rounded-2xl p-5 sm:p-7 text-center">
                 <h3
                   id="active-question-heading"
@@ -1080,49 +1269,87 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
               </div>
 
               {/* Optional Question Image Display — Preserves aspect ratio & responsive across mobile, desktop, and TV */}
-              {activeSelection.question.imageUrl && !imageLoadFailed && (
-                <div className="bg-[#F3F5E9]/40 border border-[#E5E8DD] rounded-2xl p-3 sm:p-4 flex flex-col items-center gap-2.5">
-                  <div className="relative w-full flex items-center justify-center">
-                    <img
-                      src={activeSelection.question.imageUrl}
-                      alt={
-                        activeSelection.question.imageDescription ||
-                        'صورة السؤال'
-                      }
-                      onError={() => setImageLoadFailed(true)}
-                      onClick={() =>
-                        setZoomedImageUrl(
-                          activeSelection.question.imageUrl || null
-                        )
-                      }
-                      className="max-h-[210px] sm:max-h-[270px] md:max-h-[320px] xl:max-h-[360px] w-auto max-w-full object-contain rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] shadow-xs cursor-zoom-in"
-                    />
+              {activeMediaType === 'image' && activeSelection.question.imageUrl && (
+                imageLoadFailed ? (
+                  <div className="bg-[#F3F5E9]/70 border border-rose-200 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="text-right space-y-1">
+                      <div className="text-xs sm:text-sm font-bold text-rose-800">
+                        تعذر تحميل صورة السؤال
+                      </div>
+                      <p className="text-[11px] text-rose-700/90">
+                        تحقق من اتصال الإنترنت ثم اضغط على «إعادة المحاولة».
+                      </p>
+                    </div>
                     <button
                       type="button"
-                      onClick={() =>
-                        setZoomedImageUrl(
-                          activeSelection.question.imageUrl || null
-                        )
-                      }
-                      className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-[#252824]/75 hover:bg-[#252824] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                      title="تكبير الصورة"
+                      onClick={() => {
+                        setImageLoadFailed(false);
+                        setImageRetryNonce((n) => n + 1);
+                      }}
+                      className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
                     >
-                      <ZoomIn className="w-3.5 h-3.5" />
-                      <span>تكبير</span>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>إعادة المحاولة</span>
                     </button>
                   </div>
+                ) : (
+                  <div className="bg-[#F3F5E9]/40 border border-[#E5E8DD] rounded-2xl p-3 sm:p-4 flex flex-col items-center gap-2.5">
+                    <div className="relative w-full flex items-center justify-center">
+                      <img
+                        key={`${activeSelection.question.imageUrl}_${imageRetryNonce}`}
+                        src={activeSelection.question.imageUrl}
+                        referrerPolicy="no-referrer"
+                        alt={
+                          activeSelection.question.imageDescription ||
+                          'صورة السؤال'
+                        }
+                        onError={() => setImageLoadFailed(true)}
+                        onClick={() =>
+                          setZoomedImageUrl(
+                            activeSelection.question.imageUrl || null
+                          )
+                        }
+                        className="max-h-[210px] sm:max-h-[270px] md:max-h-[320px] xl:max-h-[360px] w-auto max-w-full object-contain rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] shadow-xs cursor-zoom-in"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setZoomedImageUrl(
+                            activeSelection.question.imageUrl || null
+                          )
+                        }
+                        className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-[#252824]/75 hover:bg-[#252824] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                        title="تكبير الصورة"
+                      >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                        <span>تكبير</span>
+                      </button>
+                    </div>
 
-                  {activeSelection.question.imageDescription && (
-                    <p className="text-xs text-[#777B73] text-center leading-relaxed">
-                      {activeSelection.question.imageDescription}
-                    </p>
-                  )}
-                </div>
+                    {activeSelection.question.imageDescription && (
+                      <p className="text-xs text-[#777B73] text-center leading-relaxed">
+                        {activeSelection.question.imageDescription}
+                      </p>
+                    )}
+                  </div>
+                )
               )}
 
-              {/* Reveal Correct Answer Action or Revealed Answer + Host Judgment Controls */}
+              {/* Question Audio Player (for Audio Questions) */}
+              {activeMediaType === 'audio' && activeSelection.question.audioUrl && (
+                <QuestionAudioPlayer
+                  audioUrl={activeSelection.question.audioUrl}
+                  maxPlays={activeSelection.question.audioMaxPlays ?? null}
+                  initialPlaysUsed={audioPlaysUsed}
+                  onPlaysUsedChange={setAudioPlaysUsed}
+                  onReadyChange={setMediaAudioReady}
+                  questionKey={`${activeSelection.tileKey}_${activeSelection.question.id}`}
+                />
+              )}
+
+              {/* ANSWER & JUDGMENT CONTROLS */}
               {!answerRevealed ? (
-                <div className="pt-2 flex flex-col items-center gap-2.5">
+                <div className="pt-2 flex flex-col items-center gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -1134,7 +1361,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                     <Eye className="w-4 h-4 text-[#F07842]" />
                     <span>إظهار الإجابة</span>
                   </button>
-                  <span className="text-[11px] text-[#777B73]">
+                  <span className="text-[11px] text-[#777B73] text-center">
                     اضغط على «إظهار الإجابة» بعد استماعك لإجابة الفريق لاحتساب النقاط
                   </span>
                 </div>

@@ -32,6 +32,7 @@ import {
   MainCategoryMeta,
   MainCategoryName,
   PointValue,
+  QuestionMediaType,
   QuestionType,
   SubcategoryItem,
   TriviaQuestion,
@@ -42,6 +43,27 @@ import {
   MAIN_CATEGORIES,
 } from '../data/categoriesAndSeed';
 import { ALL_EXPANDED_QUESTIONS } from '../data/questions';
+import {
+  ALLOWED_QUESTION_AUDIO_TYPES,
+  ALLOWED_QUESTION_IMAGE_TYPES,
+  inferQuestionMediaType,
+  MAX_QUESTION_AUDIO_SIZE_BYTES,
+  MAX_QUESTION_IMAGE_SIZE_BYTES,
+  normalizeAudioMaxPlays,
+  validateQuestionAudioFile,
+  validateQuestionImageFile,
+} from '../utils/questionMedia';
+
+export {
+  ALLOWED_QUESTION_AUDIO_TYPES,
+  ALLOWED_QUESTION_IMAGE_TYPES,
+  inferQuestionMediaType,
+  MAX_QUESTION_AUDIO_SIZE_BYTES,
+  MAX_QUESTION_IMAGE_SIZE_BYTES,
+  normalizeAudioMaxPlays,
+  validateQuestionAudioFile,
+  validateQuestionImageFile,
+};
 
 const QUESTIONS_COLLECTION = 'questions';
 const SUBCATEGORIES_COLLECTION = 'subcategories';
@@ -229,6 +251,23 @@ function mapDocToQuestion(
       ? data.imageDescription.trim()
       : '';
 
+  const rawAudioUrl =
+    typeof data.audioUrl === 'string' ? data.audioUrl.trim() : '';
+  const safeAudioUrl =
+    rawAudioUrl.startsWith('http://') || rawAudioUrl.startsWith('https://')
+      ? rawAudioUrl
+      : '';
+  const safeAudioStoragePath =
+    typeof data.audioStoragePath === 'string'
+      ? data.audioStoragePath.trim()
+      : '';
+  const safeAudioMaxPlays = normalizeAudioMaxPlays(data.audioMaxPlays);
+  const resolvedMediaType = inferQuestionMediaType({
+    mediaType: data.mediaType,
+    audioUrl: safeAudioUrl,
+    imageUrl: safeImageUrl,
+  });
+
   return {
     id: data.id || id,
     subcategoryId:
@@ -236,6 +275,7 @@ function mapDocToQuestion(
     category: String(data.category || ''),
     questionText,
     questionType: 'direct',
+    mediaType: resolvedMediaType,
     difficulty: data.difficulty as DifficultyLevel,
     points: Number(data.points || 100) as PointValue,
     options: [],
@@ -246,6 +286,9 @@ function mapDocToQuestion(
     imageUrl: safeImageUrl || undefined,
     imageStoragePath: safeStoragePath || undefined,
     imageDescription: safeImageDesc || undefined,
+    audioUrl: safeAudioUrl || undefined,
+    audioStoragePath: safeAudioStoragePath || undefined,
+    audioMaxPlays: safeAudioMaxPlays,
     authorId: String(data.authorId || ''),
     createdAt: formatTimestamp(data.createdAt),
     reviewedAt: formatTimestamp(data.reviewedAt),
@@ -1391,33 +1434,6 @@ export async function fetchQuestionsForSubcategories(
   }
 }
 
-export const ALLOWED_QUESTION_IMAGE_TYPES = [
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/webp',
-];
-export const MAX_QUESTION_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
-
-export function validateQuestionImageFile(file: File): string | null {
-  if (!file) {
-    return 'لم يتم اختيار ملف صورة.';
-  }
-  const mime = (file.type || '').toLowerCase();
-  const extMatch = file.name.toLowerCase().match(/\.(jpg|jpeg|png|webp)$/);
-  if (!ALLOWED_QUESTION_IMAGE_TYPES.includes(mime) && !extMatch) {
-    return 'صيغة الصورة غير مدعومة. يرجى رفع صورة بصيغة JPG أو PNG أو WEBP فقط.';
-  }
-  if (file.size <= 0) {
-    return 'ملف الصورة فارغ أو غير صالح.';
-  }
-  if (file.size > MAX_QUESTION_IMAGE_SIZE_BYTES) {
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
-    return `حجم الصورة (${sizeMb} ميجابايت) يتجاوز الحد الأقصى المسموح به وهو 5 ميجابايت.`;
-  }
-  return null;
-}
-
 export async function uploadQuestionImageToStorage(
   file: File,
   subcategoryIdOrCategory: string,
@@ -1486,6 +1502,88 @@ export async function uploadQuestionImageToStorage(
   }
 }
 
+export async function uploadQuestionAudioToStorage(
+  file: File,
+  subcategoryIdOrCategory: string,
+  questionIdHint?: string
+): Promise<{ audioUrl: string; audioStoragePath: string }> {
+  const validationError = validateQuestionAudioFile(file);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  const lowerName = file.name.toLowerCase();
+  const mime = (file.type || '').toLowerCase();
+  let ext = 'mp3';
+  let fallbackContentType = 'audio/mpeg';
+
+  if (mime.includes('wav') || lowerName.endsWith('.wav')) {
+    ext = 'wav';
+    fallbackContentType = 'audio/wav';
+  } else if (mime.includes('ogg') || lowerName.endsWith('.ogg')) {
+    ext = 'ogg';
+    fallbackContentType = 'audio/ogg';
+  } else if (mime.includes('m4a') || mime === 'audio/mp4' || lowerName.endsWith('.m4a')) {
+    ext = 'm4a';
+    fallbackContentType = 'audio/mp4';
+  } else if (mime.includes('aac') || lowerName.endsWith('.aac')) {
+    ext = 'aac';
+    fallbackContentType = 'audio/aac';
+  } else if (mime.includes('webm') || lowerName.endsWith('.webm')) {
+    ext = 'webm';
+    fallbackContentType = 'audio/webm';
+  }
+
+  const safeFolder = sanitizeId(subcategoryIdOrCategory || 'general');
+  const safeQuestionPrefix = sanitizeId(questionIdHint || 'q');
+  const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const storagePath = `question-audio/${safeFolder}/${safeQuestionPrefix}-${uniqueToken}.${ext}`;
+
+  try {
+    const storageRef = ref(storage, storagePath);
+    const uploadPromise = (async () => {
+      const snapshot = await uploadBytes(storageRef, file, {
+        contentType: file.type || fallbackContentType,
+      });
+      return await getDownloadURL(snapshot.ref);
+    })();
+
+    const timeoutPromise = new Promise<string>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              'انتهت مهلة رفع المقطع الصوتي إلى Firebase Storage. تأكد من تفعيل خدمة Storage ومن سرعة اتصال الإنترنت.'
+            )
+          ),
+        20000
+      )
+    );
+
+    const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
+    if (!downloadUrl || !downloadUrl.startsWith('http')) {
+      throw new Error('لم يتم استلام رابط صالح للمقطع الصوتي من Firebase Storage.');
+    }
+
+    return {
+      audioUrl: downloadUrl,
+      audioStoragePath: storagePath,
+    };
+  } catch (err: any) {
+    const code = err?.code || '';
+    if (code === 'storage/unauthorized') {
+      throw new Error(
+        'غير مصرح برفع المقطع الصوتي إلى Firebase Storage (تأكد من تسجيل الدخول بحساب المشرف وضبط قواعد Storage).'
+      );
+    }
+    throw new Error(
+      err instanceof Error
+        ? err.message
+        : 'تعذر رفع المقطع الصوتي إلى Firebase Storage. بيانات السؤال النصية محفوظة في النموذج ويمكنك إعادة المحاولة.'
+    );
+  }
+}
+
 export async function deleteQuestionImageFromStorage(
   storagePath?: string
 ): Promise<void> {
@@ -1507,6 +1605,7 @@ export interface CreateQuestionPayload {
   category: string; // Subcategory name
   questionText: string;
   questionType: QuestionType;
+  mediaType?: QuestionMediaType;
   difficulty: DifficultyLevel;
   points: PointValue;
   options: string[];
@@ -1517,6 +1616,85 @@ export interface CreateQuestionPayload {
   imageUrl?: string;
   imageStoragePath?: string;
   imageDescription?: string;
+  audioUrl?: string;
+  audioStoragePath?: string;
+  audioMaxPlays?: number | null;
+}
+
+function sanitizeMediaFieldsForWrite(
+  payload: Omit<CreateQuestionPayload, 'id'>
+): {
+  mediaType: QuestionMediaType;
+  imageUrl: string;
+  imageStoragePath: string;
+  imageDescription: string;
+  audioUrl: string;
+  audioStoragePath: string;
+  audioMaxPlays: number | null;
+} {
+  const rawImageUrl = (payload.imageUrl || '').trim();
+  if (rawImageUrl.startsWith('data:')) {
+    throw new Error('لا يُسمح بتخزين الصور بصيغة Base64 داخل مستندات Firestore.');
+  }
+  const rawAudioUrl = (payload.audioUrl || '').trim();
+  if (rawAudioUrl.startsWith('data:')) {
+    throw new Error('لا يُسمح بتخزين الملفات الصوتية بصيغة Base64 داخل مستندات Firestore.');
+  }
+
+  const validImageUrl =
+    rawImageUrl.startsWith('http://') || rawImageUrl.startsWith('https://')
+      ? rawImageUrl.slice(0, 2000)
+      : '';
+  const validAudioUrl =
+    rawAudioUrl.startsWith('http://') || rawAudioUrl.startsWith('https://')
+      ? rawAudioUrl.slice(0, 2000)
+      : '';
+
+  const resolvedMediaType = inferQuestionMediaType({
+    mediaType: payload.mediaType,
+    imageUrl: validImageUrl,
+    audioUrl: validAudioUrl,
+  });
+
+  if (resolvedMediaType === 'audio') {
+    return {
+      mediaType: 'audio',
+      imageUrl: '',
+      imageStoragePath: '',
+      imageDescription: '',
+      audioUrl: validAudioUrl,
+      audioStoragePath: validAudioUrl
+        ? (payload.audioStoragePath || '').trim().slice(0, 500)
+        : '',
+      audioMaxPlays: normalizeAudioMaxPlays(payload.audioMaxPlays),
+    };
+  }
+
+  if (resolvedMediaType === 'image') {
+    return {
+      mediaType: 'image',
+      imageUrl: validImageUrl,
+      imageStoragePath: validImageUrl
+        ? (payload.imageStoragePath || '').trim().slice(0, 500)
+        : '',
+      imageDescription: validImageUrl
+        ? (payload.imageDescription || '').trim().slice(0, 300)
+        : '',
+      audioUrl: '',
+      audioStoragePath: '',
+      audioMaxPlays: null,
+    };
+  }
+
+  return {
+    mediaType: 'text',
+    imageUrl: '',
+    imageStoragePath: '',
+    imageDescription: '',
+    audioUrl: '',
+    audioStoragePath: '',
+    audioMaxPlays: null,
+  };
 }
 
 export async function createQuestionInFirestore(
@@ -1535,26 +1713,14 @@ export async function createQuestionInFirestore(
   const resolvedStatus: ApprovalStatus =
     payload.status === 'approved' && needsReview ? 'pending' : payload.status;
 
-  const rawImageUrl = (payload.imageUrl || '').trim();
-  if (rawImageUrl.startsWith('data:')) {
-    throw new Error('لا يُسمح بتخزين الصور بصيغة Base64 داخل مستندات Firestore.');
-  }
-  const cleanImageUrl =
-    rawImageUrl.startsWith('http://') || rawImageUrl.startsWith('https://')
-      ? rawImageUrl.slice(0, 2000)
-      : '';
-  const cleanStoragePath = cleanImageUrl
-    ? (payload.imageStoragePath || '').trim().slice(0, 500)
-    : '';
-  const cleanImageDescription = cleanImageUrl
-    ? (payload.imageDescription || '').trim().slice(0, 300)
-    : '';
+  const mediaFields = sanitizeMediaFieldsForWrite(payload);
 
   const docData: Record<string, any> = {
     id: docId,
     category: payload.category.trim().slice(0, 80),
     questionText: cleanQuestionText,
     questionType: 'direct',
+    mediaType: mediaFields.mediaType,
     difficulty: payload.difficulty,
     points: Number(payload.points),
     options: [],
@@ -1562,9 +1728,12 @@ export async function createQuestionInFirestore(
     explanation: (payload.explanation || '').trim().slice(0, 800),
     source: (payload.source || '').trim().slice(0, 300),
     status: resolvedStatus,
-    imageUrl: cleanImageUrl,
-    imageStoragePath: cleanStoragePath,
-    imageDescription: cleanImageDescription,
+    imageUrl: mediaFields.imageUrl,
+    imageStoragePath: mediaFields.imageStoragePath,
+    imageDescription: mediaFields.imageDescription,
+    audioUrl: mediaFields.audioUrl,
+    audioStoragePath: mediaFields.audioStoragePath,
+    audioMaxPlays: mediaFields.audioMaxPlays,
     authorId: authorId.slice(0, 128),
     createdAt: serverTimestamp(),
     reviewedAt: serverTimestamp(),
@@ -1602,25 +1771,13 @@ export async function updateQuestionInFirestore(
   const resolvedStatus: ApprovalStatus =
     payload.status === 'approved' && needsReview ? 'pending' : payload.status;
 
-  const rawImageUrl = (payload.imageUrl || '').trim();
-  if (rawImageUrl.startsWith('data:')) {
-    throw new Error('لا يُسمح بتخزين الصور بصيغة Base64 داخل مستندات Firestore.');
-  }
-  const cleanImageUrl =
-    rawImageUrl.startsWith('http://') || rawImageUrl.startsWith('https://')
-      ? rawImageUrl.slice(0, 2000)
-      : '';
-  const cleanStoragePath = cleanImageUrl
-    ? (payload.imageStoragePath || '').trim().slice(0, 500)
-    : '';
-  const cleanImageDescription = cleanImageUrl
-    ? (payload.imageDescription || '').trim().slice(0, 300)
-    : '';
+  const mediaFields = sanitizeMediaFieldsForWrite(payload);
 
   const updateData: Record<string, any> = {
     category: payload.category.trim().slice(0, 80),
     questionText: cleanQuestionText,
     questionType: 'direct',
+    mediaType: mediaFields.mediaType,
     difficulty: payload.difficulty,
     points: Number(payload.points),
     options: [],
@@ -1628,9 +1785,12 @@ export async function updateQuestionInFirestore(
     explanation: (payload.explanation || '').trim().slice(0, 800),
     source: (payload.source || '').trim().slice(0, 300),
     status: resolvedStatus,
-    imageUrl: cleanImageUrl,
-    imageStoragePath: cleanStoragePath,
-    imageDescription: cleanImageDescription,
+    imageUrl: mediaFields.imageUrl,
+    imageStoragePath: mediaFields.imageStoragePath,
+    imageDescription: mediaFields.imageDescription,
+    audioUrl: mediaFields.audioUrl,
+    audioStoragePath: mediaFields.audioStoragePath,
+    audioMaxPlays: mediaFields.audioMaxPlays,
     reviewedAt: serverTimestamp(),
   };
 
@@ -1716,23 +1876,10 @@ export async function updateQuestionStatusInFirestore(
 
 export async function deleteQuestionFromFirestore(
   questionId: string,
-  imageStoragePath?: string
+  _imageStoragePath?: string
 ): Promise<void> {
   try {
-    let pathToDelete = imageStoragePath;
-    if (!pathToDelete) {
-      const snap = await getDoc(doc(db, QUESTIONS_COLLECTION, questionId));
-      if (snap.exists()) {
-        const data = snap.data();
-        if (typeof data.imageStoragePath === 'string' && data.imageStoragePath) {
-          pathToDelete = data.imageStoragePath;
-        }
-      }
-    }
     await deleteDoc(doc(db, QUESTIONS_COLLECTION, questionId));
-    if (pathToDelete) {
-      await deleteQuestionImageFromStorage(pathToDelete);
-    }
     serviceCache.invalidate('approved_questions');
     serviceCache.invalidate('admin_questions');
   } catch (error) {

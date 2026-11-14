@@ -1,4 +1,4 @@
-import { PointValue, TeamConfig } from './game';
+import { PointValue, QuestionMediaType, TeamConfig } from './game';
 
 export type MatchStatus = 'in_progress' | 'completed' | 'abandoned';
 export type MatchMode = 'local' | 'online';
@@ -12,8 +12,12 @@ export interface ActiveQuestionSavedState {
   questionId: string;
   questionText: string;
   correctAnswer: string;
+  mediaType?: QuestionMediaType;
   imageUrl?: string;
   imageDescription?: string;
+  audioUrl?: string;
+  audioMaxPlays?: number | null;
+  audioPlaysUsed?: number;
   explanation?: string;
   answerRevealed: boolean;
   timeLeft: number;

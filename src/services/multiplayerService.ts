@@ -5,6 +5,7 @@ import {
   updateDoc,
   onSnapshot,
   deleteField,
+  runTransaction,
 } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 import { db } from '../lib/firebase';
@@ -750,7 +751,7 @@ export async function hostCloseActiveQuestion(code: string, hostId: string): Pro
   });
 }
 
-// 15. Host: Award Points to a Team
+// 15. Host: Award Points to a Team (Atomic Firestore Transaction to prevent duplicate scoring)
 export async function hostAwardPoints(params: {
   code: string;
   hostId: string;
@@ -763,69 +764,69 @@ export async function hostAwardPoints(params: {
   const cleanCode = params.code.trim().toUpperCase();
   const roomRef = getRoomDoc(cleanCode);
 
-  const snap = await getDoc(roomRef);
-  if (!snap.exists()) throw new Error('الغرفة غير موجودة');
-  const room = snap.data() as OnlineGameRoom;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+    if (!snap.exists()) throw new Error('الغرفة غير موجودة');
+    const room = snap.data() as OnlineGameRoom;
 
-  // Verify host
-  if (room.hostId !== params.hostId) {
-    throw new Error('المضيف فقط يملك صلاحية تسجيل النقاط');
-  }
+    if (room.hostId !== params.hostId) {
+      throw new Error('المضيف فقط يملك صلاحية تسجيل النقاط');
+    }
 
-  // Idempotency check: tile already used
-  if (room.usedTileKeys.includes(params.tileKey)) {
-    return;
-  }
+    // Strictly idempotent: tile already scored/used
+    if ((room.usedTileKeys || []).includes(params.tileKey)) {
+      return;
+    }
 
-  const nextUsedTiles = [...room.usedTileKeys, params.tileKey];
-  const nextRoundQuestions = room.roundUsedQuestionIds.includes(params.questionId)
-    ? room.roundUsedQuestionIds
-    : [...room.roundUsedQuestionIds, params.questionId];
+    const nextUsedTiles = [...(room.usedTileKeys || []), params.tileKey];
+    const nextRoundQuestions = (room.roundUsedQuestionIds || []).includes(params.questionId)
+      ? room.roundUsedQuestionIds
+      : [...(room.roundUsedQuestionIds || []), params.questionId];
 
-  const safeTeamIndex =
-    params.awardedTeamIndex >= 0 && params.awardedTeamIndex < room.teams.length
-      ? params.awardedTeamIndex
-      : 0;
+    const safeTeamIndex =
+      params.awardedTeamIndex >= 0 && params.awardedTeamIndex < room.teams.length
+        ? params.awardedTeamIndex
+        : 0;
 
-  const awardedTeam = room.teams[safeTeamIndex];
-  const nextTeams = room.teams.map((t, idx) =>
-    idx === safeTeamIndex ? { ...t, score: t.score + params.points } : t
-  );
+    const awardedTeam = room.teams[safeTeamIndex];
+    const nextTeams = room.teams.map((t, idx) =>
+      idx === safeTeamIndex ? { ...t, score: t.score + params.points } : t
+    );
 
-  const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
-  const now = Date.now();
+    const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
+    const now = Date.now();
 
-  // Check if game is completed
-  const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
-  let winnerId: string | null = null;
-  let winnerName: string | null = null;
-  let winnerScore = 0;
+    const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
+    let winnerId: string | null = null;
+    let winnerName: string | null = null;
+    let winnerScore = 0;
 
-  if (isGameFinished) {
-    const sorted = [...nextTeams].sort((a, b) => b.score - a.score);
-    const win = sorted[0];
-    winnerId = win ? win.id : null;
-    winnerName = win ? win.name : '';
-    winnerScore = win ? win.score : 0;
-  }
+    if (isGameFinished) {
+      const sorted = [...nextTeams].sort((a, b) => b.score - a.score);
+      const win = sorted[0];
+      winnerId = win ? win.id : null;
+      winnerName = win ? win.name : '';
+      winnerScore = win ? win.score : 0;
+    }
 
-  await updateDoc(roomRef, {
-    teams: nextTeams,
-    usedTileKeys: nextUsedTiles,
-    roundUsedQuestionIds: nextRoundQuestions,
-    activeTeamIndex: nextActiveTeamIndex,
-    activeQuestion: null,
-    status: isGameFinished ? 'finished' : room.status,
-    winnerTeamId: winnerId,
-    winnerTeamName: winnerName,
-    winnerScore,
-    lastActionMessage: `حصل ${awardedTeam.name} على +${params.points} نقطة! 🎉`,
-    lastActionAt: now,
-    updatedAt: now,
+    transaction.update(roomRef, {
+      teams: nextTeams,
+      usedTileKeys: nextUsedTiles,
+      roundUsedQuestionIds: nextRoundQuestions,
+      activeTeamIndex: nextActiveTeamIndex,
+      activeQuestion: null,
+      status: isGameFinished ? 'finished' : room.status,
+      winnerTeamId: winnerId,
+      winnerTeamName: winnerName,
+      winnerScore,
+      lastActionMessage: `حصل ${awardedTeam.name} على +${params.points} نقطة! 🎉`,
+      lastActionAt: now,
+      updatedAt: now,
+    });
   });
 }
 
-// 16. Host: Mark Tile Used with No Points (Skip)
+// 16. Host: Mark Tile Used with No Points (Skip - Atomic Transaction)
 export async function hostMarkTileNoPoints(params: {
   code: string;
   hostId: string;
@@ -836,46 +837,48 @@ export async function hostMarkTileNoPoints(params: {
   const cleanCode = params.code.trim().toUpperCase();
   const roomRef = getRoomDoc(cleanCode);
 
-  const snap = await getDoc(roomRef);
-  if (!snap.exists()) return;
-  const room = snap.data() as OnlineGameRoom;
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+    if (!snap.exists()) return;
+    const room = snap.data() as OnlineGameRoom;
 
-  if (room.hostId !== params.hostId) return;
-  if (room.usedTileKeys.includes(params.tileKey)) return;
+    if (room.hostId !== params.hostId) return;
+    if ((room.usedTileKeys || []).includes(params.tileKey)) return;
 
-  const nextUsedTiles = [...room.usedTileKeys, params.tileKey];
-  const nextRoundQuestions = room.roundUsedQuestionIds.includes(params.questionId)
-    ? room.roundUsedQuestionIds
-    : [...room.roundUsedQuestionIds, params.questionId];
+    const nextUsedTiles = [...(room.usedTileKeys || []), params.tileKey];
+    const nextRoundQuestions = (room.roundUsedQuestionIds || []).includes(params.questionId)
+      ? room.roundUsedQuestionIds
+      : [...(room.roundUsedQuestionIds || []), params.questionId];
 
-  const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
-  const now = Date.now();
+    const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;
+    const now = Date.now();
 
-  const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
-  let winnerId: string | null = null;
-  let winnerName: string | null = null;
-  let winnerScore = 0;
+    const isGameFinished = nextUsedTiles.length >= params.totalPlayableTiles;
+    let winnerId: string | null = null;
+    let winnerName: string | null = null;
+    let winnerScore = 0;
 
-  if (isGameFinished) {
-    const sorted = [...room.teams].sort((a, b) => b.score - a.score);
-    const win = sorted[0];
-    winnerId = win ? win.id : null;
-    winnerName = win ? win.name : '';
-    winnerScore = win ? win.score : 0;
-  }
+    if (isGameFinished) {
+      const sorted = [...room.teams].sort((a, b) => b.score - a.score);
+      const win = sorted[0];
+      winnerId = win ? win.id : null;
+      winnerName = win ? win.name : '';
+      winnerScore = win ? win.score : 0;
+    }
 
-  await updateDoc(roomRef, {
-    usedTileKeys: nextUsedTiles,
-    roundUsedQuestionIds: nextRoundQuestions,
-    activeTeamIndex: nextActiveTeamIndex,
-    activeQuestion: null,
-    status: isGameFinished ? 'finished' : room.status,
-    winnerTeamId: winnerId,
-    winnerTeamName: winnerName,
-    winnerScore,
-    lastActionMessage: 'تم تخطي السؤال بدون نقاط',
-    lastActionAt: now,
-    updatedAt: now,
+    transaction.update(roomRef, {
+      usedTileKeys: nextUsedTiles,
+      roundUsedQuestionIds: nextRoundQuestions,
+      activeTeamIndex: nextActiveTeamIndex,
+      activeQuestion: null,
+      status: isGameFinished ? 'finished' : room.status,
+      winnerTeamId: winnerId,
+      winnerTeamName: winnerName,
+      winnerScore,
+      lastActionMessage: 'تم تخطي السؤال بدون نقاط',
+      lastActionAt: now,
+      updatedAt: now,
+    });
   });
 }
 

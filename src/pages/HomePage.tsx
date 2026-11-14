@@ -89,12 +89,13 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </span>
                 </button>
 
-                <a
-                  href="#how-to-play"
-                  className="px-6 py-4 text-sm md:text-base font-bold text-[#14543D] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-2xl transition-colors"
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.('how_to_play')}
+                  className="px-6 py-4 text-sm md:text-base font-bold text-[#14543D] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-2xl transition-colors cursor-pointer"
                 >
                   كيف تلعب؟
-                </a>
+                </button>
               </div>
             </div>
 
@@ -253,6 +254,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               );
             })}
+          </div>
+
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={() => onNavigate?.('how_to_play')}
+              className="px-7 py-3 text-sm font-bold text-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] border border-[#E5E8DD] hover:border-[#14543D]/50 rounded-2xl transition-colors inline-flex items-center gap-2 cursor-pointer"
+            >
+              <span>اقرأ القواعد الكاملة لطريقة اللعب</span>
+              <ArrowLeft className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </section>

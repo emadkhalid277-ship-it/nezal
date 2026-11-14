@@ -9,7 +9,8 @@ export type PageView =
   | 'my_lists'
   | 'online_multiplayer'
   | 'my_matches'
-  | 'friends';
+  | 'friends'
+  | 'how_to_play';
 
 export type MainCategoryName = string;
 
@@ -20,6 +21,8 @@ export type DifficultyLevel = 'سهل' | 'متوسط' | 'صعب' | 'صعب جد�
 export type PointValue = 100 | 200 | 300 | 400 | 500;
 
 export type QuestionType = 'direct' | 'mcq';
+
+export type QuestionMediaType = 'text' | 'image' | 'audio';
 
 export type ApprovalStatus = 'approved' | 'pending' | 'rejected';
 
@@ -81,12 +84,33 @@ export interface ContactSettings {
   updatedAt?: string;
 }
 
+export interface QuestionDedupSettings {
+  id: string;
+  allowRepeatAfterExhaustion: boolean;
+  trackSpectators: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface SeenQuestionRecord {
+  id: string;
+  userId: string;
+  questionId: string;
+  subcategoryId: string;
+  category: string;
+  firstSeenAtMs: number;
+  lastSeenAtMs: number;
+  seenCount: number;
+  mode: 'local' | 'online';
+}
+
 export interface TriviaQuestion {
   id: string;
   subcategoryId?: string;
   category: string; // Subcategory name
   questionText: string;
   questionType: QuestionType;
+  mediaType?: QuestionMediaType;
   difficulty: DifficultyLevel;
   points: PointValue;
   options: string[];
@@ -97,6 +121,9 @@ export interface TriviaQuestion {
   imageUrl?: string;
   imageStoragePath?: string;
   imageDescription?: string;
+  audioUrl?: string;
+  audioStoragePath?: string;
+  audioMaxPlays?: number | null;
   authorId: string;
   createdAt: string;
   reviewedAt: string;

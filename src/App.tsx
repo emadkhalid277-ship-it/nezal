@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -12,6 +12,7 @@ import {
   DEFAULT_BRAND_NAME,
   MainCategoryMeta,
   PageView,
+  QuestionDedupSettings,
   SUBCATEGORIES_PER_TEAM,
   SubcategoryItem,
   TeamConfig,
@@ -38,6 +39,13 @@ import {
   recordGameSessionInFirestore,
   seedInitialQuestionsToFirestore,
 } from './services/questionService';
+import { DEFAULT_QUESTION_DEDUP_SETTINGS } from './utils/questionDedupLogic';
+import {
+  fetchQuestionDedupSettingsFromFirestore,
+  flushPendingSeenQuestions,
+  recordQuestionSeenForUser,
+  subscribeToUserSeenQuestions,
+} from './services/seenQuestionsService';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { Footer } from './components/Footer';
@@ -81,6 +89,11 @@ const MyMatchesPage = lazy(() =>
 const FriendsPage = lazy(() =>
   import('./pages/FriendsPage').then((m) => ({
     default: m.FriendsPage,
+  }))
+);
+const HowToPlayPage = lazy(() =>
+  import('./pages/HowToPlayPage').then((m) => ({
+    default: m.HowToPlayPage,
   }))
 );
 import { ResumeMatchModal } from './components/ResumeMatchModal';
@@ -164,6 +177,7 @@ const VALID_PAGES: PageView[] = [
   'online_multiplayer',
   'my_matches',
   'friends',
+  'how_to_play',
 ];
 
 interface SavedGameSession {
@@ -320,6 +334,11 @@ export default function App() {
   const [contactSettings, setContactSettings] = useState<ContactSettings>(
     DEFAULT_CONTACT_SETTINGS
   );
+  const [questionDedupSettings, setQuestionDedupSettings] =
+    useState<QuestionDedupSettings>(DEFAULT_QUESTION_DEDUP_SETTINGS);
+  const [seenQuestionIds, setSeenQuestionIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
@@ -396,6 +415,11 @@ export default function App() {
     const saved = loadSavedGameSession().usedTileKeys;
     return Array.isArray(saved) ? saved.map(String) : [];
   });
+  // Synchronous ref preventing duplicate point awards on rapid clicks or race conditions
+  const resolvedTileKeysRef = useRef<Set<string>>(new Set(usedTileKeys));
+  useEffect(() => {
+    resolvedTileKeysRef.current = new Set(usedTileKeys);
+  }, [usedTileKeys]);
 
   const [roundUsedQuestionIds, setRoundUsedQuestionIds] = useState<string[]>(
     () => {
@@ -708,6 +732,23 @@ export default function App() {
     }
   }, []);
 
+  // Load Question Deduplication settings from Firestore
+  const loadQuestionDedupSettings = useCallback(async (forceRefresh = false) => {
+    try {
+      const settings = await fetchQuestionDedupSettingsFromFirestore(
+        forceRefresh
+      );
+      setQuestionDedupSettings(settings);
+      return settings;
+    } catch (err) {
+      console.error(
+        'Failed to load question dedup settings from Firestore:',
+        err
+      );
+      return DEFAULT_QUESTION_DEDUP_SETTINGS;
+    }
+  }, []);
+
   // Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -739,6 +780,7 @@ export default function App() {
         loadQuestions(adminStatus),
         loadSubcategories(adminStatus, loadedMains),
         loadContactSettings(),
+        loadQuestionDedupSettings(),
       ]);
       setCategoriesLoaded(true);
 
@@ -779,7 +821,54 @@ export default function App() {
     loadMainCategories,
     loadSubcategories,
     loadContactSettings,
+    loadQuestionDedupSettings,
   ]);
+
+  // Persistent per-UID seen questions real-time subscription + offline retry flush
+  useEffect(() => {
+    if (!user?.uid) {
+      setSeenQuestionIds(new Set());
+      return;
+    }
+
+    const uid = user.uid;
+    flushPendingSeenQuestions(uid).catch(() => {});
+
+    const unsubSeen = subscribeToUserSeenQuestions(uid, (ids) => {
+      setSeenQuestionIds(new Set(ids));
+    });
+
+    const handleOnlineFlush = () => {
+      flushPendingSeenQuestions(uid).catch(() => {});
+    };
+    window.addEventListener('online', handleOnlineFlush);
+
+    return () => {
+      unsubSeen();
+      window.removeEventListener('online', handleOnlineFlush);
+    };
+  }, [user?.uid]);
+
+  const handleRecordQuestionSeen = useCallback(
+    async (params: {
+      questionId: string;
+      category: string;
+      subcategoryId?: string;
+      mode: 'local' | 'online';
+      displayKey?: string;
+    }) => {
+      if (!user?.uid || !params.questionId) return;
+      await recordQuestionSeenForUser({
+        uid: user.uid,
+        questionId: params.questionId,
+        category: params.category,
+        subcategoryId: params.subcategoryId,
+        mode: params.mode,
+        displayKey: params.displayKey,
+      });
+    },
+    [user?.uid]
+  );
 
   // Global Hybrid Real-time Presence Lifecycle
   // Uses explicit state transitions + tab-close keepalive beacon + network status + heartbeat safety net
@@ -1068,6 +1157,7 @@ export default function App() {
       setActiveTeamIndex(matchToResume.activeTeamIndex);
     }
     if (Array.isArray(matchToResume.usedTileKeys)) {
+      resolvedTileKeysRef.current = new Set(matchToResume.usedTileKeys);
       setUsedTileKeys(matchToResume.usedTileKeys);
     }
     if (Array.isArray(matchToResume.roundUsedQuestionIds)) {
@@ -1091,8 +1181,11 @@ export default function App() {
             id: qState.questionId,
             questionText: qState.questionText,
             correctAnswer: qState.correctAnswer,
+            mediaType: qState.mediaType,
             imageUrl: qState.imageUrl,
             imageDescription: qState.imageDescription,
+            audioUrl: qState.audioUrl,
+            audioMaxPlays: qState.audioMaxPlays ?? null,
             explanation: qState.explanation,
             points: qState.points,
             mainCategory: qState.mainCategoryName,
@@ -1107,6 +1200,8 @@ export default function App() {
             ? qState.timeLeft
             : matchToResume.timerDuration || 60,
         timerPaused: Boolean(qState.timerPaused),
+        audioPlaysUsed:
+          typeof qState.audioPlaysUsed === 'number' ? qState.audioPlaysUsed : 0,
       };
       try {
         localStorage.setItem(
@@ -1148,6 +1243,7 @@ export default function App() {
     const freshId = generateMatchId();
     setCurrentMatchId(freshId);
     setIsGameLocked(false);
+    resolvedTileKeysRef.current = new Set();
     setUsedTileKeys([]);
     setRoundUsedQuestionIds([]);
     setTeams((prev) => prev.map((t) => ({ ...t, score: 0 })));
@@ -1183,6 +1279,7 @@ export default function App() {
       score: 0,
     }));
     setTeams(updatedTeams);
+    resolvedTileKeysRef.current = new Set();
     setUsedTileKeys([]);
     setRoundUsedQuestionIds([]);
     setActiveTeamIndex(0);
@@ -1220,8 +1317,11 @@ export default function App() {
     questionId: string,
     playableTilesCount?: number
   ) => {
-    // Idempotency guard: prevent double scoring for the same tile
-    if (usedTileKeys.includes(tileKey)) return;
+    // Synchronous + state idempotency guard: strictly prevent double scoring for the same tile
+    if (resolvedTileKeysRef.current.has(tileKey) || usedTileKeys.includes(tileKey)) {
+      return;
+    }
+    resolvedTileKeysRef.current.add(tileKey);
 
     const safeIndex =
       teamIndex >= 0 && teamIndex < teams.length ? teamIndex : 0;
@@ -1286,8 +1386,11 @@ export default function App() {
     questionId: string,
     playableTilesCount?: number
   ) => {
-    // Idempotency guard: prevent marking the same tile used twice
-    if (usedTileKeys.includes(tileKey)) return;
+    // Synchronous + state idempotency guard: prevent marking the same tile used twice
+    if (resolvedTileKeysRef.current.has(tileKey) || usedTileKeys.includes(tileKey)) {
+      return;
+    }
+    resolvedTileKeysRef.current.add(tileKey);
 
     const nextUsedTiles = [...usedTileKeys, tileKey];
     setUsedTileKeys(nextUsedTiles);
@@ -1342,6 +1445,7 @@ export default function App() {
 
   const handleResetBoard = () => {
     clearModalLocalStorage();
+    resolvedTileKeysRef.current = new Set();
     setTeams((prev) => prev.map((t) => ({ ...t, score: 0 })));
     setUsedTileKeys([]);
     setRoundUsedQuestionIds([]);
@@ -1389,6 +1493,14 @@ export default function App() {
               />
             )}
 
+            {activePage === 'how_to_play' && (
+              <HowToPlayPage
+                onBackToHome={() => handleNavigate('home')}
+                onStartLocalGame={() => handleNavigate('categories')}
+                onStartOnlineGame={() => handleNavigate('online_multiplayer')}
+              />
+            )}
+
             {(activePage === 'categories' || activePage === 'setup') && (
               <CategorySelectionPage
                 teams={teams}
@@ -1430,6 +1542,10 @@ export default function App() {
                 timerDuration={timerDuration}
                 approvedQuestions={approvedQuestions}
                 isGameLocked={isGameLocked}
+                userId={user?.uid || null}
+                seenQuestionIds={seenQuestionIds}
+                questionDedupSettings={questionDedupSettings}
+                onRecordQuestionSeen={handleRecordQuestionSeen}
                 onAwardPoints={handleAwardPoints}
                 onMarkTileUsedNoPoints={handleMarkTileUsedNoPoints}
                 onSelectTurn={setActiveTeamIndex}
@@ -1517,6 +1633,9 @@ export default function App() {
                 mainCategories={mainCategories}
                 subcategories={activeSubcategories}
                 approvedQuestions={approvedQuestions}
+                seenQuestionIds={seenQuestionIds}
+                questionDedupSettings={questionDedupSettings}
+                onRecordQuestionSeen={handleRecordQuestionSeen}
                 onNavigateHome={() => handleNavigate('home')}
                 onNavigate={handleNavigate}
                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -1537,6 +1656,7 @@ export default function App() {
                   mainCategories={mainCategories}
                   subcategories={subcategories}
                   contactSettings={contactSettings}
+                  questionDedupSettings={questionDedupSettings}
                   loadingQuestions={loadingQuestions}
                   onLoginGoogle={handleGoogleLogin}
                   onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -1553,6 +1673,9 @@ export default function App() {
                   }}
                   onRefreshContactSettings={async () => {
                     await loadContactSettings();
+                  }}
+                  onRefreshQuestionDedupSettings={async () => {
+                    await loadQuestionDedupSettings(true);
                   }}
                   onSeedFoundationalPack={handleSeedFoundationalPack}
                   seeding={seeding}
@@ -1573,6 +1696,7 @@ export default function App() {
         onUpdateBrandName={handleUpdateBrandName}
         onNavigate={handleNavigate}
         isAdmin={isAdmin}
+        contactSettings={contactSettings}
       />
 
       <ResumeMatchModal

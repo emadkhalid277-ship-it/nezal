@@ -14,13 +14,26 @@ service firebase.storage {
     function isValidImageUpload() {
       return request.resource != null &&
         request.resource.size <= 5 * 1024 * 1024 &&
-        request.resource.contentType.matches('image/(jpeg|png|webp)');
+        request.resource.contentType.matches('image/(jpeg|jpg|png|webp)');
+    }
+
+    function isValidAudioUpload() {
+      return request.resource != null &&
+        request.resource.size <= 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('audio/(mpeg|mp3|wav|x-wav|wave|ogg|mp4|x-m4a|aac|webm)');
     }
 
     // Question images: publicly readable during gameplay, admin-only upload/replace/delete
     match /question-images/{subcategoryId}/{fileName} {
       allow read: if true;
       allow create, update: if isVerifiedAdmin() && isValidImageUpload();
+      allow delete: if isVerifiedAdmin();
+    }
+
+    // Question audio clips: publicly readable during gameplay, admin-only upload/replace/delete
+    match /question-audio/{subcategoryId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isVerifiedAdmin() && isValidAudioUpload();
       allow delete: if isVerifiedAdmin();
     }
 

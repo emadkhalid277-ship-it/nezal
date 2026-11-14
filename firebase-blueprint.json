@@ -279,6 +279,121 @@
         "updatedAt"
       ]
     },
+    "PointStealSettings": {
+      "title": "PointStealSettings",
+      "description": "Admin-configurable settings for the Point Steal feature in local and online matches.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Document identifier (point_steal)",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether Point Steal is globally enabled"
+        },
+        "stealTimerSeconds": {
+          "type": "number",
+          "description": "Seconds granted to the rival team to answer during a steal attempt (5-90)"
+        },
+        "modeScope": {
+          "type": "string",
+          "enum": ["all", "local_only", "online_only"],
+          "description": "Match types where Point Steal is enabled"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Admin UID who updated the settings",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "enabled",
+        "stealTimerSeconds",
+        "modeScope",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "QuestionDedupSettings": {
+      "title": "QuestionDedupSettings",
+      "description": "Admin-configurable settings for per-player question deduplication and exhaustion replay behavior.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Document identifier (question_dedup)",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "allowRepeatAfterExhaustion": {
+          "type": "boolean",
+          "description": "Whether to allow replaying seen questions only after all unseen questions in a category/tier are exhausted"
+        },
+        "trackSpectators": {
+          "type": "boolean",
+          "description": "Whether online spectators also record displayed questions to their seen history"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Admin UID who updated the settings",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "allowRepeatAfterExhaustion",
+        "trackSpectators",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "UserSeenQuestion": {
+      "title": "UserSeenQuestion",
+      "description": "Persistent per-user record of each trivia question actually displayed to a player.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 3, "maxLength": 256 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "questionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "subcategoryId": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "firstSeenAtMs": { "type": "number" },
+        "lastSeenAtMs": { "type": "number" },
+        "seenCount": { "type": "number" },
+        "mode": { "type": "string", "enum": ["local", "online"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "userId",
+        "questionId",
+        "subcategoryId",
+        "category",
+        "firstSeenAtMs",
+        "lastSeenAtMs",
+        "seenCount",
+        "mode",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
     "Question": {
       "title": "Question",
       "description": "A trivia question stored in Firestore linked to a subcategory.",
@@ -350,6 +465,40 @@
           "enum": ["approved", "pending", "rejected"],
           "minLength": 6,
           "maxLength": 12
+        },
+        "mediaType": {
+          "type": "string",
+          "description": "Media format of the question (text, image, or audio)",
+          "enum": ["text", "image", "audio"]
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Optional HTTPS image URL for image questions",
+          "maxLength": 2000
+        },
+        "imageStoragePath": {
+          "type": "string",
+          "description": "Optional Firebase Storage object path for the question image",
+          "maxLength": 500
+        },
+        "imageDescription": {
+          "type": "string",
+          "description": "Optional caption or alt text for the question image",
+          "maxLength": 300
+        },
+        "audioUrl": {
+          "type": "string",
+          "description": "Optional HTTPS audio URL for audio questions",
+          "maxLength": 2000
+        },
+        "audioStoragePath": {
+          "type": "string",
+          "description": "Optional Firebase Storage object path for the question audio",
+          "maxLength": 500
+        },
+        "audioMaxPlays": {
+          "type": ["number", "null"],
+          "description": "Optional maximum allowed plays for audio questions (1-20, or null for unlimited)"
         },
         "authorId": {
           "type": "string",
@@ -691,6 +840,10 @@
     "/notifications/{notifId}": {
       "schema": { "$ref": "#/entities/UserNotification" },
       "description": "Real-time notification center entries per user."
+    },
+    "/userSeenQuestions/{recordId}": {
+      "schema": { "$ref": "#/entities/UserSeenQuestion" },
+      "description": "Persistent per-UID record of questions actually displayed to each registered user."
     }
   }
 }

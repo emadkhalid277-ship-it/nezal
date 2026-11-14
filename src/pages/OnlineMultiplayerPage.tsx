@@ -32,6 +32,11 @@ import {
   CheckCircle2,
   Lock,
   Flame,
+  ShieldAlert,
+  EyeOff,
+  Image as ImageIcon,
+  ZoomIn,
+  RefreshCw,
 } from 'lucide-react';
 import {
   ActiveQuestionState,
@@ -44,6 +49,7 @@ import {
   MainCategoryMeta,
   PageView,
   PointValue,
+  QuestionDedupSettings,
   SubcategoryItem,
   TriviaQuestion,
 } from '../types/game';
@@ -77,14 +83,31 @@ import {
 import { TEAM_COLOR_OPTIONS, DEFAULT_SUBCATEGORIES } from '../data/categoriesAndSeed';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
+import { QuestionAudioPlayer } from '../components/QuestionAudioPlayer';
+import { inferQuestionMediaType } from '../services/questionService';
 import { saveMatchProgressToFirestore } from '../services/matchService';
 import { soundFX } from '../services/soundEffects';
+import {
+  DEFAULT_QUESTION_DEDUP_SETTINGS,
+  selectNextQuestionForSlot,
+  shouldRecordQuestionSeenForParticipant,
+  SlotSelectionResult,
+} from '../utils/questionDedupLogic';
 
 interface OnlineMultiplayerPageProps {
   user: User | null;
   mainCategories: MainCategoryMeta[];
   subcategories: SubcategoryItem[];
   approvedQuestions: TriviaQuestion[];
+  seenQuestionIds?: Set<string>;
+  questionDedupSettings?: QuestionDedupSettings;
+  onRecordQuestionSeen?: (params: {
+    questionId: string;
+    category: string;
+    subcategoryId?: string;
+    mode: 'local' | 'online';
+    displayKey?: string;
+  }) => Promise<void> | void;
   onNavigateHome: () => void;
   onNavigate?: (page: PageView) => void;
   onOpenAuthModal?: () => void;
@@ -104,6 +127,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   mainCategories,
   subcategories,
   approvedQuestions,
+  seenQuestionIds,
+  questionDedupSettings = DEFAULT_QUESTION_DEDUP_SETTINGS,
+  onRecordQuestionSeen,
   onNavigateHome,
   onNavigate,
   onOpenAuthModal,
@@ -157,6 +183,16 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
   // Question Timer State (synced from openedAt)
   const [modalTimeLeft, setModalTimeLeft] = useState<number>(60);
+  const [hostAnswerPeek, setHostAnswerPeek] = useState<boolean>(false);
+  const [actionBusy, setActionBusy] = useState<boolean>(false);
+  const [onlineImageLoadFailed, setOnlineImageLoadFailed] =
+    useState<boolean>(false);
+  const [onlineImageRetryNonce, setOnlineImageRetryNonce] = useState<number>(0);
+  const [onlineZoomedImageUrl, setOnlineZoomedImageUrl] = useState<
+    string | null
+  >(null);
+  const [onlineAudioReady, setOnlineAudioReady] = useState<boolean>(true);
+  const [onlineAudioLoadWaitMs, setOnlineAudioLoadWaitMs] = useState<number>(0);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() =>
     soundFX.isEnabled()
   );
@@ -164,6 +200,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // Ref to active subscription & previous room state for live SFX triggers
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const heartbeatRef = useRef<number | null>(null);
+  const audioLoadingStartedAtRef = useRef<number | null>(null);
   const prevModalTimeLeftRef = useRef<number>(60);
   const prevRoomSyncRef = useRef<{
     code: string;
@@ -232,17 +269,25 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     }
   }, [currentRoom?.status]);
 
-  // Active question countdown timer (anchored to room.activeQuestion.openedAt)
+  // Active question countdown timer (anchored to openedAt + fair audio load delay so buffering never penalizes teams)
   useEffect(() => {
-    if (!currentRoom?.activeQuestion) {
+    const aq = currentRoom?.activeQuestion;
+    if (!aq) {
       prevModalTimeLeftRef.current = currentRoom?.timerDuration || 60;
       return;
     }
     const qDuration = currentRoom.timerDuration || 60;
-    const openedAt = currentRoom.activeQuestion.openedAt || Date.now();
+    const isAudioQ = inferQuestionMediaType(aq) === 'audio';
+
+    if (isAudioQ && !onlineAudioReady) {
+      setModalTimeLeft(qDuration);
+      return;
+    }
+
+    const openedAt = (aq.openedAt || Date.now()) + (isAudioQ ? onlineAudioLoadWaitMs : 0);
 
     const updateTimer = () => {
-      const elapsedSeconds = Math.floor((Date.now() - openedAt) / 1000);
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - openedAt) / 1000));
       const remaining = Math.max(0, qDuration - elapsedSeconds);
       setModalTimeLeft(remaining);
     };
@@ -250,12 +295,19 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     updateTimer();
     const interval = window.setInterval(updateTimer, 500);
     return () => window.clearInterval(interval);
-  }, [currentRoom?.activeQuestion, currentRoom?.timerDuration]);
+  }, [
+    currentRoom?.activeQuestion,
+    currentRoom?.timerDuration,
+    onlineAudioReady,
+    onlineAudioLoadWaitMs,
+  ]);
 
-  // Timer tick & time-up sound effects for Online Multiplayer
+  // Timer tick & time-up sound effects for Online Multiplayer (primary question timer)
   useEffect(() => {
     const q = currentRoom?.activeQuestion;
-    if (!q || q.isAnswerRevealed) {
+    const isAudioWaiting =
+      Boolean(q) && inferQuestionMediaType(q) === 'audio' && !onlineAudioReady;
+    if (!q || q.isAnswerRevealed || isAudioWaiting) {
       prevModalTimeLeftRef.current = modalTimeLeft;
       return;
     }
@@ -269,7 +321,21 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       soundFX.playTimerTick();
     }
     prevModalTimeLeftRef.current = modalTimeLeft;
-  }, [modalTimeLeft, currentRoom?.activeQuestion]);
+  }, [modalTimeLeft, currentRoom?.activeQuestion, onlineAudioReady]);
+
+  // Reset host-only private answer peek & media readiness whenever active question changes
+  useEffect(() => {
+    setHostAnswerPeek(false);
+    setActionBusy(false);
+    setOnlineImageLoadFailed(false);
+    setOnlineImageRetryNonce(0);
+    setOnlineZoomedImageUrl(null);
+    const aq = currentRoom?.activeQuestion;
+    const isAudioQ = inferQuestionMediaType(aq) === 'audio';
+    setOnlineAudioReady(!isAudioQ);
+    setOnlineAudioLoadWaitMs(0);
+    audioLoadingStartedAtRef.current = isAudioQ ? Date.now() : null;
+  }, [currentRoom?.activeQuestion?.tileKey, currentRoom?.activeQuestion?.openedAt]);
 
   // Synchronized real-time sound effects across all connected devices in the room
   useEffect(() => {
@@ -326,11 +392,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     }
 
     // 4. Answer Revealed
-    if (!prev.isAnswerRevealed && currentSnapshot.isAnswerRevealed) {
+    if (
+      !prev.isAnswerRevealed &&
+      currentSnapshot.isAnswerRevealed
+    ) {
       soundFX.playAnswerReveal();
     }
 
-    // 5. Scoring / Wrong / Buzz-in Feedback
+    // 6. Scoring / Wrong / Buzz-in Feedback
     const scoringTeamIdx = teamScores.findIndex(
       (score, idx) => score > (prev.teamScores[idx] ?? 0)
     );
@@ -480,39 +549,61 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     };
   }, []);
 
-  // Pre-index approved questions by subcategory and points for O(1) instant board lookups
+  // Pre-index all approved questions by subcategory and points for fast slot lookups
   const questionsBySlotMap = useMemo(() => {
-    const map = new Map<string, TriviaQuestion>();
+    const map = new Map<string, TriviaQuestion[]>();
     for (const q of approvedQuestions) {
       if (q.subcategoryId) {
         const idKey = `${q.subcategoryId}__${q.points}`;
-        if (!map.has(idKey)) map.set(idKey, q);
+        if (!map.has(idKey)) map.set(idKey, []);
+        map.get(idKey)!.push(q);
       }
       const nameKey = `${q.category.trim()}__${q.points}`;
-      if (!map.has(nameKey)) map.set(nameKey, q);
+      if (!map.has(nameKey)) map.set(nameKey, []);
+      map.get(nameKey)!.push(q);
     }
     return map;
   }, [approvedQuestions]);
 
-  const findQuestionForTile = useCallback(
-    (subId: string, subName: string, points: PointValue): TriviaQuestion | null => {
+  const findSlotForTile = useCallback(
+    (
+      subId: string,
+      subName: string,
+      points: PointValue,
+      tileKey: string
+    ): SlotSelectionResult => {
       const idKey = `${subId}__${points}`;
-      const foundById = questionsBySlotMap.get(idKey);
-      if (foundById) return foundById;
-
       const nameKey = `${subName.trim()}__${points}`;
-      const foundByName = questionsBySlotMap.get(nameKey);
-      if (foundByName) return foundByName;
+      let candidates =
+        questionsBySlotMap.get(idKey) || questionsBySlotMap.get(nameKey);
 
-      return (
-        approvedQuestions.find(
+      if (!candidates || candidates.length === 0) {
+        candidates = approvedQuestions.filter(
           (q) =>
-            (q.subcategoryId === subId || q.category === subName) &&
+            (q.subcategoryId === subId || q.category.trim() === subName.trim()) &&
             q.points === points
-        ) || null
-      );
+        );
+      }
+
+      return selectNextQuestionForSlot({
+        candidates: candidates || [],
+        tileKey,
+        currentlyOpenTileKey: currentRoom?.activeQuestion?.tileKey || null,
+        roundUsedQuestionIds: currentRoom?.roundUsedQuestionIds || [],
+        userSeenQuestionIds: seenQuestionIds || new Set<string>(),
+        allowRepeatAfterExhaustion: Boolean(
+          questionDedupSettings?.allowRepeatAfterExhaustion
+        ),
+      });
     },
-    [questionsBySlotMap, approvedQuestions]
+    [
+      questionsBySlotMap,
+      approvedQuestions,
+      currentRoom?.roundUsedQuestionIds,
+      currentRoom?.activeQuestion?.tileKey,
+      seenQuestionIds,
+      questionDedupSettings?.allowRepeatAfterExhaustion,
+    ]
   );
 
   // Active subcategories that belong to active main categories
@@ -611,8 +702,11 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   questionId: updatedRoom.activeQuestion.questionId,
                   questionText: updatedRoom.activeQuestion.questionText,
                   correctAnswer: updatedRoom.activeQuestion.correctAnswer,
+                  mediaType: inferQuestionMediaType(updatedRoom.activeQuestion),
                   imageUrl: updatedRoom.activeQuestion.imageUrl,
                   imageDescription: updatedRoom.activeQuestion.imageDescription,
+                  audioUrl: updatedRoom.activeQuestion.audioUrl,
+                  audioMaxPlays: updatedRoom.activeQuestion.audioMaxPlays ?? null,
                   explanation: updatedRoom.activeQuestion.explanation,
                   answerRevealed: updatedRoom.activeQuestion.isAnswerRevealed,
                   timeLeft: updatedRoom.timerDuration || 60,
@@ -886,11 +980,21 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     if (!currentRoom || !isHost) return;
     if (currentRoom.usedTileKeys.includes(tileKey)) return;
 
-    const matchedQ = findQuestionForTile(subId, subName, points);
+    const slot = findSlotForTile(subId, subName, points, tileKey);
+    const matchedQ = slot.question;
     if (!matchedQ) {
-      setErrorMsg('لا يتوفر سؤال مخصص لهذه الخانة حالياً.');
+      const msg = slot.isExhausted
+        ? `خلصت الأسئلة الجديدة في هذي الفئة (${subName} - ${points} نقطة).`
+        : 'لا يتوفر سؤال مخصص لهذه الخانة حالياً.';
+      setErrorMsg(msg);
+      setToastNotification(msg);
+      window.setTimeout(() => {
+        setToastNotification((prev) => (prev === msg ? null : prev));
+      }, 3600);
       return;
     }
+
+    setErrorMsg(null);
 
     const payload: ActiveQuestionState = {
       tileKey,
@@ -902,8 +1006,11 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       difficulty: matchedQ.difficulty,
       questionText: matchedQ.questionText,
       correctAnswer: matchedQ.correctAnswer,
+      mediaType: inferQuestionMediaType(matchedQ),
       imageUrl: matchedQ.imageUrl || '',
       imageDescription: matchedQ.imageDescription || '',
+      audioUrl: matchedQ.audioUrl || '',
+      audioMaxPlays: matchedQ.audioMaxPlays ?? null,
       explanation: matchedQ.explanation || '',
       isAnswerRevealed: false,
       openedAt: Date.now(),
@@ -911,6 +1018,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     };
 
     try {
+      setHostAnswerPeek(false);
       await hostSelectQuestion(currentRoom.code, currentRoom.hostId, payload);
     } catch (err) {
       console.error('Failed to open question for all players:', err);
@@ -919,10 +1027,13 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
   // 7. Host Award Points
   const handleHostAward = async (awardedTeamIndex: number) => {
-    if (!currentRoom || !isHost || !currentRoom.activeQuestion) return;
+    if (!currentRoom || !isHost || !currentRoom.activeQuestion || actionBusy) {
+      return;
+    }
     const { tileKey, questionId, points } = currentRoom.activeQuestion;
     const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
 
+    setActionBusy(true);
     try {
       await hostAwardPoints({
         code: currentRoom.code,
@@ -935,15 +1046,20 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       });
     } catch (err) {
       console.error('Failed to award points:', err);
+    } finally {
+      setActionBusy(false);
     }
   };
 
   // 8. Host Skip Question
   const handleHostSkip = async () => {
-    if (!currentRoom || !isHost || !currentRoom.activeQuestion) return;
+    if (!currentRoom || !isHost || !currentRoom.activeQuestion || actionBusy) {
+      return;
+    }
     const { tileKey, questionId } = currentRoom.activeQuestion;
     const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
 
+    setActionBusy(true);
     try {
       await hostMarkTileNoPoints({
         code: currentRoom.code,
@@ -954,16 +1070,23 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       });
     } catch (err) {
       console.error('Failed to skip question:', err);
+    } finally {
+      setActionBusy(false);
     }
   };
 
   // 9. Host Reveal Answer
   const handleHostReveal = async () => {
-    if (!currentRoom || !isHost || !currentRoom.activeQuestion) return;
+    if (!currentRoom || !isHost || !currentRoom.activeQuestion || actionBusy) {
+      return;
+    }
+    setActionBusy(true);
     try {
       await hostRevealAnswer(currentRoom.code, currentRoom.hostId);
     } catch (err) {
       console.error('Failed to reveal answer:', err);
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -1007,6 +1130,39 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       !myPlayer &&
       currentRoom.spectators?.[playerProfile.id]
   );
+
+  // Independently record the active displayed question for every signed-in participant (excluding spectators by default)
+  useEffect(() => {
+    const aq = currentRoom?.activeQuestion;
+    if (!aq?.questionId || !currentRoom?.code || !onRecordQuestionSeen) return;
+
+    const canRecord = shouldRecordQuestionSeenForParticipant({
+      userId: user?.uid || null,
+      isSpectator,
+      trackSpectators: Boolean(questionDedupSettings?.trackSpectators),
+    });
+    if (!canRecord) return;
+
+    void onRecordQuestionSeen({
+      questionId: aq.questionId,
+      category: aq.subcategoryName || aq.category || 'عام',
+      subcategoryId: aq.subcategoryId || '',
+      mode: 'online',
+      displayKey: `online_${currentRoom.code}_${aq.tileKey}_${aq.openedAt || aq.questionId}`,
+    });
+  }, [
+    currentRoom?.code,
+    currentRoom?.activeQuestion?.questionId,
+    currentRoom?.activeQuestion?.tileKey,
+    currentRoom?.activeQuestion?.openedAt,
+    currentRoom?.activeQuestion?.subcategoryName,
+    currentRoom?.activeQuestion?.subcategoryId,
+    currentRoom?.activeQuestion?.category,
+    user?.uid,
+    isSpectator,
+    questionDedupSettings?.trackSpectators,
+    onRecordQuestionSeen,
+  ]);
   const spectatorsList = useMemo(() => {
     return currentRoom?.spectators ? Object.values(currentRoom.spectators) : [];
   }, [currentRoom?.spectators]);
@@ -2464,6 +2620,37 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </div>
         </div>
 
+        {/* Host Exhaustion Notice if a selected category has no remaining unseen questions */}
+        {isHost &&
+          !questionDedupSettings?.allowRepeatAfterExhaustion &&
+          (() => {
+            const exhaustedCols = onlineBoardColumns.filter((col) => {
+              let hasPlayableUnused = false;
+              let hasExhaustedUnused = false;
+              for (const pts of POINT_TIERS) {
+                const tk = `${col.subId}__${pts}`;
+                if (currentRoom.usedTileKeys.includes(tk)) continue;
+                const sl = findSlotForTile(col.subId, col.subName, pts, tk);
+                if (sl.question) hasPlayableUnused = true;
+                else if (sl.isExhausted) hasExhaustedUnused = true;
+              }
+              return !hasPlayableUnused && hasExhaustedUnused;
+            });
+            if (exhaustedCols.length === 0) return null;
+            return (
+              <div
+                role="status"
+                className="bg-[#FFF7ED] border border-[#F07842]/40 rounded-2xl px-5 py-3.5 flex items-center gap-2 text-xs font-semibold text-[#252824]"
+              >
+                <ShieldAlert className="w-4 h-4 text-[#F07842] shrink-0" />
+                <span>
+                  خلصت الأسئلة الجديدة في هذي الفئة:{' '}
+                  {exhaustedCols.map((c) => c.subName).join('، ')} — لن يتم عرض أسئلة سبق أن ظهرت في حسابك.
+                </span>
+              </div>
+            );
+          })()}
+
         {/* GAME BOARD: Subcategory Columns × 5 Point Rows */}
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 md:p-6 shadow-sm overflow-x-auto">
           <div
@@ -2500,18 +2687,32 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 {onlineBoardColumns.map((col, cIdx) => {
                   const tileKey = `${col.subId}__${points}`;
                   const isUsed = currentRoom.usedTileKeys.includes(tileKey);
+                  const hostSlot =
+                    !isUsed && isHost
+                      ? findSlotForTile(col.subId, col.subName, points, tileKey)
+                      : null;
+                  const isHostExhausted = Boolean(
+                    hostSlot && !hostSlot.question && hostSlot.isExhausted
+                  );
 
                   return (
                     <button
                       key={`${col.subId}_${points}`}
                       type="button"
-                      disabled={isUsed || (!isHost && !isUsed)}
+                      disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
+                      title={
+                        isHostExhausted
+                          ? 'خلصت الأسئلة الجديدة في هذي الفئة'
+                          : undefined
+                      }
                       onClick={() =>
                         handleHostTileClick(col.subId, col.subName, points, tileKey)
                       }
                       className={`h-20 md:h-24 rounded-2xl border-2 font-display text-2xl md:text-3xl font-bold transition-all flex flex-col items-center justify-center cursor-pointer select-none ${
                         isUsed
                           ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
+                          : isHostExhausted
+                          ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-xs'
                           : isHost
                           ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] hover:scale-[1.02] shadow-sm active:scale-95'
                           : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
@@ -2519,6 +2720,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     >
                       {isUsed ? (
                         <Check className="w-6 h-6 text-[#777B73]/40" />
+                      ) : isHostExhausted ? (
+                        <span className="text-[10px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
+                          خلصت الأسئلة الجديدة
+                        </span>
                       ) : (
                         <span>{points}</span>
                       )}
@@ -2538,164 +2743,309 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         </div>
 
         {/* SYNCHRONIZED QUESTION MODAL (POPS UP FOR ALL PLAYERS IN REAL TIME) */}
-        {currentRoom.activeQuestion && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-3xl p-6 md:p-8 max-w-2xl w-full space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-              {/* Modal Top Bar */}
-              <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/20">
-                    {currentRoom.activeQuestion.subcategoryName}
-                  </span>
-                  <span className="font-mono text-sm font-bold text-[#F07842]">
-                    {currentRoom.activeQuestion.points} نقطة
-                  </span>
+        {currentRoom.activeQuestion && (() => {
+          const aq = currentRoom.activeQuestion;
+
+          return (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-3xl p-6 md:p-8 max-w-2xl w-full max-h-[92vh] overflow-y-auto space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                {/* Modal Top Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/20">
+                      {aq.subcategoryName}
+                    </span>
+                    <span className="font-mono text-sm font-bold text-[#F07842]">
+                      {aq.points} نقطة
+                    </span>
+                    {inferQuestionMediaType(aq) === 'audio' ? (
+                      <span className="text-xs font-bold text-[#14543D] flex items-center gap-1">
+                        <Volume2 className="w-3.5 h-3.5 text-[#F07842]" />
+                        <span>سؤال صوتي</span>
+                      </span>
+                    ) : inferQuestionMediaType(aq) === 'image' ? (
+                      <span className="text-xs font-bold text-[#F07842] flex items-center gap-1">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>سؤال صورة</span>
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Countdown Timer */}
+                  <div
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-mono text-base font-bold ${
+                      inferQuestionMediaType(aq) === 'audio' && !onlineAudioReady
+                        ? 'bg-[#EAF2EE] text-[#14543D]'
+                        : modalTimeLeft <= 10
+                        ? 'bg-rose-100 text-rose-700 animate-pulse'
+                        : 'bg-[#F3F5E9] text-[#252824]'
+                    }`}
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>
+                      {inferQuestionMediaType(aq) === 'audio' && !onlineAudioReady
+                        ? `متوقف (${modalTimeLeft}s)`
+                        : `${modalTimeLeft}s`}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Countdown Timer */}
-                <div
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-mono text-base font-bold ${
-                    modalTimeLeft <= 10
-                      ? 'bg-rose-100 text-rose-700 animate-pulse'
-                      : 'bg-[#F3F5E9] text-[#252824]'
-                  }`}
-                >
-                  <Clock className="w-4 h-4" />
-                  <span>{modalTimeLeft}s</span>
-                </div>
-              </div>
+                {/* Question Body */}
+                <div className="space-y-4 text-center py-1">
+                  <h3 className="font-display text-xl md:text-2xl font-bold text-[#252824] leading-relaxed">
+                    {aq.questionText}
+                  </h3>
 
-              {/* Question Body */}
-              <div className="space-y-4 text-center py-2">
-                <h3 className="font-display text-xl md:text-2xl font-bold text-[#252824] leading-relaxed">
-                  {currentRoom.activeQuestion.questionText}
-                </h3>
+                  {/* Optional Question Image with Error Retry & Zoom */}
+                  {inferQuestionMediaType(aq) === 'image' && aq.imageUrl && (
+                    onlineImageLoadFailed ? (
+                      <div className="bg-[#F3F5E9] border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-right">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-rose-800">
+                            تعذر تحميل صورة السؤال
+                          </div>
+                          <p className="text-[11px] text-rose-700/90">
+                            تأكد من الاتصال ثم اضغط على «إعادة المحاولة».
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOnlineImageLoadFailed(false);
+                            setOnlineImageRetryNonce((n) => n + 1);
+                          }}
+                          className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>إعادة المحاولة</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="max-w-lg mx-auto rounded-2xl overflow-hidden border border-[#E5E8DD] bg-[#F3F5E9]/50 p-2.5 space-y-2">
+                        <div className="relative flex items-center justify-center">
+                          <img
+                            key={`${aq.imageUrl}_${onlineImageRetryNonce}`}
+                            src={aq.imageUrl}
+                            referrerPolicy="no-referrer"
+                            alt={aq.imageDescription || 'صورة السؤال'}
+                            onError={() => setOnlineImageLoadFailed(true)}
+                            onClick={() => setOnlineZoomedImageUrl(aq.imageUrl || null)}
+                            className="w-full max-h-72 object-contain rounded-xl bg-[#FFFFFF] cursor-zoom-in"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setOnlineZoomedImageUrl(aq.imageUrl || null)}
+                            className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-[#252824]/75 hover:bg-[#252824] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                            title="تكبير الصورة"
+                          >
+                            <ZoomIn className="w-3.5 h-3.5" />
+                            <span>تكبير</span>
+                          </button>
+                        </div>
+                        {aq.imageDescription && (
+                          <p className="text-xs text-[#777B73] text-center">
+                            {aq.imageDescription}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  )}
 
-                {/* Optional Question Image */}
-                {currentRoom.activeQuestion.imageUrl && (
-                  <div className="max-w-md mx-auto rounded-2xl overflow-hidden border border-[#E5E8DD]">
-                    <img
-                      src={currentRoom.activeQuestion.imageUrl}
-                      alt={
-                        currentRoom.activeQuestion.imageDescription ||
-                        'صورة السؤال'
-                      }
-                      className="w-full max-h-64 object-contain bg-[#F3F5E9]"
+                  {/* Question Audio Player */}
+                  {inferQuestionMediaType(aq) === 'audio' && aq.audioUrl && (
+                    <QuestionAudioPlayer
+                      audioUrl={aq.audioUrl}
+                      maxPlays={aq.audioMaxPlays ?? null}
+                      questionKey={`online_${currentRoom.code}_${aq.tileKey}_${aq.openedAt}`}
+                      onReadyChange={(ready) => {
+                        setOnlineAudioReady(ready);
+                        if (ready && audioLoadingStartedAtRef.current) {
+                          setOnlineAudioLoadWaitMs(
+                            Math.max(0, Date.now() - audioLoadingStartedAtRef.current)
+                          );
+                          audioLoadingStartedAtRef.current = null;
+                        } else if (!ready && !audioLoadingStartedAtRef.current) {
+                          audioLoadingStartedAtRef.current = Date.now();
+                        }
+                      }}
                     />
+                  )}
+                </div>
+
+                {/* Answer Area */}
+                {aq.isAnswerRevealed ? (
+                  <div className="p-4 rounded-2xl bg-[#EAF2EE] border-2 border-[#14543D] text-center space-y-1 animate-in fade-in">
+                    <div className="text-xs font-bold text-[#14543D]">
+                      الإجابة الصحيحة:
+                    </div>
+                    <div className="font-display text-xl font-bold text-[#14543D]">
+                      {aq.correctAnswer}
+                    </div>
+                    {aq.explanation && (
+                      <p className="text-xs text-[#777B73] pt-1">
+                        {aq.explanation}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-[#F3F5E9] border border-[#E5E8DD] text-center space-y-2">
+                    <div className="text-xs font-bold text-[#777B73]">
+                      الإجابة مخفية عن الجميع حالياً
+                    </div>
+
+                    {isHost ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-[#777B73]">
+                          يمكنك التحقق من الإجابة بشكل خاص على شاشتك دون كشفها للاعبين.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHostAnswerPeek((p) => !p)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#14543D]/40 text-xs font-bold text-[#14543D] cursor-pointer"
+                        >
+                          {hostAnswerPeek ? (
+                            <>
+                              <EyeOff className="w-3.5 h-3.5" />
+                              <span>إخفاء المعاينة الخاصة</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>معاينة الإجابة للمضيف فقط</span>
+                            </>
+                          )}
+                        </button>
+                        {hostAnswerPeek && (
+                          <div className="mt-2 p-3 rounded-xl bg-[#FFFFFF] border border-[#14543D]/30 text-sm font-bold text-[#252824]">
+                            {aq.correctAnswer}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-[#777B73]">
+                        بانتظار المضيف لكشف الإجابة...
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ACTION BUTTONS */}
+                {isHost ? (
+                  <div className="space-y-3 pt-1">
+                    {!aq.isAnswerRevealed ? (
+                      <button
+                        type="button"
+                        disabled={actionBusy}
+                        onClick={handleHostReveal}
+                        className="w-full py-3.5 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] disabled:opacity-50 rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        <Eye className="w-5 h-5 text-[#F07842]" />
+                        <span>إظهار الإجابة للجميع</span>
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="text-xs font-bold text-center text-[#252824]">
+                          اختر الفريق الذي أجاب إجابة صحيحة لمنحه النقاط:
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {currentRoom.teams.map((t, tIdx) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              disabled={actionBusy}
+                              onClick={() => handleHostAward(tIdx)}
+                              className="py-3 px-3 rounded-xl text-xs font-bold text-[#FFFFFF] hover:opacity-95 disabled:opacity-50 cursor-pointer shadow-xs transition-transform active:scale-95"
+                              style={{ backgroundColor: t.color }}
+                            >
+                              + {aq.points} لـ {t.name}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2">
+                          <button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={handleHostSkip}
+                            className="flex-1 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] disabled:opacity-50 text-xs font-bold text-[#777B73] cursor-pointer"
+                          >
+                            تخطي بدون نقاط
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={() =>
+                              hostCloseActiveQuestion(
+                                currentRoom.code,
+                                currentRoom.hostId
+                              )
+                            }
+                            className="py-2.5 px-4 rounded-xl border border-[#E5E8DD] text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          >
+                            إغلاق
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : isSpectator ? (
+                  <div className="pt-2 text-center text-xs font-bold text-[#14543D] bg-[#EAF2EE] py-3 px-4 rounded-xl border border-[#14543D]/15">
+                    تتابع السؤال الآن بوضع المشاهد (للعرض فقط — يتم تحديث الإجابة والنقاط مباشرة).
+                  </div>
+                ) : (
+                  /* Non-Host Player Interactive Buttons */
+                  <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePlayerBuzz('buzz_in')}
+                      className="flex-1 w-full py-3 text-xs font-bold rounded-xl bg-[#14543D] text-[#FFFFFF] hover:bg-[#0E3D2C] cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Hand className="w-4 h-4 text-[#F07842]" />
+                      <span>أنا جاهز للإجابة! (رفع اليد)</span>
+                    </button>
+
+                    {!aq.isAnswerRevealed && (
+                      <button
+                        type="button"
+                        onClick={() => handlePlayerBuzz('reveal_answer')}
+                        className="py-3 px-4 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] cursor-pointer"
+                      >
+                        طلب كشف الإجابة 📢
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
+            </div>
+          );
+        })()}
 
-              {/* Answer Area (Revealed or Masked) */}
-              {currentRoom.activeQuestion.isAnswerRevealed ? (
-                <div className="p-4 rounded-2xl bg-[#EAF2EE] border-2 border-[#14543D] text-center space-y-1 animate-in fade-in">
-                  <div className="text-xs font-bold text-[#14543D]">
-                    الإجابة الصحيحة:
-                  </div>
-                  <div className="font-display text-xl font-bold text-[#14543D]">
-                    {currentRoom.activeQuestion.correctAnswer}
-                  </div>
-                  {currentRoom.activeQuestion.explanation && (
-                    <p className="text-xs text-[#777B73] pt-1">
-                      {currentRoom.activeQuestion.explanation}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="p-4 rounded-2xl bg-[#F3F5E9] border border-[#E5E8DD] text-center space-y-1">
-                  <div className="text-xs font-bold text-[#777B73]">
-                    الإجابة مخفية حالياً
-                  </div>
-                  <div className="text-xs text-[#777B73]">
-                    {isHost
-                      ? 'اضغط على زر كشف الإجابة لعرضها للجميع'
-                      : 'بانتظار المضيف لكشف الإجابة...'}
-                  </div>
-                </div>
-              )}
-
-              {/* ACTION BUTTONS */}
-              {isHost ? (
-                <div className="space-y-3 pt-2">
-                  {!currentRoom.activeQuestion.isAnswerRevealed ? (
-                    <button
-                      type="button"
-                      onClick={handleHostReveal}
-                      className="w-full py-3.5 text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-                    >
-                      <Eye className="w-5 h-5" />
-                      <span>إظهار الإجابة للجميع</span>
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-xs font-bold text-center text-[#252824]">
-                        اختر الفريق الذي أجاب إجابة صحيحة لمنحه النقاط:
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {currentRoom.teams.map((t, tIdx) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => handleHostAward(tIdx)}
-                            className="py-3 px-3 rounded-xl text-xs font-bold text-[#FFFFFF] hover:opacity-95 cursor-pointer shadow-xs transition-transform active:scale-95"
-                            style={{ backgroundColor: t.color }}
-                          >
-                            + {currentRoom.activeQuestion?.points} لـ {t.name}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={handleHostSkip}
-                          className="flex-1 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#777B73] cursor-pointer"
-                        >
-                          تخطي بدون نقاط
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            hostCloseActiveQuestion(
-                              currentRoom.code,
-                              currentRoom.hostId
-                            )
-                          }
-                          className="py-2.5 px-4 rounded-xl border border-[#E5E8DD] text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
-                        >
-                          إغلاق
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : isSpectator ? (
-                <div className="pt-2 text-center text-xs font-bold text-[#14543D] bg-[#EAF2EE] py-3 px-4 rounded-xl border border-[#14543D]/15">
-                  تتابع السؤال الآن بوضع المشاهد (للعرض فقط — يتم تحديث الإجابة والنقاط مباشرة).
-                </div>
-              ) : (
-                /* Non-Host Player Interactive Buttons */
-                <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => handlePlayerBuzz('buzz_in')}
-                    className="flex-1 w-full py-3 text-xs font-bold rounded-xl bg-[#14543D] text-[#FFFFFF] hover:bg-[#0E3D2C] cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Hand className="w-4 h-4 text-[#F07842]" />
-                    <span>أنا جاهز للإجابة! (رفع اليد)</span>
-                  </button>
-
-                  {!currentRoom.activeQuestion.isAnswerRevealed && (
-                    <button
-                      type="button"
-                      onClick={() => handlePlayerBuzz('reveal_answer')}
-                      className="py-3 px-4 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] cursor-pointer"
-                    >
-                      طلب كشف الإجابة 📢
-                    </button>
-                  )}
-                </div>
-              )}
+        {onlineZoomedImageUrl && currentRoom.activeQuestion && (
+          <div
+            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-[#252824]/90 backdrop-blur-xs"
+            onClick={() => setOnlineZoomedImageUrl(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="عرض صورة السؤال بالحجم الكامل"
+          >
+            <div
+              className="relative max-w-5xl max-h-[90vh] flex flex-col items-center gap-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setOnlineZoomedImageUrl(null)}
+                className="self-end px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+                <span>إغلاق التكبير</span>
+              </button>
+              <img
+                src={onlineZoomedImageUrl}
+                referrerPolicy="no-referrer"
+                alt={currentRoom.activeQuestion.imageDescription || 'صورة السؤال مكبرة'}
+                className="max-h-[80vh] max-w-[92vw] w-auto object-contain rounded-2xl border border-white/20 bg-[#FFFFFF] p-2 shadow-2xl"
+              />
             </div>
           </div>
         )}

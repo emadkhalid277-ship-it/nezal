@@ -1,3 +1,5 @@
+import { QuestionMediaType } from './game';
+
 export type RoomStatus =
   | 'waiting_for_opponent'
   | 'selecting_categories'
@@ -50,8 +52,11 @@ export interface ActiveQuestionState {
   difficulty: string;
   questionText: string;
   correctAnswer: string;
+  mediaType?: QuestionMediaType;
   imageUrl?: string;
   imageDescription?: string;
+  audioUrl?: string;
+  audioMaxPlays?: number | null;
   explanation?: string;
   isAnswerRevealed: boolean;
   openedAt: number;

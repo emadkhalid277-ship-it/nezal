@@ -29,8 +29,11 @@ import {
   Inbox,
   BarChart3,
   Clock,
+  Volume2,
 } from 'lucide-react';
 import { AdminPlayerAnalytics } from '../components/AdminPlayerAnalytics';
+import { AdminSeenQuestionsSection } from '../components/AdminSeenQuestionsSection';
+import { QuestionAudioPlayer } from '../components/QuestionAudioPlayer';
 import {
   ApprovalStatus,
   ContactSettings,
@@ -41,6 +44,8 @@ import {
   MainCategoryName,
   PointValue,
   POINT_TO_DIFFICULTY,
+  QuestionDedupSettings,
+  QuestionMediaType,
   QuestionType,
   SubcategoryItem,
   TARGET_QUESTIONS_PER_CATEGORY,
@@ -48,6 +53,7 @@ import {
   TriviaQuestion,
   UserContribution,
 } from '../types/game';
+import { DEFAULT_QUESTION_DEDUP_SETTINGS } from '../utils/questionDedupLogic';
 import {
   fetchAllContributionsForAdmin,
   approveAndPublishContribution,
@@ -64,9 +70,10 @@ import {
   CreateQuestionPayload,
   deleteMainCategoryFromFirestore,
   deleteQuestionFromFirestore,
-  deleteQuestionImageFromStorage,
   deleteSubcategorySafeFromFirestore,
+  inferQuestionMediaType,
   matchesSubcategoryQuestion,
+  normalizeAudioMaxPlays,
   saveContactSettingsToFirestore,
   saveMainCategoryImageToFirestore,
   saveMainCategoryToFirestore,
@@ -75,7 +82,9 @@ import {
   updateQuestionInFirestore,
   updateQuestionStatusInFirestore,
   uploadCategoryImageToFirebase,
+  uploadQuestionAudioToStorage,
   uploadQuestionImageToStorage,
+  validateQuestionAudioFile,
   validateQuestionImageFile,
 } from '../services/questionService';
 
@@ -87,6 +96,7 @@ interface AdminDashboardPageProps {
   questions: TriviaQuestion[];
   subcategories: SubcategoryItem[];
   contactSettings: ContactSettings;
+  questionDedupSettings?: QuestionDedupSettings;
   loadingQuestions: boolean;
   onLoginGoogle?: () => Promise<void> | void;
   onOpenAuthModal?: () => void;
@@ -95,6 +105,7 @@ interface AdminDashboardPageProps {
   onRefreshSubcategories: () => Promise<void>;
   onRefreshMainCategories: () => Promise<void>;
   onRefreshContactSettings: () => Promise<void>;
+  onRefreshQuestionDedupSettings?: () => Promise<void>;
   onSeedFoundationalPack: () => Promise<void>;
   seeding: boolean;
 }
@@ -105,6 +116,7 @@ type AdminTab =
   | 'images'
   | 'questions'
   | 'contact'
+  | 'question_dedup'
   | 'contributions'
   | 'player_analytics';
 
@@ -144,6 +156,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   questions,
   subcategories,
   contactSettings,
+  questionDedupSettings = DEFAULT_QUESTION_DEDUP_SETTINGS,
   loadingQuestions,
   onLoginGoogle,
   onOpenAuthModal,
@@ -152,6 +165,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   onRefreshSubcategories,
   onRefreshMainCategories,
   onRefreshContactSettings,
+  onRefreshQuestionDedupSettings,
   onSeedFoundationalPack,
   seeding,
 }) => {
@@ -237,12 +251,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [deleteSubConfirmQuestions, setDeleteSubConfirmQuestions] =
     useState(false);
 
-  // Add / Edit Question Modal State (Direct Questions: Text-only or Illustrated)
+  // Add / Edit Question Modal State (Direct Questions: Text, Image, or Audio)
   const [modalOpen, setModalOpen] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(
     null
   );
   const [formCategory, setFormCategory] = useState<string>('معلومات عامة');
+  const [formMediaType, setFormMediaType] = useState<QuestionMediaType>('text');
   const [formQuestionText, setFormQuestionText] = useState('');
   const [formDifficulty, setFormDifficulty] =
     useState<DifficultyLevel>('سهل');
@@ -253,12 +268,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [formStatus, setFormStatus] = useState<ApprovalStatus>('approved');
   const [formImageUrl, setFormImageUrl] = useState<string>('');
   const [formImageStoragePath, setFormImageStoragePath] = useState<string>('');
-  const [originalImageStoragePath, setOriginalImageStoragePath] =
-    useState<string>('');
   const [formImageDescription, setFormImageDescription] = useState<string>('');
   const [pendingQuestionImageFile, setPendingQuestionImageFile] =
     useState<File | null>(null);
   const [pendingQuestionImagePreviewUrl, setPendingQuestionImagePreviewUrl] =
+    useState<string | null>(null);
+  const [formAudioUrl, setFormAudioUrl] = useState<string>('');
+  const [formAudioStoragePath, setFormAudioStoragePath] = useState<string>('');
+  const [formAudioMaxPlays, setFormAudioMaxPlays] = useState<number | null>(
+    null
+  );
+  const [pendingQuestionAudioFile, setPendingQuestionAudioFile] =
+    useState<File | null>(null);
+  const [pendingQuestionAudioPreviewUrl, setPendingQuestionAudioPreviewUrl] =
     useState<string | null>(null);
   const [questionModalError, setQuestionModalError] = useState<string | null>(
     null
@@ -405,6 +427,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const questionImageInputRef = useRef<HTMLInputElement | null>(null);
+  const questionAudioInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImageTargetRef = useRef<{
     kind: 'main' | 'sub' | 'main_draft' | 'sub_draft';
     mainCat?: MainCategoryMeta;
@@ -482,10 +505,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       if (difficultyFilter !== 'الكل' && q.difficulty !== difficultyFilter) {
         return false;
       }
-      if (typeFilter === 'image' && !q.imageUrl) {
+      if (typeFilter === 'image' && inferQuestionMediaType(q) !== 'image') {
         return false;
       }
-      if (typeFilter === 'text' && q.imageUrl) {
+      if (typeFilter === 'audio' && inferQuestionMediaType(q) !== 'audio') {
+        return false;
+      }
+      if (typeFilter === 'text' && inferQuestionMediaType(q) !== 'text') {
         return false;
       }
       if (statusFilter !== 'الكل' && q.status !== statusFilter) {
@@ -535,8 +561,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     const rejected = questions.filter((q) => q.status === 'rejected').length;
     const mcq = questions.filter((q) => q.questionType === 'mcq').length;
     const direct = questions.filter((q) => q.questionType === 'direct').length;
-    const illustrated = questions.filter((q) => Boolean(q.imageUrl)).length;
-    const textOnly = questions.length - illustrated;
+    const illustrated = questions.filter(
+      (q) => inferQuestionMediaType(q) === 'image'
+    ).length;
+    const audioOnly = questions.filter(
+      (q) => inferQuestionMediaType(q) === 'audio'
+    ).length;
+    const textOnly = Math.max(0, questions.length - illustrated - audioOnly);
     return {
       total: questions.length,
       approved,
@@ -545,6 +576,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       mcq,
       direct,
       illustrated,
+      audioOnly,
       textOnly,
       duplicates: duplicateIdsSet.size,
     };
@@ -1229,7 +1261,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
   };
 
-  // --- QUESTIONS HANDLERS (Direct Questions: Text-only & Illustrated) ---
+  // --- QUESTIONS HANDLERS (Direct Questions: Text, Image, & Audio) ---
   const clearPendingQuestionImage = () => {
     if (pendingQuestionImagePreviewUrl) {
       URL.revokeObjectURL(pendingQuestionImagePreviewUrl);
@@ -1241,17 +1273,31 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
   };
 
+  const clearPendingQuestionAudio = () => {
+    if (pendingQuestionAudioPreviewUrl) {
+      URL.revokeObjectURL(pendingQuestionAudioPreviewUrl);
+    }
+    setPendingQuestionAudioFile(null);
+    setPendingQuestionAudioPreviewUrl(null);
+    if (questionAudioInputRef.current) {
+      questionAudioInputRef.current.value = '';
+    }
+  };
+
   const handleCloseQuestionModal = () => {
     clearPendingQuestionImage();
+    clearPendingQuestionAudio();
     setQuestionModalError(null);
     setModalOpen(false);
   };
 
   const openAddModal = () => {
     clearPendingQuestionImage();
+    clearPendingQuestionAudio();
     setQuestionModalError(null);
     setEditingQuestionId(null);
     setFormCategory(subcategories[0]?.name || 'معلومات عامة');
+    setFormMediaType('text');
     setFormQuestionText('');
     setFormDifficulty('سهل');
     setFormPoints(100);
@@ -1261,16 +1307,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setFormStatus('approved');
     setFormImageUrl('');
     setFormImageStoragePath('');
-    setOriginalImageStoragePath('');
     setFormImageDescription('');
+    setFormAudioUrl('');
+    setFormAudioStoragePath('');
+    setFormAudioMaxPlays(null);
     setModalOpen(true);
   };
 
   const openEditModal = (q: TriviaQuestion) => {
     clearPendingQuestionImage();
+    clearPendingQuestionAudio();
     setQuestionModalError(null);
     setEditingQuestionId(q.id);
     setFormCategory(q.category);
+    setFormMediaType(inferQuestionMediaType(q));
     setFormQuestionText(q.questionText);
     setFormDifficulty(q.difficulty);
     setFormPoints(q.points);
@@ -1280,8 +1330,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setFormStatus(q.status);
     setFormImageUrl(q.imageUrl || '');
     setFormImageStoragePath(q.imageStoragePath || '');
-    setOriginalImageStoragePath(q.imageStoragePath || '');
     setFormImageDescription(q.imageDescription || '');
+    setFormAudioUrl(q.audioUrl || '');
+    setFormAudioStoragePath(q.audioStoragePath || '');
+    setFormAudioMaxPlays(normalizeAudioMaxPlays(q.audioMaxPlays));
     setModalOpen(true);
   };
 
@@ -1305,6 +1357,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     const previewUrl = URL.createObjectURL(file);
     setPendingQuestionImageFile(file);
     setPendingQuestionImagePreviewUrl(previewUrl);
+    setFormMediaType('image');
   };
 
   const handleRemoveQuestionImage = () => {
@@ -1312,6 +1365,36 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setFormImageUrl('');
     setFormImageStoragePath('');
     setFormImageDescription('');
+    setQuestionModalError(null);
+  };
+
+  const handleQuestionAudioFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    const validationError = validateQuestionAudioFile(file);
+    if (validationError) {
+      setQuestionModalError(validationError);
+      return;
+    }
+
+    setQuestionModalError(null);
+    if (pendingQuestionAudioPreviewUrl) {
+      URL.revokeObjectURL(pendingQuestionAudioPreviewUrl);
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setPendingQuestionAudioFile(file);
+    setPendingQuestionAudioPreviewUrl(previewUrl);
+    setFormMediaType('audio');
+  };
+
+  const handleRemoveQuestionAudio = () => {
+    clearPendingQuestionAudio();
+    setFormAudioUrl('');
+    setFormAudioStoragePath('');
     setQuestionModalError(null);
   };
 
@@ -1327,35 +1410,89 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       return;
     }
 
+    if (
+      formMediaType === 'image' &&
+      !pendingQuestionImageFile &&
+      !formImageUrl.trim()
+    ) {
+      setQuestionModalError(
+        'يرجى رفع صورة للسؤال المصوّر أو إدخال رابط صورة موثوق، أو اختيار «سؤال نصي عادي».'
+      );
+      return;
+    }
+
+    if (
+      formMediaType === 'image' &&
+      !pendingQuestionImageFile &&
+      formImageUrl.trim() &&
+      !formImageUrl.trim().startsWith('http://') &&
+      !formImageUrl.trim().startsWith('https://')
+    ) {
+      setQuestionModalError('يجب أن يبدأ رابط الصورة بـ https:// أو http://');
+      return;
+    }
+
+    if (
+      formMediaType === 'audio' &&
+      !pendingQuestionAudioFile &&
+      !formAudioUrl.trim()
+    ) {
+      setQuestionModalError(
+        'يرجى رفع مقطع صوتي للسؤال الصوتي أو إدخال رابط صوتي موثوق، أو اختيار «سؤال نصي عادي».'
+      );
+      return;
+    }
+
+    if (
+      formMediaType === 'audio' &&
+      !pendingQuestionAudioFile &&
+      formAudioUrl.trim() &&
+      !formAudioUrl.trim().startsWith('http://') &&
+      !formAudioUrl.trim().startsWith('https://')
+    ) {
+      setQuestionModalError('يجب أن يبدأ الرابط الصوتي بـ https:// أو http://');
+      return;
+    }
+
     const matchedSub = subcategories.find(
       (s) => s.name === formCategory.trim()
     );
 
     setActionLoading(true);
-    let finalImageUrl = formImageUrl.trim();
-    let finalStoragePath = formImageStoragePath.trim();
-    let newlyUploadedStoragePath = '';
+    let finalImageUrl = formMediaType === 'image' ? formImageUrl.trim() : '';
+    let finalImageStoragePath =
+      formMediaType === 'image' ? formImageStoragePath.trim() : '';
+    let finalAudioUrl = formMediaType === 'audio' ? formAudioUrl.trim() : '';
+    let finalAudioStoragePath =
+      formMediaType === 'audio' ? formAudioStoragePath.trim() : '';
 
     try {
-      // 1. If a new image file was selected from the device, upload it to Firebase Storage first
-      if (pendingQuestionImageFile) {
+      // 1. Upload newly selected image or audio file to Firebase Storage (never auto-delete old Storage files)
+      if (formMediaType === 'image' && pendingQuestionImageFile) {
         const uploaded = await uploadQuestionImageToStorage(
           pendingQuestionImageFile,
           matchedSub?.id || formCategory.trim(),
           editingQuestionId || undefined
         );
         finalImageUrl = uploaded.imageUrl;
-        finalStoragePath = uploaded.imageStoragePath;
-        newlyUploadedStoragePath = uploaded.imageStoragePath;
+        finalImageStoragePath = uploaded.imageStoragePath;
+      } else if (formMediaType === 'audio' && pendingQuestionAudioFile) {
+        const uploaded = await uploadQuestionAudioToStorage(
+          pendingQuestionAudioFile,
+          matchedSub?.id || formCategory.trim(),
+          editingQuestionId || undefined
+        );
+        finalAudioUrl = uploaded.audioUrl;
+        finalAudioStoragePath = uploaded.audioStoragePath;
       }
 
       // 2. Construct payload (never Base64)
-      const hasImage = Boolean(finalImageUrl);
       const payload: CreateQuestionPayload = {
         subcategoryId: matchedSub?.id,
         category: formCategory.trim(),
         questionText: formQuestionText.trim(),
         questionType: 'direct',
+        mediaType: formMediaType,
         difficulty: formDifficulty,
         points: formPoints,
         options: [],
@@ -1363,42 +1500,49 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         explanation: formExplanation.trim(),
         source: formSource.trim(),
         status: formStatus,
-        imageUrl: hasImage ? finalImageUrl : '',
-        imageStoragePath: hasImage ? finalStoragePath : '',
-        imageDescription: hasImage ? formImageDescription.trim() : '',
+        imageUrl: formMediaType === 'image' ? finalImageUrl : '',
+        imageStoragePath:
+          formMediaType === 'image' ? finalImageStoragePath : '',
+        imageDescription:
+          formMediaType === 'image' ? formImageDescription.trim() : '',
+        audioUrl: formMediaType === 'audio' ? finalAudioUrl : '',
+        audioStoragePath:
+          formMediaType === 'audio' ? finalAudioStoragePath : '',
+        audioMaxPlays:
+          formMediaType === 'audio'
+            ? normalizeAudioMaxPlays(formAudioMaxPlays)
+            : null,
       };
 
       if (editingQuestionId) {
-        await updateQuestionInFirestore(editingQuestionId, payload, user?.uid || 'system');
-        // Clean up old Storage file if the image was replaced or deleted
-        if (
-          originalImageStoragePath &&
-          originalImageStoragePath !== finalStoragePath
-        ) {
-          await deleteQuestionImageFromStorage(originalImageStoragePath);
-        }
+        await updateQuestionInFirestore(
+          editingQuestionId,
+          payload,
+          user?.uid || 'system'
+        );
         setStatusBanner(
-          hasImage
-            ? 'تم تحديث السؤال المصوّر وحفظ صورته في Firebase Storage بنجاح.'
+          formMediaType === 'audio'
+            ? 'تم تحديث السؤال الصوتي وحفظ المقطع الصوتي بنجاح.'
+            : formMediaType === 'image'
+            ? 'تم تحديث سؤال الصورة وحفظه بنجاح.'
             : 'تم تحديث السؤال النصي المباشر بنجاح في قاعدة البيانات.'
         );
       } else {
         await createQuestionInFirestore(payload, user.uid);
         setStatusBanner(
-          hasImage
-            ? 'تمت إضافة السؤال المصوّر الجديد ورفع صورته إلى Firebase Storage بنجاح.'
+          formMediaType === 'audio'
+            ? 'تمت إضافة السؤال الصوتي الجديد بنجاح إلى Firestore.'
+            : formMediaType === 'image'
+            ? 'تمت إضافة سؤال الصورة الجديد بنجاح إلى Firestore.'
             : 'تمت إضافة السؤال النصي المباشر الجديد بنجاح إلى Firestore.'
         );
       }
 
       clearPendingQuestionImage();
+      clearPendingQuestionAudio();
       setModalOpen(false);
       await onRefreshQuestions();
     } catch (err) {
-      // If Firestore write failed after a new Storage upload, clean up the orphan Storage file
-      if (newlyUploadedStoragePath && !formImageUrl) {
-        await deleteQuestionImageFromStorage(newlyUploadedStoragePath);
-      }
       // Preserve all question form fields inside the open modal so no data is lost
       const errMsg =
         err instanceof Error ? err.message : 'حدث خطأ غير متوقع أثناء الحفظ.';
@@ -1978,6 +2122,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               {pendingContributionsCount} جديدة
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('question_dedup')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+            adminTab === 'question_dedup'
+              ? 'bg-[#14543D] text-white shadow-xs'
+              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-[#F07842]" />
+          <span>منع تكرار الأسئلة</span>
         </button>
 
         <button
@@ -2839,8 +2996,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
             <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
               <div className="text-xs text-[#777B73]">أنواع الأسئلة</div>
-              <div className="font-mono tabular-nums text-base font-bold text-[#14543D]">
-                {counts.illustrated} مصوّر · {counts.textOnly} نصي
+              <div className="font-mono tabular-nums text-xs sm:text-sm font-bold text-[#14543D]">
+                {counts.textOnly} نصي · {counts.illustrated} صورة · {counts.audioOnly} صوت
               </div>
             </div>
             <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
@@ -2952,9 +3109,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   aria-label="تصفية حسب نوع السؤال"
                   className="w-full px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none"
                 >
-                  <option value="الكل">كل الأنواع (نصي ومصوّر)</option>
-                  <option value="text">سؤال نصي بدون صورة ({counts.textOnly})</option>
-                  <option value="image">سؤال مصوّر ({counts.illustrated})</option>
+                  <option value="الكل">كل الأنواع</option>
+                  <option value="text">سؤال نصي ({counts.textOnly})</option>
+                  <option value="image">سؤال صورة ({counts.illustrated})</option>
+                  <option value="audio">سؤال صوتي ({counts.audioOnly})</option>
                 </select>
               </div>
 
@@ -3181,7 +3339,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             </div>
                           </td>
                           <td className="py-3.5 px-4 whitespace-nowrap">
-                            {q.imageUrl ? (
+                            {inferQuestionMediaType(q) === 'audio' ? (
+                              <div className="flex items-center gap-2">
+                                <div className="w-9 h-9 rounded-lg bg-[#EAF2EE] border border-[#C5DDD1] flex items-center justify-center shrink-0">
+                                  <Volume2 className="w-4 h-4 text-[#14543D]" />
+                                </div>
+                                <div>
+                                  <div className="text-[#14543D] font-bold">
+                                    سؤال صوتي
+                                  </div>
+                                  <div className="text-[10px] text-[#777B73]">
+                                    {q.audioMaxPlays
+                                      ? `حد التشغيل: ${q.audioMaxPlays} ${q.audioMaxPlays === 1 ? 'مرة' : 'مرات'}`
+                                      : 'تشغيل غير محدود'}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : inferQuestionMediaType(q) === 'image' && q.imageUrl ? (
                               <div className="flex items-center gap-2">
                                 <img
                                   src={q.imageUrl}
@@ -3191,7 +3365,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 <div>
                                   <div className="text-[#F07842] font-bold flex items-center gap-1">
                                     <ImageIcon className="w-3.5 h-3.5" />
-                                    <span>سؤال مصوّر</span>
+                                    <span>سؤال صورة</span>
                                   </div>
                                   {q.imageDescription && (
                                     <div className="text-[10px] text-[#777B73] max-w-[120px] truncate">
@@ -3809,6 +3983,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* SECTION 7: PLAYER & CATEGORY ANALYTICS DASHBOARD */}
       {adminTab === 'player_analytics' && (
         <AdminPlayerAnalytics isAdmin={isAdmin} subcategories={subcategories} />
+      )}
+
+      {/* SECTION 8: PER-PLAYER QUESTION DEDUP SETTINGS & SEEN HISTORY ANALYTICS */}
+      {adminTab === 'question_dedup' && (
+        <AdminSeenQuestionsSection
+          adminUid={user?.uid || ''}
+          isAdmin={isAdmin}
+          questions={questions}
+          subcategories={subcategories}
+          questionDedupSettings={questionDedupSettings}
+          onRefreshQuestionDedupSettings={async () => {
+            if (onRefreshQuestionDedupSettings) {
+              await onRefreshQuestionDedupSettings();
+            }
+          }}
+        />
       )}
 
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}
@@ -4641,24 +4831,83 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                     <span>{questionModalError}</span>
                   </div>
-                  {pendingQuestionImageFile && (
+                  {(pendingQuestionImageFile || pendingQuestionAudioFile) && (
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-rose-200/70 text-[11px]">
                       <span>
-                        بيانات السؤال النصية محفوظة بالكامل. يمكنك إعادة المحاولة أو إزالة الصورة المعلقة وحفظ السؤال كنص فقط.
+                        بيانات السؤال النصية محفوظة بالكامل. يمكنك إعادة المحاولة أو إزالة الملف المعلق وحفظ السؤال.
                       </span>
                       <button
                         type="button"
-                        onClick={handleRemoveQuestionImage}
+                        onClick={() => {
+                          if (pendingQuestionImageFile) handleRemoveQuestionImage();
+                          if (pendingQuestionAudioFile) handleRemoveQuestionAudio();
+                        }}
                         className="px-2.5 py-1 rounded-lg bg-white border border-rose-300 text-rose-700 font-bold hover:bg-rose-100 cursor-pointer shrink-0"
                       >
-                        إزالة الصورة المعلقة
+                        إزالة الملف المعلق
                       </button>
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Question Media Type Selector */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-[#252824]">
+                  نوع السؤال
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormMediaType('text');
+                      setQuestionModalError(null);
+                    }}
+                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                      formMediaType === 'text'
+                        ? 'bg-[#14543D] text-white border-[#14543D]'
+                        : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
+                    }`}
+                  >
+                    <FileQuestion className="w-4 h-4" />
+                    <span>سؤال نصي عادي</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormMediaType('image');
+                      setQuestionModalError(null);
+                    }}
+                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                      formMediaType === 'image'
+                        ? 'bg-[#F07842] text-white border-[#F07842]'
+                        : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#F07842]/40'
+                    }`}
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    <span>سؤال بصورة</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormMediaType('audio');
+                      setQuestionModalError(null);
+                    }}
+                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                      formMediaType === 'audio'
+                        ? 'bg-[#14543D] text-white border-[#14543D]'
+                        : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
+                    }`}
+                  >
+                    <Volume2 className="w-4 h-4 text-[#F07842]" />
+                    <span>سؤال صوتي</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block font-bold text-[#252824]">
                     الفئة الفرعية
@@ -4682,22 +4931,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       );
                     })}
                   </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
-                    نوع السؤال المباشر
-                  </label>
-                  {pendingQuestionImagePreviewUrl || formImageUrl ? (
-                    <div className="w-full px-3 py-2.5 rounded-xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#F07842] font-bold flex items-center gap-1.5">
-                      <ImageIcon className="w-3.5 h-3.5 shrink-0" />
-                      <span>سؤال مصوّر (نص + صورة)</span>
-                    </div>
-                  ) : (
-                    <div className="w-full px-3 py-2.5 rounded-xl bg-[#EAF2EE] border border-[#C5DDD1] text-[#14543D] font-bold">
-                      سؤال نصي بدون صورة
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -4731,103 +4964,276 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   required
                   value={formQuestionText}
                   onChange={(e) => setFormQuestionText(e.target.value)}
-                  placeholder="اكتب السؤال المباشر بصياغة عربية واضحة ومكتملة بدون الحاجة لخيارات..."
+                  placeholder={
+                    formMediaType === 'image'
+                      ? 'مثال: لمن يعود هذا الشعار؟ أو ما اسم المعلم الظاهر في الصورة؟'
+                      : formMediaType === 'audio'
+                      ? 'مثال: استمع إلى المقطع الصوتي وتعرّف على الصوت أو صاحب النشيد...'
+                      : 'اكتب السؤال المباشر بصياغة عربية واضحة ومكتملة بدون الحاجة لخيارات...'
+                  }
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
                 />
               </div>
 
-              {/* Optional Question Image Upload & Live Preview Section */}
-              <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-[#252824] flex items-center gap-1.5">
-                      <ImageIcon className="w-4 h-4 text-[#14543D]" />
-                      <span>صورة السؤال (اختياري — للسؤال المصوّر)</span>
+              {/* Image Upload & Live Preview Section (Shown when mediaType === 'image') */}
+              {formMediaType === 'image' && (
+                <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-[#F07842]" />
+                        <span>صورة السؤال (مطلوبة لسؤال الصورة)</span>
+                      </div>
+                      <p className="text-[11px] text-[#777B73]">
+                        الصيغ المدعومة: JPG وPNG وWEBP · الحد الأقصى للحجم: 5 ميجابايت · أو أدخل رابط صورة HTTPS موثوق.
+                      </p>
                     </div>
-                    <p className="text-[11px] text-[#777B73]">
-                      الصيغ المدعومة: JPG وPNG وWEBP · الحد الأقصى للحجم: 5 ميجابايت · يمكنك تركه فارغاً لإنشاء سؤال نصي عادي.
-                    </p>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={questionImageInputRef}
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                      onChange={handleQuestionImageFileChange}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      disabled={actionLoading}
-                      onClick={() => questionImageInputRef.current?.click()}
-                      className="px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>
-                        {pendingQuestionImagePreviewUrl || formImageUrl
-                          ? 'تغيير الصورة'
-                          : 'رفع صورة من الجهاز'}
-                      </span>
-                    </button>
-
-                    {(pendingQuestionImagePreviewUrl || formImageUrl) && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={questionImageInputRef}
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                        onChange={handleQuestionImageFileChange}
+                        className="hidden"
+                      />
                       <button
                         type="button"
                         disabled={actionLoading}
-                        onClick={handleRemoveQuestionImage}
-                        className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
+                        onClick={() => questionImageInputRef.current?.click()}
+                        className="px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>حذف الصورة</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {(pendingQuestionImagePreviewUrl || formImageUrl) && (
-                  <div className="space-y-3 pt-2 border-t border-[#E5E8DD]">
-                    <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3 flex flex-col items-center gap-2">
-                      <div className="w-full flex items-center justify-between text-[11px] text-[#777B73]">
-                        <span className="font-semibold text-[#14543D]">
-                          معاينة الصورة قبل الحفظ:
-                        </span>
+                        <Upload className="w-3.5 h-3.5" />
                         <span>
-                          {pendingQuestionImageFile
-                            ? `ملف جديد: ${pendingQuestionImageFile.name} (${(
-                                pendingQuestionImageFile.size /
-                                (1024 * 1024)
-                              ).toFixed(2)} MB)`
-                            : 'صورة محفوظة في Firebase Storage'}
+                          {pendingQuestionImagePreviewUrl || formImageUrl
+                            ? 'تغيير الصورة'
+                            : 'رفع صورة من الجهاز'}
                         </span>
-                      </div>
-                      <img
-                        src={pendingQuestionImagePreviewUrl || formImageUrl}
-                        alt={
-                          formImageDescription ||
-                          'معاينة صورة السؤال قبل الحفظ'
-                        }
-                        className="max-h-52 w-auto max-w-full object-contain rounded-lg border border-[#E5E8DD]"
-                      />
-                    </div>
+                      </button>
 
+                      {(pendingQuestionImagePreviewUrl || formImageUrl) && (
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={handleRemoveQuestionImage}
+                          className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>إزالة الصورة</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {!pendingQuestionImageFile && (
                     <div className="space-y-1">
-                      <label className="block font-bold text-[#252824]">
-                        وصف الصورة (اختياري)
+                      <label className="block text-[11px] font-bold text-[#777B73]">
+                        أو رابط صورة موثوق (HTTPS):
                       </label>
                       <input
-                        type="text"
-                        value={formImageDescription}
-                        onChange={(e) =>
-                          setFormImageDescription(e.target.value)
-                        }
-                        placeholder="توضيح مختصر للصورة يظهر أسفلها أو كوصف بديل عند الحاجة..."
-                        className="w-full px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824]"
+                        type="url"
+                        dir="ltr"
+                        value={formImageUrl}
+                        onChange={(e) => {
+                          setFormImageUrl(e.target.value);
+                          setFormImageStoragePath('');
+                        }}
+                        placeholder="https://..."
+                        className="w-full px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824] text-left"
                       />
                     </div>
+                  )}
+
+                  {(pendingQuestionImagePreviewUrl || formImageUrl) && (
+                    <div className="space-y-3 pt-2 border-t border-[#E5E8DD]">
+                      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3 flex flex-col items-center gap-2">
+                        <div className="w-full flex items-center justify-between text-[11px] text-[#777B73]">
+                          <span className="font-semibold text-[#14543D]">
+                            معاينة الصورة قبل الحفظ:
+                          </span>
+                          <span>
+                            {pendingQuestionImageFile
+                              ? `ملف جديد: ${pendingQuestionImageFile.name} (${(
+                                  pendingQuestionImageFile.size /
+                                  (1024 * 1024)
+                                ).toFixed(2)} MB)`
+                              : 'رابط صورة محفوظ'}
+                          </span>
+                        </div>
+                        <img
+                          src={pendingQuestionImagePreviewUrl || formImageUrl}
+                          alt={
+                            formImageDescription ||
+                            'معاينة صورة السؤال قبل الحفظ'
+                          }
+                          className="max-h-52 w-auto max-w-full object-contain rounded-lg border border-[#E5E8DD]"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block font-bold text-[#252824]">
+                          وصف الصورة (اختياري — لا يظهر قبل الإجابة إذا كان يكشف الحل)
+                        </label>
+                        <input
+                          type="text"
+                          value={formImageDescription}
+                          onChange={(e) =>
+                            setFormImageDescription(e.target.value)
+                          }
+                          placeholder="وصف بديل مختصر للصورة..."
+                          className="w-full px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824]"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Audio Upload, Preview & Max Plays Section (Shown when mediaType === 'audio') */}
+              {formMediaType === 'audio' && (
+                <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                        <Volume2 className="w-4 h-4 text-[#14543D]" />
+                        <span>المقطع الصوتي للسؤال (مطلوب للسؤال الصوتي)</span>
+                      </div>
+                      <p className="text-[11px] text-[#777B73]">
+                        الصيغ المدعومة: MP3 وWAV وOGG وM4A وAAC وWEBM · الحد الأقصى: 10 ميجابايت · لا يظهر اسم الملف للاعبين.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={questionAudioInputRef}
+                        type="file"
+                        accept=".mp3,.wav,.ogg,.m4a,.aac,.webm,audio/*"
+                        onChange={handleQuestionAudioFileChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => questionAudioInputRef.current?.click()}
+                        className="px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>
+                          {pendingQuestionAudioPreviewUrl || formAudioUrl
+                            ? 'تغيير المقطع'
+                            : 'رفع ملف صوتي'}
+                        </span>
+                      </button>
+
+                      {(pendingQuestionAudioPreviewUrl || formAudioUrl) && (
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={handleRemoveQuestionAudio}
+                          className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>إزالة المقطع</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  {!pendingQuestionAudioFile && (
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold text-[#777B73]">
+                        أو رابط صوتي موثوق (HTTPS):
+                      </label>
+                      <input
+                        type="url"
+                        dir="ltr"
+                        value={formAudioUrl}
+                        onChange={(e) => {
+                          setFormAudioUrl(e.target.value);
+                          setFormAudioStoragePath('');
+                        }}
+                        placeholder="https://..."
+                        className="w-full px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824] text-left"
+                      />
+                    </div>
+                  )}
+
+                  {(pendingQuestionAudioPreviewUrl || formAudioUrl) && (
+                    <div className="space-y-2 pt-2 border-t border-[#E5E8DD]">
+                      <div className="flex items-center justify-between text-[11px] text-[#777B73]">
+                        <span className="font-semibold text-[#14543D]">
+                          معاينة المقطع الصوتي قبل الحفظ:
+                        </span>
+                        <span>
+                          {pendingQuestionAudioFile
+                            ? `ملف جديد (${(
+                                pendingQuestionAudioFile.size /
+                                (1024 * 1024)
+                              ).toFixed(2)} MB)`
+                            : 'ملف صوتي محفوظ'}
+                        </span>
+                      </div>
+                      <QuestionAudioPlayer
+                        audioUrl={pendingQuestionAudioPreviewUrl || formAudioUrl}
+                        maxPlays={formAudioMaxPlays}
+                        previewMode
+                        questionKey={`admin_preview_${editingQuestionId || 'new'}`}
+                      />
+                    </div>
+                  )}
+
+                  {/* Configurable Max Play Count */}
+                  <div className="pt-2 border-t border-[#E5E8DD] space-y-2">
+                    <label className="block font-bold text-[#252824]">
+                      عدد مرات تشغيل المقطع المسموحة لكل سؤال
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[
+                        { label: 'غير محدود', value: null },
+                        { label: 'مرة واحدة (1)', value: 1 },
+                        { label: 'مرتان (2)', value: 2 },
+                        { label: '3 مرات', value: 3 },
+                      ].map((opt) => {
+                        const isSelected = formAudioMaxPlays === opt.value;
+                        return (
+                          <button
+                            key={String(opt.value)}
+                            type="button"
+                            onClick={() => setFormAudioMaxPlays(opt.value)}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-[#F07842] text-white border-[#F07842]'
+                                : 'bg-[#FFFFFF] text-[#252824] border-[#E5E8DD] hover:border-[#F07842]/50'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+
+                      <div className="flex items-center gap-1.5 mr-auto">
+                        <span className="text-[11px] text-[#777B73]">مخصص:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={20}
+                          placeholder="—"
+                          value={formAudioMaxPlays ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) {
+                              setFormAudioMaxPlays(null);
+                            } else {
+                              setFormAudioMaxPlays(normalizeAudioMaxPlays(val));
+                            }
+                          }}
+                          className="w-16 px-2 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] text-center font-mono tabular-nums text-xs text-[#252824]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -4906,6 +5312,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   {actionLoading
                     ? pendingQuestionImageFile
                       ? 'جاري رفع الصورة وحفظ السؤال...'
+                      : pendingQuestionAudioFile
+                      ? 'جاري رفع المقطع الصوتي وحفظ السؤال...'
                       : 'جاري الحفظ...'
                     : 'حفظ السؤال في Firestore'}
                 </button>
