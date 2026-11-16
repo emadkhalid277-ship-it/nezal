@@ -20,6 +20,20 @@
     scroll-behavior: smooth;
     background-color: #F3F5E9;
     color: #252824;
+    overflow-x: clip;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    overflow-x: clip;
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
   }
 
   h1, h2, h3, h4, .font-display {
@@ -30,6 +44,23 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* Prevent iOS Safari automatic page zoom when focusing text inputs below 16px */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

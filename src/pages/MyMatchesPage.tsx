@@ -174,7 +174,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
   // Not signed in state
   if (!user) {
     return (
-      <div className="max-w-[700px] mx-auto px-4 py-16 text-center space-y-6">
+      <div className="max-w-[700px] mx-auto px-3 sm:px-6 py-8 md:py-16 text-center space-y-6">
         <div className="w-16 h-16 rounded-3xl bg-[#EAF2EE] border border-[#14543D]/20 text-[#14543D] flex items-center justify-center mx-auto">
           <Trophy className="w-8 h-8 text-[#F07842]" />
         </div>
@@ -190,7 +190,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="px-8 py-3.5 rounded-2xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer shadow-sm transition-all"
+            className="w-full sm:w-auto px-8 py-3.5 min-h-[48px] rounded-2xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer shadow-sm transition-all"
           >
             تسجيل الدخول / إنشاء حساب
           </button>
@@ -200,7 +200,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
   }
 
   return (
-    <div className="max-w-[1040px] mx-auto px-4 py-8 md:py-12 space-y-8">
+    <div className="max-w-[1040px] mx-auto px-3 sm:px-6 py-5 md:py-12 space-y-6 md:space-y-8">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
         <div>
@@ -247,7 +247,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
       <UserMatchesStats matches={matches} />
 
       {/* Multi-Filter Controls Section */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4 shadow-xs">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-3">
           <div className="flex items-center gap-2 text-xs font-bold text-[#252824]">
             <Filter className="w-4 h-4 text-[#14543D]" />
@@ -297,43 +297,43 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
             <span className="text-xs font-bold text-[#777B73] block">
               نوع المباراة:
             </span>
-            <div className="grid grid-cols-3 gap-1.5 bg-[#F3F5E9] p-1 rounded-xl">
+            <div className="grid grid-cols-3 gap-1 sm:gap-1.5 bg-[#F3F5E9] p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setModeFilter('all')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   modeFilter === 'all'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
                     : 'text-[#777B73] hover:text-[#252824]'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5" />
+                <Layers className="w-3.5 h-3.5 shrink-0 hidden sm:inline" />
                 <span>الكل ({totalCount})</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setModeFilter('local')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   modeFilter === 'local'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
                     : 'text-[#777B73] hover:text-[#252824]'
                 }`}
               >
-                <Users className="w-3.5 h-3.5 text-[#14543D]" />
+                <Users className="w-3.5 h-3.5 text-[#14543D] shrink-0 hidden sm:inline" />
                 <span>محلية ({localCount})</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setModeFilter('online')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   modeFilter === 'online'
                     ? 'bg-[#FFFFFF] text-[#F07842] shadow-xs'
                     : 'text-[#777B73] hover:text-[#252824]'
                 }`}
               >
-                <Radio className="w-3.5 h-3.5 text-[#F07842]" />
+                <Radio className="w-3.5 h-3.5 text-[#F07842] shrink-0 hidden sm:inline" />
                 <span>أونلاين ({onlineCount})</span>
               </button>
             </div>
@@ -344,43 +344,43 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
             <span className="text-xs font-bold text-[#777B73] block">
               حالة المباراة:
             </span>
-            <div className="grid grid-cols-3 gap-1.5 bg-[#F3F5E9] p-1 rounded-xl">
+            <div className="grid grid-cols-3 gap-1 sm:gap-1.5 bg-[#F3F5E9] p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   statusFilter === 'all'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
                     : 'text-[#777B73] hover:text-[#252824]'
                 }`}
               >
-                <span>جميع الحالات</span>
+                <span>الكل</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setStatusFilter('completed')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   statusFilter === 'completed'
                     ? 'bg-[#FFFFFF] text-emerald-700 shadow-xs'
                     : 'text-[#777B73] hover:text-[#252824]'
                 }`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 hidden sm:inline" />
                 <span>مكتملة ({completedCount})</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setStatusFilter('in_progress')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   statusFilter === 'in_progress'
                     ? 'bg-[#FFFFFF] text-amber-700 shadow-xs'
                     : 'text-[#777B73] hover:text-[#252824]'
                 }`}
               >
-                <Clock className="w-3.5 h-3.5 text-amber-600" />
-                <span>غير مكتملة ({inProgressCount})</span>
+                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0 hidden sm:inline" />
+                <span>جارية ({inProgressCount})</span>
               </button>
             </div>
           </div>
@@ -499,7 +499,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
             return (
               <div
                 key={m.id}
-                className={`bg-[#FFFFFF] border-2 rounded-2xl p-5 md:p-6 space-y-4 transition-all shadow-xs ${
+                className={`bg-[#FFFFFF] border-2 rounded-2xl p-4 sm:p-5 md:p-6 space-y-4 transition-all shadow-xs ${
                   isInProgress
                     ? 'border-[#14543D]/40 bg-[#F3F5E9]/20'
                     : 'border-[#E5E8DD]'
@@ -645,7 +645,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                     <button
                       type="button"
                       onClick={() => handleResume(m)}
-                      className={`w-full sm:w-auto px-6 py-2.5 rounded-xl text-[#FFFFFF] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-transform active:scale-95 touch-manipulation ${
+                      className={`w-full sm:w-auto px-6 py-2.5 min-h-[44px] rounded-xl text-[#FFFFFF] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-transform active:scale-95 touch-manipulation ${
                         isOnline
                           ? 'bg-[#F07842] hover:bg-[#d45e2a]'
                           : 'bg-[#14543D] hover:bg-[#0E3D2C]'

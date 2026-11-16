@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import {
   auth,
   checkUserIsAdmin,
@@ -17,7 +17,14 @@ import {
   SubcategoryItem,
   TeamConfig,
   TriviaQuestion,
+  VisualEffectsSettings,
 } from './types/game';
+import {
+  DEFAULT_VISUAL_EFFECTS_SETTINGS,
+  fetchVisualEffectsSettingsFromFirestore,
+  loadCachedVisualEffectsSettings,
+} from './services/visualEffectsService';
+import { evaluateMatchOutcome } from './utils/matchOutcome';
 import {
   DEFAULT_SUBCATEGORIES,
   INITIAL_SEED_QUESTIONS,
@@ -50,19 +57,12 @@ import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { Footer } from './components/Footer';
 import { HomePage } from './pages/HomePage';
+import { CategorySelectionPage } from './pages/CategorySelectionPage';
+import { GameBoardPage } from './pages/GameBoardPage';
+import { ResultsPage } from './pages/ResultsPage';
+import { HowToPlayPage } from './pages/HowToPlayPage';
 
-// Code-split heavy pages to keep initial bundle ultra-light and fast
-const CategorySelectionPage = lazy(() =>
-  import('./pages/CategorySelectionPage').then((m) => ({
-    default: m.CategorySelectionPage,
-  }))
-);
-const GameBoardPage = lazy(() =>
-  import('./pages/GameBoardPage').then((m) => ({ default: m.GameBoardPage }))
-);
-const ResultsPage = lazy(() =>
-  import('./pages/ResultsPage').then((m) => ({ default: m.ResultsPage }))
-);
+// Code-split online-only & admin pages to keep initial bundle light
 const AdminDashboardPage = lazy(() =>
   import('./pages/AdminDashboardPage').then((m) => ({
     default: m.AdminDashboardPage,
@@ -91,11 +91,6 @@ const FriendsPage = lazy(() =>
     default: m.FriendsPage,
   }))
 );
-const HowToPlayPage = lazy(() =>
-  import('./pages/HowToPlayPage').then((m) => ({
-    default: m.HowToPlayPage,
-  }))
-);
 import { ResumeMatchModal } from './components/ResumeMatchModal';
 import { UserGameMatch } from './types/match';
 import {
@@ -116,15 +111,27 @@ import {
   syncPublicPlayerProfile,
 } from './services/presenceService';
 import { PresenceStatus } from './types/social';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { PWAInstallBanner } from './components/PWAInstallButton';
+import { OfflineSyncModal } from './components/OfflineSyncModal';
+import {
+  OfflineDataStatus,
+  getOfflineDataStatus,
+  loadActiveOfflineDataset,
+  syncOfflineDatasetAtomically,
+} from './services/offlineStore';
+import { NizalLoadingScreen } from './components/NizalLoadingScreen';
+
+type GamePlayMode = 'offline_local' | 'online_cloud' | null;
 
 function PageFallback() {
   return (
-    <div className="min-h-[50vh] flex flex-col items-center justify-center py-20 px-4 text-center">
-      <div className="w-12 h-12 rounded-2xl bg-[#EAF2EE] border border-[#14543D]/20 flex items-center justify-center mb-4">
-        <div className="w-6 h-6 border-3 border-[#14543D] border-t-transparent rounded-full animate-spin" />
-      </div>
-      <p className="text-sm font-bold text-[#14543D]">جاري تحميل الصفحة...</p>
-    </div>
+    <NizalLoadingScreen
+      variant="section"
+      message="جاري تحميل الصفحة..."
+      subMessage=""
+    />
   );
 }
 
@@ -182,6 +189,7 @@ const VALID_PAGES: PageView[] = [
 
 interface SavedGameSession {
   activePage?: PageView;
+  playMode?: GamePlayMode;
   isGameLocked?: boolean;
   teams?: TeamConfig[];
   teamSubcategoryIds?: Record<string, string[]>;
@@ -331,14 +339,42 @@ export default function App() {
     DEFAULT_SUBCATEGORIES
   );
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
+  const [initialMinSplashDone, setInitialMinSplashDone] = useState(false);
   const [contactSettings, setContactSettings] = useState<ContactSettings>(
     DEFAULT_CONTACT_SETTINGS
   );
   const [questionDedupSettings, setQuestionDedupSettings] =
     useState<QuestionDedupSettings>(DEFAULT_QUESTION_DEDUP_SETTINGS);
+  const [visualEffectsSettings, setVisualEffectsSettings] =
+    useState<VisualEffectsSettings>(() => loadCachedVisualEffectsSettings());
   const [seenQuestionIds, setSeenQuestionIds] = useState<Set<string>>(
     () => new Set()
   );
+  const { isOnline } = useOnlineStatus();
+
+  const [playMode, setPlayMode] = useState<GamePlayMode>(() => {
+    const saved = loadSavedGameSession().playMode;
+    return saved === 'offline_local' || saved === 'online_cloud' ? saved : null;
+  });
+
+  const [offlineStatus, setOfflineStatus] = useState<OfflineDataStatus>({
+    ready: false,
+    syncing: false,
+    questionsCount: 0,
+    categoriesCount: 0,
+    subcategoriesCount: 0,
+    syncedAt: null,
+    source: null,
+    mediaUrlsCached: 0,
+    mediaUrlsTotal: 0,
+  });
+
+  const [offlineModalMode, setOfflineModalMode] = useState<
+    'needs_initial_download' | 'online_required_for_multiplayer' | null
+  >(null);
+
+  const hasSyncedInitialSnapshotRef = useRef(false);
+
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
@@ -587,6 +623,7 @@ export default function App() {
     try {
       const sessionPayload: SavedGameSession = {
         activePage,
+        playMode,
         isGameLocked,
         teams,
         teamSubcategoryIds,
@@ -610,6 +647,7 @@ export default function App() {
     }
   }, [
     activePage,
+    playMode,
     isGameLocked,
     teams,
     teamSubcategoryIds,
@@ -749,6 +787,23 @@ export default function App() {
     }
   }, []);
 
+  // Load Visual Effects settings from Firestore / local cache
+  const loadVisualEffectsSettings = useCallback(async (forceRefresh = false) => {
+    try {
+      const settings = await fetchVisualEffectsSettingsFromFirestore(
+        forceRefresh
+      );
+      setVisualEffectsSettings(settings);
+      return settings;
+    } catch (err) {
+      console.error(
+        'Failed to load visual effects settings:',
+        err
+      );
+      return DEFAULT_VISUAL_EFFECTS_SETTINGS;
+    }
+  }, []);
+
   // Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -775,17 +830,49 @@ export default function App() {
         }
       }
 
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        const offlineSnap = await loadActiveOfflineDataset();
+        if (offlineSnap) {
+          setMainCategories(offlineSnap.mainCategories);
+          setSubcategories(offlineSnap.subcategories);
+          setAllQuestions(offlineSnap.questions);
+        }
+        setCategoriesLoaded(true);
+        return;
+      }
+
       const loadedMains = await loadMainCategories();
-      const [loadedQuestions] = await Promise.all([
+      const [loadedQuestions, loadedSubs] = await Promise.all([
         loadQuestions(adminStatus),
         loadSubcategories(adminStatus, loadedMains),
         loadContactSettings(),
         loadQuestionDedupSettings(),
+        loadVisualEffectsSettings(),
       ]);
       setCategoriesLoaded(true);
 
+      // Keep local IndexedDB copy safely up-to-date via atomic staging swap when online
+      if (!hasSyncedInitialSnapshotRef.current) {
+        hasSyncedInitialSnapshotRef.current = true;
+        setOfflineStatus((prev) => ({ ...prev, syncing: true }));
+        const syncRes = await syncOfflineDatasetAtomically({
+          mainCategories: loadedMains,
+          subcategories: loadedSubs,
+          questions: (loadedQuestions || []).filter((q) => q.status !== 'rejected'),
+          source: 'firebase',
+        });
+        const nextStatus = await getOfflineDataStatus();
+        setOfflineStatus({
+          ...nextStatus,
+          syncing: false,
+        });
+        if (!syncRes.ok) {
+          console.warn('Offline snapshot sync skipped:', syncRes.reason);
+        }
+      }
+
       // Check if user has an unfinished active match from a previous session
-      if (currentUser) {
+      if (currentUser && playMode !== 'offline_local') {
         try {
           const match = await fetchActiveIncompleteMatch(currentUser.uid);
           if (match && match.status === 'in_progress') {
@@ -822,7 +909,48 @@ export default function App() {
     loadSubcategories,
     loadContactSettings,
     loadQuestionDedupSettings,
+    loadVisualEffectsSettings,
   ]);
+
+  // Load initial IndexedDB offline readiness status on startup
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const status = await getOfflineDataStatus();
+      if (!active) return;
+      setOfflineStatus((prev) => ({ ...status, syncing: prev.syncing }));
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine === false &&
+        status.ready
+      ) {
+        const snap = await loadActiveOfflineDataset();
+        if (active && snap) {
+          setMainCategories(snap.mainCategories);
+          setSubcategories(snap.subcategories);
+          setAllQuestions(snap.questions);
+          setCategoriesLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Ensure initial branded splash displays smoothly without flicker and never stalls if network hangs
+  useEffect(() => {
+    const minTimer = window.setTimeout(() => {
+      setInitialMinSplashDone(true);
+    }, 550);
+    const safetyTimer = window.setTimeout(() => {
+      setCategoriesLoaded(true);
+    }, 6500);
+    return () => {
+      window.clearTimeout(minTimer);
+      window.clearTimeout(safetyTimer);
+    };
+  }, []);
 
   // Persistent per-UID seen questions real-time subscription + offline retry flush
   useEffect(() => {
@@ -857,7 +985,15 @@ export default function App() {
       mode: 'local' | 'online';
       displayKey?: string;
     }) => {
-      if (!user?.uid || !params.questionId) return;
+      // Strict isolation: NEVER trigger Firebase writes during Local Offline Mode or when disconnected
+      if (
+        !user?.uid ||
+        !params.questionId ||
+        playMode === 'offline_local' ||
+        !isOnline
+      ) {
+        return;
+      }
       await recordQuestionSeenForUser({
         uid: user.uid,
         questionId: params.questionId,
@@ -867,7 +1003,7 @@ export default function App() {
         displayKey: params.displayKey,
       });
     },
-    [user?.uid]
+    [user?.uid, playMode, isOnline]
   );
 
   // Global Hybrid Real-time Presence Lifecycle
@@ -886,12 +1022,12 @@ export default function App() {
     activePage === 'online_multiplayer' ? onlineActivity.roomCode : null;
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isOnline || playMode === 'offline_local') return;
     void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
-  }, [user, effectivePresenceStatus, effectivePresenceRoomCode]);
+  }, [user, isOnline, playMode, effectivePresenceStatus, effectivePresenceRoomCode]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isOnline || playMode === 'offline_local') return;
     void refreshCachedAuthToken(user);
 
     const handlePageExit = () => {
@@ -986,7 +1122,8 @@ export default function App() {
 
   const autoSaveMatch = useCallback(
     async (overrides?: Partial<UserGameMatch>) => {
-      if (!user) return;
+      // Strict isolation: Local Offline Mode and offline states never write match state to Firestore
+      if (!user || playMode === 'offline_local' || !isOnline) return;
       const matchId = overrides?.id || currentMatchId || generateMatchId();
       if (!currentMatchId) {
         setCurrentMatchId(matchId);
@@ -1030,6 +1167,8 @@ export default function App() {
     },
     [
       user,
+      playMode,
+      isOnline,
       currentMatchId,
       teams,
       teamSubcategoryIds,
@@ -1045,9 +1184,18 @@ export default function App() {
     ]
   );
 
-  // Periodic auto-save to Firestore every 30 seconds if game is locked and user is signed in
+  // Periodic auto-save to Firestore every 30 seconds ONLY when online and not in Local Offline Mode
   useEffect(() => {
-    if (!user || !isGameLocked || !currentMatchId || activePage === 'results') return;
+    if (
+      !user ||
+      playMode === 'offline_local' ||
+      !isOnline ||
+      !isGameLocked ||
+      !currentMatchId ||
+      activePage === 'results'
+    ) {
+      return;
+    }
 
     const interval = setInterval(() => {
       autoSaveMatch();
@@ -1063,10 +1211,102 @@ export default function App() {
       clearInterval(interval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [user, isGameLocked, currentMatchId, activePage, autoSaveMatch]);
+  }, [user, playMode, isOnline, isGameLocked, currentMatchId, activePage, autoSaveMatch]);
+
+  const handleSyncOfflineData = useCallback(async (): Promise<boolean> => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const currentStatus = await getOfflineDataStatus();
+      setOfflineStatus({ ...currentStatus, syncing: false });
+      return currentStatus.ready;
+    }
+
+    setOfflineStatus((prev) => ({ ...prev, syncing: true }));
+    try {
+      const mains = await loadMainCategories();
+      const [questions, subs] = await Promise.all([
+        loadQuestions(isAdmin),
+        loadSubcategories(isAdmin, mains),
+      ]);
+      setCategoriesLoaded(true);
+
+      const syncRes = await syncOfflineDatasetAtomically({
+        mainCategories: mains,
+        subcategories: subs,
+        questions: (questions || []).filter((q) => q.status !== 'rejected'),
+        source: 'firebase',
+      });
+      const nextStatus = await getOfflineDataStatus();
+      setOfflineStatus({ ...nextStatus, syncing: false });
+      return syncRes.ok;
+    } catch {
+      const fallbackStatus = await getOfflineDataStatus();
+      setOfflineStatus({ ...fallbackStatus, syncing: false });
+      return fallbackStatus.ready;
+    }
+  }, [isAdmin, loadMainCategories, loadQuestions, loadSubcategories]);
+
+  const handleStartOfflineLocalPlay = useCallback(
+    async (requestedPage?: PageView) => {
+      let snapshot = await loadActiveOfflineDataset();
+
+      if (!snapshot && isOnline) {
+        await handleSyncOfflineData();
+        snapshot = await loadActiveOfflineDataset();
+      }
+
+      if (!snapshot) {
+        setOfflineModalMode('needs_initial_download');
+        return;
+      }
+
+      // Hydrate from verified local IndexedDB snapshot when offline or not yet synced
+      if (!isOnline || !categoriesLoaded) {
+        setMainCategories(snapshot.mainCategories);
+        setSubcategories(snapshot.subcategories);
+        setAllQuestions(snapshot.questions);
+        setCategoriesLoaded(true);
+      }
+
+      setPlayMode('offline_local');
+      setOfflineModalMode(null);
+
+      const destination: PageView =
+        requestedPage || (isGameLocked ? 'board' : 'categories');
+      setActivePage(destination);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [isOnline, categoriesLoaded, handleSyncOfflineData, isGameLocked]
+  );
 
   const handleNavigate = (page: PageView) => {
-    // 1. Mandatory Sign-in: require user authentication for playing or managing matches
+    // Online Multiplayer requires active internet connection
+    if (page === 'online_multiplayer') {
+      if (!isOnline || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+        setOfflineModalMode('online_required_for_multiplayer');
+        return;
+      }
+      setPlayMode('online_cloud');
+    }
+
+    // Local gameplay routes: allow seamless entry in Local Offline Mode (or when offline via IndexedDB verification)
+    if (page === 'categories' || page === 'setup' || page === 'board') {
+      if (playMode === 'offline_local' || !isOnline) {
+        if (page === 'board' && !isGameLocked && !isAllTeamsSelectionComplete) {
+          const firstIncompleteIdx = teams.findIndex(
+            (t) => (teamSubcategoryIds[t.id] || []).length < SUBCATEGORIES_PER_TEAM
+          );
+          if (firstIncompleteIdx >= 0) {
+            setSelectingTeamIndex(firstIncompleteIdx);
+          }
+          void handleStartOfflineLocalPlay('categories');
+          return;
+        }
+        void handleStartOfflineLocalPlay(page);
+        return;
+      }
+    }
+
+    // 1. Mandatory Sign-in: require user authentication for cloud-synced / account features
     const protectedPages: PageView[] = [
       'categories',
       'setup',
@@ -1253,7 +1493,7 @@ export default function App() {
 
   // Game Board Handlers
   const handleStartGameFromSetup = () => {
-    if (!user) {
+    if (!user && playMode !== 'offline_local' && isOnline) {
       setPendingPlayTarget('setup');
       setIsAuthModalOpen(true);
       return;
@@ -1350,8 +1590,7 @@ export default function App() {
         : defaultTotalBoardTiles;
 
     const isMatchFinished = nextUsedTiles.length >= targetTotal;
-    const sorted = [...nextTeams].sort((a, b) => b.score - a.score);
-    const winner = sorted[0];
+    const outcome = evaluateMatchOutcome(nextTeams);
 
     autoSaveMatch({
       teams: nextTeams,
@@ -1359,21 +1598,23 @@ export default function App() {
       roundUsedQuestionIds: nextRoundUsed,
       activeTeamIndex: nextTeamIdx,
       status: isMatchFinished ? 'completed' : 'in_progress',
-      winnerTeamName: isMatchFinished ? winner?.name : undefined,
-      winnerScore: isMatchFinished ? winner?.score : undefined,
+      winnerTeamName: isMatchFinished ? outcome.winnerTeamName : undefined,
+      winnerScore: isMatchFinished ? outcome.topScore : undefined,
       activeQuestionState: null,
       activePage: isMatchFinished ? 'results' : 'board',
     });
 
     if (isMatchFinished) {
-      recordGameSessionInFirestore({
-        teams: nextTeams,
-        selectedSubcategories,
-        totalQuestionsPlayed: nextUsedTiles.length,
-        winnerTeamName: winner ? winner.name : '',
-        winnerScore: winner ? winner.score : 0,
-        userId: user?.uid || null,
-      }).catch(() => {});
+      if (playMode !== 'offline_local' && isOnline) {
+        recordGameSessionInFirestore({
+          teams: nextTeams,
+          selectedSubcategories,
+          totalQuestionsPlayed: nextUsedTiles.length,
+          winnerTeamName: outcome.winnerTeamName,
+          winnerScore: outcome.topScore,
+          userId: user?.uid || null,
+        }).catch(() => {});
+      }
 
       soundFX.playMatchWin();
       setActivePage('results');
@@ -1412,8 +1653,7 @@ export default function App() {
         : defaultTotalBoardTiles;
 
     const isMatchFinished = nextUsedTiles.length >= targetTotal;
-    const sorted = [...teams].sort((a, b) => b.score - a.score);
-    const winner = sorted[0];
+    const outcome = evaluateMatchOutcome(teams);
 
     autoSaveMatch({
       teams,
@@ -1421,21 +1661,23 @@ export default function App() {
       roundUsedQuestionIds: nextRoundUsed,
       activeTeamIndex: nextTeamIdx,
       status: isMatchFinished ? 'completed' : 'in_progress',
-      winnerTeamName: isMatchFinished ? winner?.name : undefined,
-      winnerScore: isMatchFinished ? winner?.score : undefined,
+      winnerTeamName: isMatchFinished ? outcome.winnerTeamName : undefined,
+      winnerScore: isMatchFinished ? outcome.topScore : undefined,
       activeQuestionState: null,
       activePage: isMatchFinished ? 'results' : 'board',
     });
 
     if (isMatchFinished) {
-      recordGameSessionInFirestore({
-        teams,
-        selectedSubcategories,
-        totalQuestionsPlayed: nextUsedTiles.length,
-        winnerTeamName: winner ? winner.name : '',
-        winnerScore: winner ? winner.score : 0,
-        userId: user?.uid || null,
-      }).catch(() => {});
+      if (playMode !== 'offline_local' && isOnline) {
+        recordGameSessionInFirestore({
+          teams,
+          selectedSubcategories,
+          totalQuestionsPlayed: nextUsedTiles.length,
+          winnerTeamName: outcome.winnerTeamName,
+          winnerScore: outcome.topScore,
+          userId: user?.uid || null,
+        }).catch(() => {});
+      }
 
       soundFX.playMatchWin();
       setActivePage('results');
@@ -1456,12 +1698,31 @@ export default function App() {
     isAllTeamsSelectionComplete &&
     (usedTileKeys.length > 0 || teams.some((t) => t.score > 0));
 
+  const showInitialLoadingScreen = !categoriesLoaded || !initialMinSplashDone;
+
   return (
-    <div
-      id="top"
-      dir="rtl"
-      className="min-h-screen flex flex-col bg-[#F3F5E9] text-[#252824]"
-    >
+    <MotionConfig reducedMotion="user">
+      <div
+        id="top"
+        dir="rtl"
+        className="min-h-screen flex flex-col bg-[#F3F5E9] text-[#252824]"
+      >
+      <AnimatePresence>
+        {showInitialLoadingScreen && (
+          <motion.div
+            key="nizal-initial-loading-screen"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 1.015 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed inset-0 z-50"
+          >
+            <NizalLoadingScreen
+              brandName={brandName}
+              variant="fullscreen"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <Navbar
         brandName={brandName}
         activePage={activePage}
@@ -1476,6 +1737,8 @@ export default function App() {
         onJoinRoomFromInvite={handleJoinRoomFromInvite}
       />
 
+      <OfflineIndicator />
+
       <main className="flex-1">
         <AnimatePresence mode="wait">
           <motion.div
@@ -1488,15 +1751,31 @@ export default function App() {
             <Suspense fallback={<PageFallback />}>
               {activePage === 'home' && (
               <HomePage
-                onStartCategorySelection={() => handleNavigate('categories')}
+                onStartCategorySelection={() => {
+                  setInitialMainCategoryId(null);
+                  void handleStartOfflineLocalPlay('categories');
+                }}
+                onStartOfflineLocalGame={() => {
+                  setInitialMainCategoryId(null);
+                  void handleStartOfflineLocalPlay('categories');
+                }}
+                onSelectMainCategory={(mainCategoryId) => {
+                  setInitialMainCategoryId(mainCategoryId);
+                  void handleStartOfflineLocalPlay('categories');
+                }}
                 onNavigate={handleNavigate}
+                mainCategories={mainCategories}
+                subcategories={activeSubcategories}
+                offlineStatus={offlineStatus}
+                isOnline={isOnline}
+                onSyncOfflineData={() => void handleSyncOfflineData()}
               />
             )}
 
             {activePage === 'how_to_play' && (
               <HowToPlayPage
                 onBackToHome={() => handleNavigate('home')}
-                onStartLocalGame={() => handleNavigate('categories')}
+                onStartLocalGame={() => void handleStartOfflineLocalPlay('categories')}
                 onStartOnlineGame={() => handleNavigate('online_multiplayer')}
               />
             )}
@@ -1565,6 +1844,7 @@ export default function App() {
                     autoSaveMatch({ activeQuestionState: st });
                   }
                 }}
+                visualEffectsSettings={visualEffectsSettings}
               />
             )}
 
@@ -1572,6 +1852,10 @@ export default function App() {
               <ResultsPage
                 teams={teams}
                 usedCount={usedTileKeys.length}
+                celebrationKey={`local_${currentMatchId || 'session'}_${usedTileKeys.length}_${teams
+                  .map((t) => `${t.id}:${t.score}`)
+                  .join('_')}`}
+                visualEffectsSettings={visualEffectsSettings}
                 onPlayAgainSameTeams={() => {
                   handleResetBoard();
                   soundFX.playChallengeStart();
@@ -1584,6 +1868,7 @@ export default function App() {
                 }}
                 onBackHome={() => {
                   setIsGameLocked(false);
+                  setPlayMode(null);
                   handleResetBoard();
                   handleNavigate('home');
                 }}
@@ -1643,6 +1928,7 @@ export default function App() {
                 initialJoinRole={initialJoinRole}
                 autoJoinNonce={autoJoinNonce}
                 onPresenceActivityChange={handlePresenceActivityChange}
+                visualEffectsSettings={visualEffectsSettings}
               />
             )}
 
@@ -1657,6 +1943,7 @@ export default function App() {
                   subcategories={subcategories}
                   contactSettings={contactSettings}
                   questionDedupSettings={questionDedupSettings}
+                  visualEffectsSettings={visualEffectsSettings}
                   loadingQuestions={loadingQuestions}
                   onLoginGoogle={handleGoogleLogin}
                   onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -1677,13 +1964,32 @@ export default function App() {
                   onRefreshQuestionDedupSettings={async () => {
                     await loadQuestionDedupSettings(true);
                   }}
+                  onRefreshVisualEffectsSettings={async () => {
+                    await loadVisualEffectsSettings(true);
+                  }}
                   onSeedFoundationalPack={handleSeedFoundationalPack}
                   seeding={seeding}
                 />
               ) : (
                 <HomePage
-                  onStartCategorySelection={() => handleNavigate('categories')}
+                  onStartCategorySelection={() => {
+                    setInitialMainCategoryId(null);
+                    void handleStartOfflineLocalPlay('categories');
+                  }}
+                  onStartOfflineLocalGame={() => {
+                    setInitialMainCategoryId(null);
+                    void handleStartOfflineLocalPlay('categories');
+                  }}
+                  onSelectMainCategory={(mainCategoryId) => {
+                    setInitialMainCategoryId(mainCategoryId);
+                    void handleStartOfflineLocalPlay('categories');
+                  }}
                   onNavigate={handleNavigate}
+                  mainCategories={mainCategories}
+                  subcategories={activeSubcategories}
+                  offlineStatus={offlineStatus}
+                  isOnline={isOnline}
+                  onSyncOfflineData={() => void handleSyncOfflineData()}
                 />
               ))}
             </Suspense>
@@ -1697,6 +2003,21 @@ export default function App() {
         onNavigate={handleNavigate}
         isAdmin={isAdmin}
         contactSettings={contactSettings}
+      />
+
+      <PWAInstallBanner />
+
+      <OfflineSyncModal
+        isOpen={offlineModalMode !== null}
+        mode={offlineModalMode || 'needs_initial_download'}
+        isOnline={isOnline}
+        isSyncing={offlineStatus.syncing}
+        onRetrySync={() => void handleStartOfflineLocalPlay('categories')}
+        onSwitchToOfflineLocal={() => {
+          setOfflineModalMode(null);
+          void handleStartOfflineLocalPlay('categories');
+        }}
+        onClose={() => setOfflineModalMode(null)}
       />
 
       <ResumeMatchModal
@@ -1727,5 +2048,6 @@ export default function App() {
         }}
       />
     </div>
+    </MotionConfig>
   );
 }

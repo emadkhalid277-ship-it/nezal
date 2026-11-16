@@ -264,12 +264,14 @@ export const Footer: React.FC<FooterProps> = ({
                   type="button"
                   onClick={() => goTo('home')}
                   aria-label={brandName || 'نِزال'}
-                  className="w-16 h-14 rounded-2xl bg-[#14543D] overflow-hidden flex items-center justify-center ring-2 ring-[#F07842]/60 shadow-lg shadow-black/30 hover:scale-105 hover:ring-[#F07842] transition-all duration-200 cursor-pointer"
+                  className="w-24 h-16 sm:w-28 sm:h-[74px] rounded-2xl bg-[#124833] overflow-hidden flex items-center justify-center ring-2 ring-[#F07842]/65 shadow-lg shadow-black/30 hover:scale-105 hover:ring-[#F07842] transition-all duration-200 cursor-pointer"
                 >
                   <img
                     src="/assets/aistudio/Screenshot_2026-11-03_192625_a95ae528.png"
                     alt={`شعار ${brandName || 'نِزال'}`}
-                    className="w-full h-full object-contain p-1.5"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-contain p-1.5 sm:p-2 select-none"
                   />
                 </button>
 
@@ -495,13 +497,13 @@ export const Footer: React.FC<FooterProps> = ({
       {/* Contextual Footer Info / FAQ / Legal / Report Modal */}
       {activeModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#181C19]/75 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#181C19]/75 backdrop-blur-xs"
           onClick={() => setActiveModal(null)}
           role="dialog"
           aria-modal="true"
         >
           <div
-            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 sm:p-7 space-y-5 text-[#252824] shadow-2xl max-h-[85vh] overflow-y-auto"
+            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-7 space-y-5 text-[#252824] shadow-2xl max-h-[88dvh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[#E5E8DD] pb-3.5">

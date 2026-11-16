@@ -19,6 +19,7 @@ import {
   RoomTeam,
 } from '../types/multiplayer';
 import { TEAM_COLOR_OPTIONS } from '../data/categoriesAndSeed';
+import { evaluateMatchOutcome } from '../utils/matchOutcome';
 
 // Primary Firestore collection for persistent room synchronization
 // Uses gameSessions for full compatibility with existing Firestore security rules
@@ -802,12 +803,17 @@ export async function hostAwardPoints(params: {
     let winnerScore = 0;
 
     if (isGameFinished) {
-      const sorted = [...nextTeams].sort((a, b) => b.score - a.score);
-      const win = sorted[0];
-      winnerId = win ? win.id : null;
-      winnerName = win ? win.name : '';
-      winnerScore = win ? win.score : 0;
+      const outcome = evaluateMatchOutcome(nextTeams);
+      winnerId = outcome.winnerTeamId;
+      winnerName = outcome.winnerTeamName;
+      winnerScore = outcome.topScore;
     }
+
+    const finishSummary = isGameFinished
+      ? winnerId
+        ? `حصل ${awardedTeam.name} على +${params.points} نقطة! 🏆 انتهت المباراة بفوز ${winnerName}`
+        : `حصل ${awardedTeam.name} على +${params.points} نقطة! 🤝 انتهت المباراة بالتعادل`
+      : `حصل ${awardedTeam.name} على +${params.points} نقطة! 🎉`;
 
     transaction.update(roomRef, {
       teams: nextTeams,
@@ -819,7 +825,7 @@ export async function hostAwardPoints(params: {
       winnerTeamId: winnerId,
       winnerTeamName: winnerName,
       winnerScore,
-      lastActionMessage: `حصل ${awardedTeam.name} على +${params.points} نقطة! 🎉`,
+      lastActionMessage: finishSummary,
       lastActionAt: now,
       updatedAt: now,
     });
@@ -859,11 +865,10 @@ export async function hostMarkTileNoPoints(params: {
     let winnerScore = 0;
 
     if (isGameFinished) {
-      const sorted = [...room.teams].sort((a, b) => b.score - a.score);
-      const win = sorted[0];
-      winnerId = win ? win.id : null;
-      winnerName = win ? win.name : '';
-      winnerScore = win ? win.score : 0;
+      const outcome = evaluateMatchOutcome(room.teams);
+      winnerId = outcome.winnerTeamId;
+      winnerName = outcome.winnerTeamName;
+      winnerScore = outcome.topScore;
     }
 
     transaction.update(roomRef, {
@@ -893,16 +898,19 @@ export async function hostFinishGame(code: string, hostId: string): Promise<void
   const room = snap.data() as OnlineGameRoom;
   if (room.hostId !== hostId) return;
 
-  const sorted = [...room.teams].sort((a, b) => b.score - a.score);
-  const win = sorted[0];
+  const outcome = evaluateMatchOutcome(room.teams);
 
   await updateDoc(roomRef, {
     status: 'finished',
     activeQuestion: null,
-    winnerTeamId: win ? win.id : null,
-    winnerTeamName: win ? win.name : '',
-    winnerScore: win ? win.score : 0,
-    lastActionMessage: `انتهت المباراة! مبروك لـ ${win ? win.name : 'الفريق الفائز'} 🏆`,
+    winnerTeamId: outcome.winnerTeamId,
+    winnerTeamName: outcome.winnerTeamName,
+    winnerScore: outcome.topScore,
+    lastActionMessage: outcome.isZeroScore
+      ? 'انتهت المباراة بدون نقاط مسجلة'
+      : outcome.isTie
+      ? 'انتهت المباراة بالتعادل! 🤝'
+      : `انتهت المباراة! مبروك لـ ${outcome.winnerTeamName} 🏆`,
     lastActionAt: now,
     updatedAt: now,
   });

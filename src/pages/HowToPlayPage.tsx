@@ -69,24 +69,24 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
   onStartOnlineGame,
 }) => {
   return (
-    <div className="max-w-[1320px] mx-auto px-6 py-8 md:py-12 space-y-12 md:space-y-16">
+    <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-5 md:py-12 space-y-8 md:space-y-16">
       {/* Top Bar + Hero Header */}
-      <section className="space-y-6">
+      <section className="space-y-4 sm:space-y-6">
         <button
           type="button"
           onClick={onBackToHome}
-          className="inline-flex items-center gap-2 text-sm font-bold text-[#14543D] hover:text-[#F07842] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 min-h-[40px] text-sm font-bold text-[#14543D] hover:text-[#F07842] transition-colors cursor-pointer"
         >
           <ArrowRight className="w-4 h-4" />
           <span>العودة إلى الرئيسية</span>
         </button>
 
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-7 md:p-11 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-8 space-y-4 text-right">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-11 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-center">
+          <div className="lg:col-span-8 space-y-3 sm:space-y-4 text-right">
             <div className="text-xs font-bold text-[#F07842] tracking-wide">
               دليل اللاعبين · قواعد اللعبة في نِزال
             </div>
-            <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold text-[#252824] leading-tight">
+            <h1 className="font-display text-2xl sm:text-4xl md:text-5xl font-bold text-[#252824] leading-tight">
               كيف تلعب وتفوز في نِزال؟
             </h1>
             <p className="text-sm sm:text-base md:text-lg text-[#777B73] leading-relaxed max-w-[60ch]">
@@ -218,14 +218,14 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
       </section>
 
       {/* Section 2: Local vs Online Modes + Start Playing CTAs */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-7 flex flex-col justify-between space-y-6">
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between space-y-5 sm:space-y-6">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 text-xs font-bold text-[#F07842]">
               <Zap className="w-4 h-4" />
               <span>للمجالس والجمعات</span>
             </div>
-            <h3 className="font-display text-2xl font-bold text-[#252824]">
+            <h3 className="font-display text-xl sm:text-2xl font-bold text-[#252824]">
               المباراة المحلية (على نفس الجهاز)
             </h3>
             <p className="text-sm text-[#777B73] leading-relaxed">
@@ -237,20 +237,20 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
           <button
             type="button"
             onClick={onStartLocalGame}
-            className="w-full sm:w-auto self-start px-7 py-3.5 rounded-2xl bg-[#F07842] hover:bg-[#D9632E] text-[#FFFFFF] font-bold text-sm sm:text-base transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full sm:w-auto self-start min-h-[48px] px-7 py-3.5 rounded-2xl bg-[#F07842] hover:bg-[#D9632E] text-[#FFFFFF] font-bold text-sm sm:text-base transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <span>ابدأ مباراة محلية</span>
             <ArrowLeft className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-7 flex flex-col justify-between space-y-6">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between space-y-5 sm:space-y-6">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 text-xs font-bold text-[#14543D]">
               <Radio className="w-4 h-4 text-[#F07842]" />
               <span>للتحدي عن بُعد</span>
             </div>
-            <h3 className="font-display text-2xl font-bold text-[#252824]">
+            <h3 className="font-display text-xl sm:text-2xl font-bold text-[#252824]">
               اللعب عن بُعد (أونلاين)
             </h3>
             <p className="text-sm text-[#777B73] leading-relaxed">
@@ -262,7 +262,7 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
           <button
             type="button"
             onClick={onStartOnlineGame}
-            className="w-full sm:w-auto self-start px-7 py-3.5 rounded-2xl bg-[#14543D] hover:bg-[#0F4230] text-[#FFFFFF] font-bold text-sm sm:text-base transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full sm:w-auto self-start min-h-[48px] px-7 py-3.5 rounded-2xl bg-[#14543D] hover:bg-[#0F4230] text-[#FFFFFF] font-bold text-sm sm:text-base transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <span>العب عن بُعد الآن</span>
             <ArrowLeft className="w-4 h-4" />

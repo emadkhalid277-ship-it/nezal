@@ -120,6 +120,10 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   const [selectedMainFilter, setSelectedMainFilter] = useState<string>(
     initialMainCategoryId || 'all'
   );
+
+  useEffect(() => {
+    setSelectedMainFilter(initialMainCategoryId || 'all');
+  }, [initialMainCategoryId]);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [autoAdvanceBanner, setAutoAdvanceBanner] = useState<string | null>(null);
   const [navError, setNavError] = useState<string | null>(null);
@@ -707,17 +711,19 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               return (
                 <div
                   key={subObj.id}
-                  className="group relative h-12 sm:h-14 rounded-xl overflow-hidden border-2 border-[#14543D] bg-white shadow-xs transition-transform duration-200 hover:scale-[1.03]"
+                  className="group relative min-h-[76px] sm:min-h-[82px] rounded-xl overflow-hidden border-2 border-[#14543D] bg-[#FFFFFF] flex flex-col shadow-xs transition-transform duration-200 hover:scale-[1.03]"
                   title={`${subObj.name} (${teamDisplayName})`}
                 >
-                  <CategoryCardArtwork
-                    name={subObj.name}
-                    mainCategory={subObj.mainCategory}
-                    imageUrl={subObj.imageUrl}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent flex items-end p-1">
-                    <span className="text-[10px] font-bold text-white line-clamp-1 leading-tight w-full text-center">
+                  <div className="relative h-6 sm:h-7 w-full overflow-hidden shrink-0">
+                    <CategoryCardArtwork
+                      name={subObj.name}
+                      mainCategory={subObj.mainCategory}
+                      imageUrl={subObj.imageUrl}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 bg-[#14543D] px-1.5 py-1.5 flex items-center justify-center text-center">
+                    <span className="font-display text-[11px] sm:text-xs font-bold text-white line-clamp-2 leading-tight w-full">
                       {subObj.name}
                     </span>
                   </div>
@@ -730,9 +736,9 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                       }}
                       title={`إزالة ${subObj.name}`}
                       aria-label={`إزالة ${subObj.name}`}
-                      className="absolute top-0.5 left-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-rose-600 text-white flex items-center justify-center opacity-90 hover:opacity-100 shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                      className="absolute top-1 left-1 w-6 h-6 sm:w-5 sm:h-5 rounded-full bg-rose-600 text-white flex items-center justify-center opacity-95 hover:opacity-100 shadow-sm cursor-pointer md:hover:scale-110 transition-transform z-10"
                     >
-                      <X className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />
+                      <X className="w-3 h-3 stroke-[3]" />
                     </button>
                   )}
                 </div>
@@ -742,7 +748,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             return (
               <div
                 key={`empty-${slotIdx}`}
-                className={`h-12 sm:h-14 rounded-xl border-2 border-dashed flex items-center justify-center gap-1 transition-all duration-200 ${
+                className={`min-h-[76px] sm:min-h-[82px] rounded-xl border-2 border-dashed flex items-center justify-center gap-1 transition-all duration-200 ${
                   isCurrent
                     ? 'border-[#F07842] bg-[#F07842]/10 text-[#F07842]'
                     : 'border-[#D2D6C6] bg-[#FFFFFF]/70 text-[#777B73]'
@@ -750,7 +756,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 title={`الخانة ${slotIdx + 1} لـ ${teamDisplayName}`}
               >
                 <Plus className="w-3.5 h-3.5 opacity-75" />
-                <span className="text-[10px] font-mono font-bold">
+                <span className="text-xs font-mono font-bold">
                   {slotIdx + 1}
                 </span>
               </div>
@@ -762,13 +768,13 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   };
 
   return (
-    <div className="max-w-[1360px] mx-auto px-4 sm:px-6 py-6 md:py-10">
+    <div className="max-w-[1360px] mx-auto px-3 sm:px-6 py-4 md:py-10">
       {/* Floating Toast for Coming Soon Clicks */}
       {comingSoonToast && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#252824] text-[#FFFFFF] px-5 py-3 rounded-2xl shadow-xl border-2 border-[#F07842] text-xs sm:text-sm font-bold flex items-center gap-2.5 animate-in fade-in"
+          className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md bg-[#252824] text-[#FFFFFF] px-4 py-3 rounded-2xl shadow-xl border-2 border-[#F07842] text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 text-center animate-in fade-in"
         >
           <Clock className="w-4 h-4 text-[#F07842] shrink-0" />
           <span>{comingSoonToast}</span>
@@ -776,7 +782,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
       )}
 
       {/* UNIFIED GAME SETUP CARD */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl md:rounded-3xl p-5 sm:p-6 md:p-8 shadow-xs space-y-8">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xs space-y-6 md:space-y-8">
         {/* Lock Banner if Game is Active */}
         {isGameLocked && (
           <div className="p-4 rounded-xl bg-[#14543D] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
@@ -804,7 +810,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 e.stopPropagation();
                 handleReturnToBoard();
               }}
-              className="px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] active:scale-95 text-white text-xs sm:text-sm font-bold whitespace-nowrap self-start sm:self-center cursor-pointer shadow-sm transition-all flex items-center gap-2 touch-manipulation select-none disabled:opacity-60"
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] active:scale-95 text-white text-xs sm:text-sm font-bold whitespace-nowrap self-stretch sm:self-center cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2 touch-manipulation select-none disabled:opacity-60"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>{isNavigating ? 'جاري الانتقال...' : 'العودة إلى لوحة اللعب'}</span>
@@ -813,7 +819,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
         )}
 
         {/* Unified Card Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-4 sm:pb-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-bold text-[#F07842]">
               <Layers className="w-4 h-4" />
@@ -821,7 +827,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 إعداد اللعبة · اختيار الفئات وتجهيز الفرق ({totalSelectedCount}/{totalRequiredCount})
               </span>
             </div>
-            <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+            <h1 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-[#252824]">
               إعداد اللعبة
             </h1>
             <p className="text-xs sm:text-sm text-[#777B73]">
@@ -829,11 +835,11 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onBackToHome}
-              className="px-3.5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#252824] flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#252824] flex items-center gap-1.5 cursor-pointer"
             >
               <ArrowRight className="w-3.5 h-3.5 text-[#14543D]" />
               <span>الرئيسية</span>
@@ -842,7 +848,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             <button
               type="button"
               onClick={() => scrollToSection('step-team-setup')}
-              className="px-3.5 py-2 rounded-xl bg-[#EAF2EE] hover:bg-[#DCEAE3] border border-[#14543D]/20 text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#EAF2EE] hover:bg-[#DCEAE3] border border-[#14543D]/20 text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer"
             >
               <Users className="w-3.5 h-3.5 text-[#F07842]" />
               <span>الانتقال إلى سوّ فريقك</span>
@@ -853,7 +859,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               <button
                 type="button"
                 onClick={handleClearCurrentTeamPicks}
-                className="px-3 py-2 rounded-xl text-xs font-bold text-[#777B73] hover:text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
+                className="min-h-[40px] px-3 py-2 rounded-xl text-xs font-bold text-[#777B73] hover:text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
                 title="مسح اختيارات الفريق الحالي"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -957,18 +963,18 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             </div>
 
             {/* Horizontal Category Filter Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-none">
               <button
                 type="button"
                 onClick={() => setSelectedMainFilter('all')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all cursor-pointer ${
+                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap border transition-all cursor-pointer ${
                   selectedMainFilter === 'all'
                     ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
                     : 'bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] border-[#E5E8DD]'
                 }`}
               >
                 <span>الكل</span>
-                <span className="font-mono text-[10px] mr-1.5 opacity-80">
+                <span className="font-mono text-[11px] mr-1.5 opacity-80">
                   ({activeSubcategories.length})
                 </span>
               </button>
@@ -997,7 +1003,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                         triggerComingSoonMessage();
                       }
                     }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap border transition-all flex items-center gap-1.5 cursor-pointer ${
                       isSelected
                         ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
                         : isComingSoon
@@ -1021,7 +1027,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                         {selectedInMain}
                       </span>
                     ) : (
-                      <span className="font-mono text-[10px] opacity-70">
+                      <span className="font-mono text-[11px] opacity-75">
                         ({subsCount})
                       </span>
                     )}
@@ -1094,7 +1100,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4">
                 {filteredSubcategories.map((sub) => {
                   const ownerInfo = subcategoryOwnerMap.get(sub.id);
                   const isSelectedByCurrentTeam =
@@ -1116,34 +1122,32 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                         aria-disabled="true"
                         onClick={() => triggerComingSoonMessage()}
                         aria-label={`${sub.name} - قريباً، هذه الفئة غير متاحة حالياً`}
-                        className="group relative aspect-square w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] text-right flex flex-col justify-end select-none opacity-90 hover:border-[#F07842]/70 transition-all duration-300 cursor-not-allowed shadow-xs"
+                        className="group relative min-h-[208px] sm:min-h-[228px] w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] flex flex-col select-none opacity-95 hover:border-[#F07842]/70 transition-all duration-200 cursor-not-allowed shadow-xs"
                       >
-                        <div className="absolute inset-0">
+                        <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
                           <CategoryCardArtwork
                             name={sub.name}
                             mainCategory={sub.mainCategory}
                             imageUrl={sub.imageUrl}
-                            className="w-full h-full object-cover grayscale-[45%] brightness-75 transition-transform duration-500"
+                            className="w-full h-full object-cover grayscale-[45%] brightness-80"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#1A1E1B]/95 via-[#1A1E1B]/60 to-[#1A1E1B]/30 backdrop-blur-[1px]" />
+                          <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
+                            <span className="px-2 py-0.5 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-sm">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span>قريباً</span>
+                            </span>
+                            <span className="w-6 h-6 rounded-lg bg-[#252824]/80 border border-white/20 text-[#F3F5E9] flex items-center justify-center">
+                              <Lock className="w-3 h-3" />
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                          <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-md border border-white/25">
-                            <Clock className="w-3 h-3 shrink-0" />
-                            <span>قريباً</span>
-                          </span>
-                          <span className="w-6 h-6 rounded-lg bg-[#252824]/75 border border-white/20 text-[#F3F5E9]/85 flex items-center justify-center">
-                            <Lock className="w-3 h-3" />
-                          </span>
-                        </div>
-
-                        <div className="relative z-10 p-3 sm:p-3.5 w-full space-y-1">
-                          <h3 className="font-display text-xs sm:text-sm md:text-base font-bold text-[#FFFFFF] leading-snug line-clamp-2 drop-shadow-xs">
+                        <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col items-center justify-between text-center gap-1.5 bg-[#F3F5E9]">
+                          <h3 className="font-display text-sm sm:text-[15px] md:text-base font-bold text-[#252824] leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center">
                             {sub.name}
                           </h3>
-                          <div className="text-[10px] sm:text-[11px] font-bold text-[#FFB088]">
-                            غير متاحة حالياً · قادمة قريباً
+                          <div className="text-[11px] font-bold text-[#D9602B]">
+                            قادمة قريباً
                           </div>
                         </div>
                       </button>
@@ -1163,92 +1167,94 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                           ? `${sub.name} - مختارة لفريقك ${currentTeam?.name}، اضغط لإلغاء الاختيار`
                           : `${sub.name} - اضغط لاختيارها لفريق ${currentTeam?.name}`
                       }
-                      className={`group relative aspect-square w-full rounded-2xl overflow-hidden bg-[#FFFFFF] border-2 text-right flex flex-col justify-end select-none transition-all duration-300 ease-out ${
+                      className={`group relative min-h-[208px] sm:min-h-[228px] w-full rounded-2xl overflow-hidden border-2 flex flex-col select-none transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
                         isSelectedByCurrentTeam
-                          ? 'border-[#F07842] ring-4 ring-[#F07842]/35 ring-offset-2 ring-offset-[#FFFFFF] -translate-y-1.5 scale-[1.02] shadow-[0_14px_28px_-6px_rgba(240,120,66,0.36),0_6px_16px_rgba(20,84,61,0.20)] hover:-translate-y-2 hover:shadow-[0_18px_36px_-6px_rgba(240,120,66,0.45)] cursor-pointer z-10'
+                          ? 'bg-[#14543D] border-[#F07842] ring-2 md:ring-4 ring-[#F07842]/35 ring-offset-1 md:ring-offset-2 ring-offset-[#FFFFFF] md:-translate-y-1 shadow-[0_10px_22px_-6px_rgba(240,120,66,0.36),0_4px_12px_rgba(20,84,61,0.18)] cursor-pointer z-10'
                           : isLockedByOtherTeam
-                          ? 'border-[#E5E8DD] opacity-50 saturate-50 cursor-not-allowed scale-[0.98]'
-                          : 'border-[#E5E8DD] hover:border-[#F07842]/80 hover:-translate-y-1 hover:shadow-lg hover:shadow-black/10 hover:scale-[1.015] active:scale-[0.97] active:translate-y-0 shadow-xs cursor-pointer'
+                          ? 'bg-[#F3F5E9] border-[#E5E8DD] opacity-65 saturate-50 cursor-not-allowed'
+                          : 'bg-[#FFFFFF] border-[#E5E8DD] hover:border-[#F07842]/80 md:hover:-translate-y-1 hover:shadow-lg active:scale-[0.98] shadow-xs cursor-pointer'
                       }`}
                     >
                       {isSelectedByCurrentTeam && (
-                        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#F07842] via-[#FFB088] to-[#F07842] z-20 shadow-[0_0_12px_rgba(240,120,66,0.85)] animate-in fade-in duration-300" />
+                        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#F07842] via-[#FFB088] to-[#F07842] z-20" />
                       )}
 
-                      <div className="absolute inset-0">
+                      {/* Top Artwork Zone (Image never overlaps or obscures subcategory name) */}
+                      <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0 bg-[#14543D]">
                         <CategoryCardArtwork
                           name={sub.name}
                           mainCategory={sub.mainCategory}
                           imageUrl={sub.imageUrl}
-                          className={`w-full h-full object-cover transition-transform duration-500 ease-out ${
+                          className={`w-full h-full object-cover transition-transform duration-300 ease-out ${
                             isSelectedByCurrentTeam
                               ? 'scale-105'
                               : 'group-hover:scale-105'
                           }`}
                         />
-                        <div
-                          className={`absolute inset-0 transition-all duration-300 ${
-                            isSelectedByCurrentTeam
-                              ? 'bg-gradient-to-t from-[#14543D] via-[#14543D]/55 to-[#F07842]/20'
-                              : isLockedByOtherTeam
-                              ? 'bg-gradient-to-t from-[#131614]/95 via-[#131614]/65 to-[#131614]/35'
-                              : 'bg-gradient-to-t from-[#131614]/90 via-[#131614]/25 to-transparent group-hover:from-[#131614]/95 group-hover:via-[#131614]/40'
-                          }`}
-                        />
+
+                        <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
+                          {isLockedByOtherTeam ? (
+                            <div
+                              className="px-2 py-0.5 rounded-lg flex items-center gap-1 text-white text-[10px] font-bold shadow-xs truncate max-w-[120px]"
+                              style={{
+                                backgroundColor: ownerInfo?.team.color || '#252824',
+                              }}
+                            >
+                              <Lock className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{ownerTeamName}</span>
+                            </div>
+                          ) : (
+                            <div
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center border-2 transition-all duration-200 ${
+                                isSelectedByCurrentTeam
+                                  ? 'bg-gradient-to-br from-[#F07842] to-[#D9602B] border-white text-white scale-105 shadow-md'
+                                  : 'bg-[#252824]/60 border-white/75 text-transparent group-hover:border-white group-hover:bg-[#252824]/85'
+                              }`}
+                            >
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            </div>
+                          )}
+
+                          {qCount > 0 && (
+                            <span
+                              className={`px-2 py-0.5 rounded-md font-mono text-[10px] sm:text-[11px] font-bold shadow-xs ${
+                                isSelectedByCurrentTeam
+                                  ? 'bg-[#14543D] text-[#F3F5E9] border border-[#F07842]/50'
+                                  : 'bg-[#252824]/80 text-[#F3F5E9]'
+                              }`}
+                            >
+                              {qCount} س
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                        {isLockedByOtherTeam ? (
-                          <div
-                            className="px-2 py-0.5 rounded-lg flex items-center gap-1 text-white text-[10px] font-bold shadow-xs truncate max-w-[130px]"
-                            style={{
-                              backgroundColor: ownerInfo?.team.color || '#252824',
-                            }}
-                          >
-                            <Lock className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{ownerTeamName}</span>
-                          </div>
-                        ) : (
-                          <div
-                            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center border-2 transition-all duration-200 ${
-                              isSelectedByCurrentTeam
-                                ? 'bg-gradient-to-br from-[#F07842] to-[#D9602B] border-white text-white scale-110 shadow-[0_4px_12px_rgba(240,120,66,0.6)] ring-2 ring-[#F07842]/60'
-                                : 'bg-[#252824]/50 border-white/60 text-transparent group-hover:border-white group-hover:bg-[#252824]/80 group-hover:scale-105'
-                            }`}
-                          >
-                            <Check className="w-3.5 h-3.5 stroke-[3] transition-transform duration-200" />
-                          </div>
-                        )}
-
-                        {qCount > 0 && (
-                          <span
-                            className={`px-1.5 py-0.5 rounded-md backdrop-blur-xs font-mono text-[9px] sm:text-[10px] font-semibold transition-all ${
-                              isSelectedByCurrentTeam
-                                ? 'bg-[#14543D] text-[#F3F5E9] border border-[#F07842]/40 shadow-xs'
-                                : 'bg-[#252824]/75 text-[#F3F5E9]'
-                            }`}
-                          >
-                            {qCount} س
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="relative z-10 p-3 sm:p-3.5 w-full">
-                        <h3 className="font-display text-xs sm:text-sm md:text-base font-bold text-[#FFFFFF] leading-snug line-clamp-2 drop-shadow-xs">
+                      {/* Dedicated Center-Aligned High-Contrast Subcategory Title Zone */}
+                      <div
+                        className={`flex-1 w-full p-3 sm:p-3.5 flex flex-col items-center justify-between text-center gap-1.5 transition-colors ${
+                          isSelectedByCurrentTeam
+                            ? 'bg-[#14543D] text-[#FFFFFF]'
+                            : isLockedByOtherTeam
+                            ? 'bg-[#F3F5E9] text-[#52574E]'
+                            : 'bg-[#FFFFFF] text-[#252824]'
+                        }`}
+                      >
+                        <h3 className="font-display text-sm sm:text-[15px] md:text-base font-bold leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center w-full">
                           {sub.name}
                         </h3>
-                        <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
+
+                        <div className="text-[11px] font-bold w-full flex items-center justify-center">
                           {isSelectedByCurrentTeam ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#F07842]/25 border border-[#F07842]/60 text-[#F07842] font-bold text-[10px] sm:text-[11px] backdrop-blur-xs shadow-xs">
-                              <Sparkles className="w-2.5 h-2.5 text-[#F07842] shrink-0" />
+                            <span className="inline-flex items-center gap-1 text-[#FFB088]">
+                              <Sparkles className="w-3 h-3 text-[#F07842] shrink-0" />
                               <span>مختارة لفريقك</span>
                             </span>
                           ) : isLockedByOtherTeam ? (
-                            <span className="font-semibold text-white/80 truncate">
+                            <span className="text-[#777B73] truncate max-w-full">
                               محجوزة لـ {ownerTeamName}
                             </span>
                           ) : (
-                            <span className="text-[#F3F5E9]/70 group-hover:text-white transition-colors">
+                            <span className="text-[#14543D] group-hover:text-[#F07842] transition-colors">
                               اضغط للاختيار
                             </span>
                           )}
@@ -1266,39 +1272,32 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                     aria-disabled="true"
                     onClick={() => triggerComingSoonMessage()}
                     aria-label={`${mainCat.name} - قريباً، هذه الفئة غير متاحة حالياً`}
-                    className="group relative aspect-square w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] text-right flex flex-col justify-end select-none opacity-90 hover:border-[#F07842]/75 transition-all duration-300 cursor-not-allowed shadow-xs"
+                    className="group relative min-h-[208px] sm:min-h-[228px] w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] flex flex-col select-none opacity-95 hover:border-[#F07842]/75 transition-all duration-200 cursor-not-allowed shadow-xs"
                   >
-                    <div className="absolute inset-0">
+                    <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
                       <CategoryCardArtwork
                         name={mainCat.name}
                         mainCategory={mainCat.name}
                         imageUrl={mainCat.imageUrl}
                         isMainCategory
-                        className="w-full h-full object-cover grayscale-[45%] brightness-75 transition-transform duration-500"
+                        className="w-full h-full object-cover grayscale-[45%] brightness-80"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#1A1E1B]/95 via-[#1A1E1B]/60 to-[#1A1E1B]/30 backdrop-blur-[1px]" />
+                      <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
+                        <span className="px-2 py-0.5 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-sm">
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span>قريباً</span>
+                        </span>
+                        <span className="w-6 h-6 rounded-lg bg-[#252824]/80 border border-white/20 text-[#F3F5E9] flex items-center justify-center">
+                          <Lock className="w-3 h-3" />
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                      <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-md border border-white/25">
-                        <Clock className="w-3 h-3 shrink-0" />
-                        <span>قريباً</span>
-                      </span>
-                      <span className="w-6 h-6 rounded-lg bg-[#252824]/75 border border-white/20 text-[#F3F5E9]/85 flex items-center justify-center">
-                        <Lock className="w-3 h-3" />
-                      </span>
-                    </div>
-
-                    <div className="relative z-10 p-3 sm:p-3.5 w-full space-y-1">
-                      <h3 className="font-display text-xs sm:text-sm md:text-base font-bold text-[#FFFFFF] leading-snug line-clamp-2 drop-shadow-xs">
+                    <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col items-center justify-between text-center gap-1.5 bg-[#F3F5E9]">
+                      <h3 className="font-display text-sm sm:text-[15px] md:text-base font-bold text-[#252824] leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center w-full">
                         {mainCat.name}
                       </h3>
-                      {(mainCat.description || mainCat.tagline) && (
-                        <p className="text-[10px] text-[#F3F5E9]/75 line-clamp-1">
-                          {mainCat.description || mainCat.tagline}
-                        </p>
-                      )}
-                      <div className="text-[10px] sm:text-[11px] font-bold text-[#FFB088]">
+                      <div className="text-[11px] font-bold text-[#D9602B]">
                         غير متاحة حالياً · قادمة قريباً
                       </div>
                     </div>
@@ -1339,8 +1338,8 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             </div>
 
             {/* Team Count & Timer Controls */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1 w-full sm:w-auto">
                 <span className="text-xs font-semibold text-[#777B73] px-2 flex items-center gap-1">
                   <Users className="w-3.5 h-3.5 text-[#14543D]" />
                   <span>عدد الفرق:</span>
@@ -1352,7 +1351,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                     disabled={isGameLocked}
                     onClick={() => handleTeamCountChange(num)}
                     title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                    className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
                       isGameLocked
                         ? 'cursor-not-allowed opacity-80'
                         : 'cursor-pointer'
@@ -1367,7 +1366,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 ))}
               </div>
 
-              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1">
+              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1 w-full sm:w-auto">
                 <span className="text-xs font-semibold text-[#777B73] px-2 flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5 text-[#F07842]" />
                   <span>وقت السؤال:</span>
@@ -1379,7 +1378,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                     disabled={isGameLocked}
                     onClick={() => onUpdateTimer(sec)}
                     title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                    className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
                       isGameLocked
                         ? 'cursor-not-allowed opacity-80'
                         : 'cursor-pointer'
@@ -1464,7 +1463,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               return (
                 <div
                   key={team.id}
-                  className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-5 space-y-5"
+                  className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 sm:space-y-5"
                 >
                   <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3.5">
                     <div className="flex items-center gap-2.5">
@@ -1582,7 +1581,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                               disabled={isGameLocked}
                               onClick={() => handleUpdateTeamColor(team.id, c.hex)}
                               title={isGameLocked ? `${c.name} (مقفل)` : c.name}
-                              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-transform ${
+                              className={`w-9 h-9 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center transition-transform ${
                                 isGameLocked
                                   ? 'cursor-not-allowed'
                                   : 'cursor-pointer'
@@ -1635,7 +1634,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                         <button
                           type="button"
                           onClick={() => handleAddPlayer(team.id)}
-                          className="px-3.5 py-2 bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 cursor-pointer"
+                          className="min-h-[42px] px-4 py-2 bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>إضافة</span>
@@ -1752,11 +1751,11 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               })}
             </div>
 
-            <div className="pt-1 flex flex-wrap items-center justify-between gap-3">
+            <div className="pt-1 flex flex-col-reverse sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => scrollToSection('step-categories')}
-                className="px-4 py-2.5 text-xs font-bold text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="w-full sm:w-auto min-h-[46px] px-4 py-2.5 text-xs font-bold text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <ArrowUp className="w-3.5 h-3.5 text-[#14543D]" />
                 <span>الرجوع لاختيار الفئات</span>
@@ -1767,7 +1766,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                   type="button"
                   disabled={isNavigating}
                   onClick={handleReturnToBoard}
-                  className="px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center gap-2.5 cursor-pointer shadow-sm"
+                  className="w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
                 >
                   <Lock className="w-4 h-4 text-[#F07842]" />
                   <span>العودة إلى لوحة اللعب (الجولة مقفلة)</span>
@@ -1776,7 +1775,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 <button
                   type="button"
                   onClick={handleStartChallenge}
-                  className="px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-xl transition-all flex items-center gap-2.5 cursor-pointer shadow-sm"
+                  className="w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
                 >
                   <Play className="w-4 h-4 fill-current" />
                   <span>
@@ -1787,7 +1786,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 <button
                   type="button"
                   onClick={handleStartChallenge}
-                  className="px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center gap-2.5 cursor-pointer"
+                  className="w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
                 >
                   <Layers className="w-4 h-4" />
                   <span>

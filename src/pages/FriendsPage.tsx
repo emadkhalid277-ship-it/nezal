@@ -482,7 +482,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
   // Sign-in gate
   if (!user) {
     return (
-      <div className="max-w-[700px] mx-auto px-4 py-16 text-center space-y-6">
+      <div className="max-w-[700px] mx-auto px-3 sm:px-6 py-8 md:py-16 text-center space-y-6">
         <div className="w-16 h-16 rounded-3xl bg-[#EAF2EE] border border-[#14543D]/15 text-[#14543D] flex items-center justify-center mx-auto">
           <Users className="w-8 h-8" />
         </div>
@@ -494,18 +494,18 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             سجّل الدخول لإضافة أصدقائك، متابعة حالتهم المباشرة، ودعوتهم للعب أو مشاهدة مبارياتك أونلاين.
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="px-7 py-3 rounded-2xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-sm font-bold cursor-pointer transition-colors"
+            className="w-full sm:w-auto px-7 py-3 min-h-[46px] rounded-2xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-sm font-bold cursor-pointer transition-colors"
           >
             تسجيل الدخول / حساب جديد
           </button>
           <button
             type="button"
             onClick={onNavigateHome}
-            className="px-6 py-3 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824] text-sm font-bold cursor-pointer"
+            className="w-full sm:w-auto px-6 py-3 min-h-[46px] rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824] text-sm font-bold cursor-pointer"
           >
             العودة للرئيسية
           </button>
@@ -552,7 +552,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
   };
 
   return (
-    <div className="max-w-[1220px] mx-auto px-4 sm:px-6 py-8 md:py-10 space-y-8">
+    <div className="max-w-[1220px] mx-auto px-3 sm:px-6 py-5 md:py-10 space-y-6 md:space-y-8">
       {/* TOP PAGE HEADER + PRIVACY TOGGLE */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-[#E5E8DD] pb-6">
         <div className="space-y-1.5">
@@ -610,7 +610,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
       </div>
 
       {/* CLEAN UNBOXED SUMMARY METRICS */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 border-b border-[#E5E8DD] pb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 border-b border-[#E5E8DD] pb-5 sm:pb-6">
         <div>
           <div className="text-xs font-medium text-[#777B73]">إجمالي الأصدقاء</div>
           <div className="font-display text-3xl font-bold text-[#252824] tabular-nums mt-1">
@@ -669,11 +669,11 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
         {/* RIGHT / PRIMARY COLUMN (8 cols): TABS & LISTS */}
         <div className="lg:col-span-8 space-y-5">
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"
               onClick={() => setActiveTab('friends')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'friends'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
@@ -687,7 +687,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('requests')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'requests'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
@@ -705,7 +705,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('invites')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'invites'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
@@ -723,7 +723,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('blocked')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'blocked'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
@@ -740,7 +740,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 md:p-6 space-y-5 shadow-xs">
               {/* Filter Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {(
                     [
                       { id: 'all', label: `الكل (${resolvedFriends.length})` },
@@ -958,7 +958,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                     {incomingRequests.map((req) => (
                       <div
                         key={req.id}
-                        className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                        className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-10 h-10 rounded-xl bg-[#EAF2EE] text-[#14543D] flex items-center justify-center font-bold text-sm shrink-0">
@@ -974,12 +974,12 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                           <button
                             type="button"
                             disabled={busyAction === `acc_req_${req.id}`}
                             onClick={() => handleAcceptRequest(req)}
-                            className="px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            className="px-3.5 py-2 min-h-[38px] rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                           >
                             <Check className="w-3.5 h-3.5" />
                             <span>قبول</span>
@@ -988,7 +988,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             type="button"
                             disabled={busyAction === `rej_req_${req.id}`}
                             onClick={() => handleRejectRequest(req)}
-                            className="px-3.5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#777B73] hover:text-rose-700 text-xs font-bold cursor-pointer"
+                            className="px-3.5 py-2 min-h-[38px] rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#777B73] hover:text-rose-700 text-xs font-bold cursor-pointer"
                           >
                             رفض
                           </button>
@@ -1016,7 +1016,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                     {outgoingRequests.map((req) => (
                       <div
                         key={req.id}
-                        className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                        className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-10 h-10 rounded-xl bg-[#F3F5E9] text-[#252824] flex items-center justify-center font-bold text-sm shrink-0">
@@ -1037,7 +1037,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           type="button"
                           disabled={busyAction === `can_req_${req.id}`}
                           onClick={() => handleCancelRequest(req)}
-                          className="px-3.5 py-2 rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#777B73] hover:text-rose-700 cursor-pointer shrink-0"
+                          className="px-3.5 py-2 min-h-[38px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#777B73] hover:text-rose-700 cursor-pointer shrink-0"
                         >
                           إلغاء الطلب
                         </button>
@@ -1144,7 +1144,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                     {outgoingInvites.map((inv) => (
                       <div
                         key={inv.id}
-                        className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                        className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div className="space-y-0.5">
                           <div className="text-sm font-bold text-[#252824]">
@@ -1162,7 +1162,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           type="button"
                           disabled={busyAction === `can_inv_${inv.id}`}
                           onClick={() => handleCancelInvite(inv)}
-                          className="px-3.5 py-2 rounded-xl border border-[#E5E8DD] hover:bg-rose-50 text-xs font-bold text-[#777B73] hover:text-rose-700 cursor-pointer shrink-0"
+                          className="px-3.5 py-2 min-h-[38px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 text-xs font-bold text-[#777B73] hover:text-rose-700 cursor-pointer shrink-0"
                         >
                           إلغاء الدعوة
                         </button>
@@ -1190,7 +1190,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                   {blockedUsers.map((blk) => (
                     <div
                       key={blk.id}
-                      className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                      className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center font-bold text-xs shrink-0">
@@ -1212,7 +1212,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                         onClick={() =>
                           handleUnblockUser(blk.blockedUid, blk.blockedName)
                         }
-                        className="px-3.5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer shrink-0"
+                        className="px-3.5 py-2 min-h-[38px] self-start sm:self-center rounded-xl bg-[#F3F5E9] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer shrink-0"
                       >
                         <Unlock className="w-3.5 h-3.5" />
                         <span>إلغاء الحظر</span>

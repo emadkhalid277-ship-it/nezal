@@ -474,7 +474,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
   // Render Logged Out View
   if (!user) {
     return (
-      <div className="max-w-[800px] mx-auto px-4 py-16 text-center space-y-6">
+      <div className="max-w-[800px] mx-auto px-3 sm:px-6 py-8 md:py-16 text-center space-y-6">
         <div className="w-20 h-20 rounded-3xl bg-[#14543D]/10 text-[#14543D] flex items-center justify-center mx-auto shadow-inner">
           <BookOpen className="w-10 h-10" />
         </div>
@@ -484,18 +484,18 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
         <p className="text-sm sm:text-base text-[#777B73] max-w-lg mx-auto leading-relaxed">
           سجل دخولك لتتمكن من إنشاء قوائم أسئلتك المخصصة، وإضافة أسئلتك وإجاباتها، والمساهمة مع مجتمع «نِزال» في بناء بنك الأسئلة الشامل.
         </p>
-        <div className="flex items-center justify-center gap-3 pt-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="px-6 py-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+            className="w-full sm:w-auto px-6 py-3 min-h-[46px] rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
           >
             تسجيل الدخول / إنشاء حساب
           </button>
           <button
             type="button"
             onClick={onNavigateHome}
-            className="px-5 py-3 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] font-bold text-sm border border-[#E5E8DD] transition-all cursor-pointer"
+            className="w-full sm:w-auto px-5 py-3 min-h-[46px] rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] font-bold text-sm border border-[#E5E8DD] transition-all cursor-pointer"
           >
             العودة للرئيسية
           </button>
@@ -505,7 +505,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
   }
 
   return (
-    <div className="max-w-[1320px] mx-auto px-4 sm:px-6 py-8 space-y-8">
+    <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-5 md:py-8 space-y-6 md:space-y-8">
       {/* Toast Notification Banner */}
       {feedback && (
         <div
@@ -534,7 +534,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
       )}
 
       {/* Page Header */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xs">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 sm:p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 shadow-xs">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-bold text-[#F07842]">
             <Sparkles className="w-4 h-4" />
@@ -548,11 +548,11 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 shrink-0">
           <button
             type="button"
             onClick={openCreateListModal}
-            className="px-4 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3B2B] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+            className="px-4 py-2.5 min-h-[42px] rounded-xl bg-[#14543D] hover:bg-[#0E3B2B] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
           >
             <FolderPlus className="w-4 h-4" />
             <span>إنشاء قائمة جديدة</span>
@@ -561,7 +561,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
             type="button"
             disabled={!activeListId}
             onClick={openCreateQuestionModal}
-            className="px-4 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            className="px-4 py-2.5 min-h-[42px] rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة سؤال</span>
@@ -630,7 +630,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             e.stopPropagation();
                             openEditListModal(l);
                           }}
-                          className="p-1 rounded-md text-[#777B73] hover:text-[#14543D] hover:bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="p-2 sm:p-1.5 rounded-md text-[#777B73] hover:text-[#14543D] hover:bg-black/5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
                           title="تعديل القائمة"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -641,7 +641,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             e.stopPropagation();
                             handleDeleteList(l.id, l.name);
                           }}
-                          className="p-1 rounded-md text-[#777B73] hover:text-rose-600 hover:bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="p-2 sm:p-1.5 rounded-md text-[#777B73] hover:text-rose-600 hover:bg-black/5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
                           title="حذف القائمة"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -696,7 +696,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
 
                 {/* Search & Filters Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                  <div className="relative flex-1 min-w-[200px]">
+                  <div className="relative min-w-0 w-full sm:flex-1 sm:min-w-[200px]">
                     <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#777B73]" />
                     <input
                       type="text"
@@ -957,8 +957,8 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
 
       {/* MODAL 1: Create / Edit List */}
       {listModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#FFFFFF] rounded-3xl border border-[#E5E8DD] max-w-md w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#FFFFFF] rounded-3xl border border-[#E5E8DD] max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
               <h3 className="font-display font-bold text-base text-[#252824]">
                 {editingList ? 'تعديل اسم القائمة' : 'إنشاء قائمة أسئلة جديدة'}
@@ -966,7 +966,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               <button
                 type="button"
                 onClick={() => setListModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-[#777B73]"
+                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1021,8 +1021,8 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
 
       {/* MODAL 2: Create / Edit Question */}
       {questionModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#FFFFFF] rounded-3xl border border-[#E5E8DD] max-w-2xl w-full p-6 space-y-5 shadow-2xl my-8 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#FFFFFF] rounded-3xl border border-[#E5E8DD] max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
               <div className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-[#F07842]" />
@@ -1033,7 +1033,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               <button
                 type="button"
                 onClick={() => setQuestionModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-[#777B73]"
+                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1091,7 +1091,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                 <label className="text-xs font-bold text-[#252824]">
                   قيمة السؤال والنقاط ({POINT_TO_DIFFICULTY[formPoints]})
                 </label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                   {([100, 200, 300, 400, 500] as PointValue[]).map((pts) => {
                     const isSelected = formPoints === pts;
                     return (
@@ -1099,7 +1099,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                         key={pts}
                         type="button"
                         onClick={() => setFormPoints(pts)}
-                        className={`py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                        className={`py-2 min-h-[42px] text-xs font-bold rounded-xl border transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
                             : 'bg-[#FBFDFB] text-[#777B73] border-[#E5E8DD] hover:border-[#14543D]/30'
@@ -1244,8 +1244,8 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
 
       {/* MODAL 3: Rejection Reason Details Modal */}
       {viewingRejection && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#FFFFFF] rounded-3xl border border-rose-200 max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-right">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#FFFFFF] rounded-3xl border border-rose-200 max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-right">
             <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
               <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
                 <XCircle className="w-5 h-5" />
@@ -1254,7 +1254,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               <button
                 type="button"
                 onClick={() => setViewingRejection(null)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-[#777B73]"
+                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1275,7 +1275,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               <button
                 type="button"
                 onClick={() => setViewingRejection(null)}
-                className="px-4 py-2 rounded-xl bg-[#14543D] text-white text-xs font-bold cursor-pointer"
+                className="px-4 py-2 min-h-[40px] rounded-xl bg-[#14543D] text-white text-xs font-bold cursor-pointer"
               >
                 فهمت
               </button>
@@ -1287,19 +1287,19 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
       {/* MODAL 4: Full Image Preview Modal */}
       {previewImageUrl && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-4 cursor-zoom-out"
           onClick={() => setPreviewImageUrl(null)}
         >
-          <div className="relative max-w-3xl max-h-[90vh]">
+          <div className="relative max-w-3xl max-h-[90dvh]">
             <img
               src={previewImageUrl}
               alt="صورة السؤال مكبرة"
-              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
+              className="max-h-[82dvh] max-w-[94vw] rounded-2xl object-contain shadow-2xl"
             />
             <button
               type="button"
               onClick={() => setPreviewImageUrl(null)}
-              className="absolute top-3 left-3 p-2 bg-black/60 hover:bg-black/80 text-white rounded-full cursor-pointer"
+              className="absolute top-3 left-3 p-2.5 bg-black/60 hover:bg-black/80 text-white rounded-full cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

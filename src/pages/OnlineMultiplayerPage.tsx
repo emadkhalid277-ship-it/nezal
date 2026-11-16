@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { User } from 'firebase/auth';
-import confetti from 'canvas-confetti';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Users,
   Copy,
@@ -14,7 +14,6 @@ import {
   HelpCircle,
   Clock,
   Sparkles,
-  Trophy,
   ArrowRight,
   ShieldCheck,
   UserCheck,
@@ -37,7 +36,9 @@ import {
   Image as ImageIcon,
   ZoomIn,
   RefreshCw,
+  WifiOff,
 } from 'lucide-react';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import {
   ActiveQuestionState,
   OnlineGameRoom,
@@ -52,6 +53,7 @@ import {
   QuestionDedupSettings,
   SubcategoryItem,
   TriviaQuestion,
+  VisualEffectsSettings,
 } from '../types/game';
 import {
   assignPlayerTeam,
@@ -93,6 +95,13 @@ import {
   shouldRecordQuestionSeenForParticipant,
   SlotSelectionResult,
 } from '../utils/questionDedupLogic';
+import { evaluateMatchOutcome } from '../utils/matchOutcome';
+import {
+  AnimatedScoreCounter,
+  AnswerFeedbackBanner,
+  MatchCelebrationHeader,
+  useEffectiveVisualEffects,
+} from '../components/GameVisualEffects';
 
 interface OnlineMultiplayerPageProps {
   user: User | null;
@@ -118,6 +127,7 @@ interface OnlineMultiplayerPageProps {
     status: 'online' | 'in_lobby' | 'in_match',
     roomCode?: string | null
   ) => void;
+  visualEffectsSettings?: VisualEffectsSettings;
 }
 
 const POINT_TIERS: PointValue[] = [100, 200, 300, 400, 500];
@@ -137,7 +147,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   initialJoinRole = 'player',
   autoJoinNonce = 0,
   onPresenceActivityChange,
+  visualEffectsSettings,
 }) => {
+  const { isOnline } = useOnlineStatus();
+  const effects = useEffectiveVisualEffects(visualEffectsSettings);
   // Local profile & session
   const [playerProfile, setPlayerProfile] = useState(() =>
     getOrCreatePlayerProfile(user)
@@ -196,11 +209,18 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() =>
     soundFX.isEnabled()
   );
+  const [onlineAnswerFeedback, setOnlineAnswerFeedback] = useState<{
+    type: 'correct' | 'wrong';
+    headline: string;
+    detail: string;
+    eventKey: string;
+  } | null>(null);
 
-  // Ref to active subscription & previous room state for live SFX triggers
+  // Ref to active subscription & previous room state for live SFX & VFX triggers
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const heartbeatRef = useRef<number | null>(null);
   const audioLoadingStartedAtRef = useRef<number | null>(null);
+  const onlineFeedbackTimerRef = useRef<number | null>(null);
   const prevModalTimeLeftRef = useRef<number>(60);
   const prevRoomSyncRef = useRef<{
     code: string;
@@ -253,21 +273,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     });
   }, [teamCount]);
 
-  // Confetti on game finished
+  // Clear answer feedback timer on unmount
   useEffect(() => {
-    if (currentRoom?.status === 'finished') {
-      try {
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#14543D', '#F07842', '#F3F5E9', '#FFFFFF'],
-        });
-      } catch {
-        // ignore
+    return () => {
+      if (onlineFeedbackTimerRef.current !== null) {
+        window.clearTimeout(onlineFeedbackTimerRef.current);
       }
-    }
-  }, [currentRoom?.status]);
+    };
+  }, []);
 
   // Active question countdown timer (anchored to openedAt + fair audio load delay so buffering never penalizes teams)
   useEffect(() => {
@@ -399,22 +412,56 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       soundFX.playAnswerReveal();
     }
 
-    // 6. Scoring / Wrong / Buzz-in Feedback
+    // 6. Scoring / Wrong / Buzz-in Feedback (SFX + real-time synced VFX)
     const scoringTeamIdx = teamScores.findIndex(
       (score, idx) => score > (prev.teamScores[idx] ?? 0)
     );
+    const triggerSyncedFeedback = (
+      type: 'correct' | 'wrong',
+      headline: string,
+      detail: string,
+      durationMs: number
+    ) => {
+      if (onlineFeedbackTimerRef.current !== null) {
+        window.clearTimeout(onlineFeedbackTimerRef.current);
+      }
+      setOnlineAnswerFeedback({
+        type,
+        headline,
+        detail,
+        eventKey: `${currentSnapshot.code}_${currentSnapshot.lastActionAt}_${type}`,
+      });
+      onlineFeedbackTimerRef.current = window.setTimeout(() => {
+        setOnlineAnswerFeedback(null);
+        onlineFeedbackTimerRef.current = null;
+      }, durationMs);
+    };
+
     if (scoringTeamIdx >= 0 && !(!wasFinished && isNowFinished)) {
       soundFX.playTeamScore(scoringTeamIdx);
+      const scoredTeam = currentRoom.teams?.[scoringTeamIdx];
+      const delta =
+        (teamScores[scoringTeamIdx] ?? 0) - (prev.teamScores[scoringTeamIdx] ?? 0);
+      triggerSyncedFeedback(
+        'correct',
+        'إجابة صحيحة!',
+        `${scoredTeam?.name || 'الفريق'} +${delta} نقطة`,
+        1750
+      );
     } else if (currentSnapshot.lastActionAt !== prev.lastActionAt) {
       const msg = currentRoom.lastActionMessage || '';
       if (currentSnapshot.totalScore > prev.totalScore && !(!wasFinished && isNowFinished)) {
         soundFX.playCorrect();
+        triggerSyncedFeedback('correct', 'إجابة صحيحة!', msg, 1750);
       } else if (
         msg.includes('تم تخطي السؤال') ||
         msg.includes('بدون نقاط') ||
         msg.includes('إجابة خاطئة')
       ) {
         soundFX.playWrong();
+        if (!isNowFinished) {
+          triggerSyncedFeedback('wrong', 'إجابة خاطئة', msg, 1500);
+        }
       } else if (msg.includes('رفع يده') || msg.includes('يطلب كشف')) {
         soundFX.playBuzzIn();
       }
@@ -734,6 +781,11 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     if (loading) return;
     setErrorMsg(null);
 
+    if (!isOnline || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+      setErrorMsg('يتطلب اللعب عن بُعد اتصالاً نشطاً بالإنترنت لإنشاء غرفة.');
+      return;
+    }
+
     let name = playerNameInput.trim();
     if (!name) {
       name = user?.displayName || user?.email?.split('@')[0] || '';
@@ -774,6 +826,11 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     e.preventDefault();
     if (loading) return;
     setErrorMsg(null);
+
+    if (!isOnline || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+      setErrorMsg('يتطلب اللعب عن بُعد اتصالاً نشطاً بالإنترنت للانضمام إلى غرفة.');
+      return;
+    }
 
     let name = playerNameInput.trim();
     if (!name) {
@@ -1286,7 +1343,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // Mandatory Login Gate for Online Multiplayer
   if (!user) {
     return (
-      <div className="max-w-[700px] mx-auto px-4 py-16 text-center space-y-6">
+      <div className="max-w-[700px] mx-auto px-3 sm:px-4 py-10 md:py-16 text-center space-y-5 sm:space-y-6">
         <div className="w-16 h-16 rounded-3xl bg-[#FEF2EC] border border-[#F07842]/20 text-[#F07842] flex items-center justify-center mx-auto">
           <Radio className="w-8 h-8 animate-pulse text-[#F07842]" />
         </div>
@@ -1294,25 +1351,33 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           <div className="inline-block px-3 py-1 rounded-full bg-[#EAF2EE] text-xs font-bold text-[#14543D]">
             تسجيل الدخول إلزامي
           </div>
-          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
-            اللعب عن بُعد يتطلب تسجيل الدخول
+          <h1 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-[#252824]">
+            اللعب عن بُعد يتطلب تسجيل الدخول واتصالاً بالإنترنت
           </h1>
-          <p className="text-sm text-[#777B73] max-w-md mx-auto">
-            لإنشاء غرفة أو الانضمام إلى مباراة أونلاين وحفظ تقدمك ونتائجك، يرجى تسجيل الدخول إلى حسابك أو إنشاء حساب جديد.
+          <p className="text-xs sm:text-sm text-[#777B73] max-w-md mx-auto leading-relaxed">
+            لإنشاء غرفة أو الانضمام إلى مباراة أونلاين وحفظ تقدمك ونتائجك، يرجى تسجيل الدخول إلى حسابك عند توفر اتصال بالإنترنت.
           </p>
+          {!isOnline && (
+            <div className="max-w-md mx-auto p-3 rounded-xl bg-[#FEF2EC] border border-[#F07842]/40 text-xs font-bold text-[#9A3412] flex items-center justify-center gap-2">
+              <WifiOff className="w-4 h-4 text-[#F07842] shrink-0" />
+              <span>أنت غير متصل بالإنترنت حالياً</span>
+            </div>
+          )}
         </div>
-        <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={onOpenAuthModal}
-            className="px-8 py-3.5 rounded-2xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer shadow-sm transition-all"
-          >
-            تسجيل الدخول / إنشاء حساب
-          </button>
+        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
+          {isOnline && (
+            <button
+              type="button"
+              onClick={onOpenAuthModal}
+              className="min-h-[48px] px-8 py-3.5 rounded-2xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer shadow-sm transition-all flex items-center justify-center"
+            >
+              تسجيل الدخول / إنشاء حساب
+            </button>
+          )}
           <button
             type="button"
             onClick={onNavigateHome}
-            className="px-6 py-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824] text-sm font-bold hover:bg-[#F3F5E9] cursor-pointer transition-colors"
+            className="min-h-[48px] px-6 py-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824] text-sm font-bold hover:bg-[#F3F5E9] cursor-pointer transition-colors flex items-center justify-center"
           >
             العودة للرئيسية
           </button>
@@ -1326,26 +1391,39 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // -------------------------------------------------------------
   if (!currentRoom) {
     return (
-      <div className="max-w-[1000px] mx-auto px-4 py-8 md:py-12 space-y-8">
+      <div className="max-w-[1000px] mx-auto px-3 sm:px-4 py-5 md:py-12 space-y-6 md:space-y-8">
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4 sm:pb-5">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EAF2EE] border border-[#14543D]/20 text-xs font-bold text-[#14543D]">
               <Radio className="w-3.5 h-3.5 animate-pulse text-[#F07842]" />
               <span>اللعب عن بُعد • Online Multiplayer</span>
             </div>
-            <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+            <h1 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-[#252824]">
               تحدّوا بعض أونلاين من أجهزتكم المختلفة!
             </h1>
           </div>
           <button
             type="button"
             onClick={onNavigateHome}
-            className="px-4 py-2 text-xs font-bold text-[#777B73] hover:text-[#252824] bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl hover:bg-[#F3F5E9] transition-colors cursor-pointer"
+            className="self-start sm:self-auto min-h-[40px] px-4 py-2 text-xs font-bold text-[#777B73] hover:text-[#252824] bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl hover:bg-[#F3F5E9] transition-colors cursor-pointer"
           >
             العودة للرئيسية
           </button>
         </div>
+
+        {/* Offline Connection Guard Banner */}
+        {!isOnline && (
+          <div className="p-4 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#9A3412] text-sm flex items-center gap-3">
+            <WifiOff className="w-5 h-5 shrink-0 text-[#F07842]" />
+            <div>
+              <p className="font-bold">يتطلب اللعب عن بُعد اتصالاً بالإنترنت</p>
+              <p className="text-xs text-[#9A3412]/85 mt-0.5">
+                أنت غير متصل حالياً. يمكنك العودة للرئيسية للعب في وضع «اللعب المحلي دون إنترنت» أو إعادة المحاولة فور توفر الإنترنت.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Error notification */}
         {errorMsg && (
@@ -1393,7 +1471,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         {entryMode === 'create' && (
           <form
             onSubmit={handleCreateRoom}
-            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 md:p-10 max-w-xl mx-auto space-y-6 shadow-sm"
+            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 sm:p-6 md:p-10 max-w-xl mx-auto space-y-5 sm:space-y-6 shadow-sm"
           >
             <div className="text-center space-y-2">
               <div className="w-14 h-14 rounded-2xl bg-[#EAF2EE] border border-[#14543D]/20 text-[#14543D] flex items-center justify-center mx-auto">
@@ -1524,7 +1602,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         {entryMode === 'join' && (
           <form
             onSubmit={handleJoinRoom}
-            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 md:p-10 max-w-xl mx-auto space-y-6 shadow-sm"
+            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 sm:p-6 md:p-10 max-w-xl mx-auto space-y-5 sm:space-y-6 shadow-sm"
           >
             <div className="text-center space-y-2">
               <div className="w-14 h-14 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/20 text-[#F07842] flex items-center justify-center mx-auto">
@@ -1661,7 +1739,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     };
 
     return (
-      <div className="max-w-[1150px] mx-auto px-4 py-8 space-y-8">
+      <div className="max-w-[1150px] mx-auto px-3 sm:px-4 py-5 md:py-8 space-y-5 sm:space-y-8">
+        {/* Offline Connection Warning Banner */}
+        {!isOnline && (
+          <div className="p-4 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#9A3412] text-sm flex items-center gap-3">
+            <WifiOff className="w-5 h-5 shrink-0 text-[#F07842]" />
+            <p className="font-bold">
+              انقطع الاتصال بالإنترنت — يتطلب اللعب عن بُعد اتصالاً بالإنترنت، وسيتم استئناف المزامنة تلقائياً فور عودة الاتصال.
+            </p>
+          </div>
+        )}
+
         {/* Error Alert */}
         {errorMsg && (
           <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between gap-3 shadow-xs animate-in fade-in">
@@ -1681,8 +1769,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
         {/* Toast Alert */}
         {toastNotification && (
-          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#14543D] text-[#FFFFFF] px-5 py-2.5 rounded-2xl shadow-lg border border-[#FFFFFF]/20 text-xs font-bold flex items-center gap-2 animate-bounce">
-            <BellRing className="w-4 h-4 text-[#F07842]" />
+          <div className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md bg-[#14543D] text-[#FFFFFF] px-4 py-2.5 rounded-2xl shadow-lg border border-[#FFFFFF]/20 text-xs font-bold flex items-center justify-center gap-2 animate-bounce text-center">
+            <BellRing className="w-4 h-4 text-[#F07842] shrink-0" />
             <span>{toastNotification}</span>
           </div>
         )}
@@ -1710,7 +1798,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             <button
               type="button"
               onClick={() => claimOnlineHost(currentRoom.code, playerProfile.id)}
-              className="px-4 py-1.5 text-xs font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-700 cursor-pointer"
+              className="min-h-[40px] px-4 py-1.5 text-xs font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-700 cursor-pointer"
             >
               استلام دور المضيف 👑
             </button>
@@ -1718,8 +1806,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         )}
 
         {/* Room Header & Invite Card */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-6">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#E5E8DD] pb-4 sm:pb-6">
             <div>
               <div className="flex items-center gap-2 text-xs text-[#777B73] flex-wrap">
                 <Radio className="w-3.5 h-3.5 text-[#14543D] animate-pulse" />
@@ -1746,17 +1834,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   </>
                 )}
               </div>
-              <h1 className="font-display text-2xl font-bold text-[#252824]">
+              <h1 className="font-display text-xl sm:text-2xl font-bold text-[#252824] mt-1">
                 صالة التحدي واختيار الفئات
               </h1>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
               {!isSpectator && (
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(true)}
-                  className="px-4 py-2 text-xs font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="min-h-[40px] px-3.5 py-2 text-xs font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3D2C] rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <Users className="w-4 h-4 text-[#F07842]" />
                   <span>دعوة أصدقاء</span>
@@ -1765,7 +1853,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               <button
                 type="button"
                 onClick={handleLeaveRoom}
-                className="px-4 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                className="min-h-[40px] px-3.5 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <LogOut className="w-4 h-4" />
                 <span>{isSpectator ? 'مغادرة المشاهدة' : 'مغادرة الغرفة'}</span>
@@ -1774,21 +1862,21 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </div>
 
           {/* Big Room Code Box */}
-          <div className="bg-[#F3F5E9] border-2 border-[#14543D]/20 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
+          <div className="bg-[#F3F5E9] border-2 border-[#14543D]/20 rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6 text-center md:text-right">
             <div className="space-y-1">
               <div className="text-xs font-bold text-[#777B73]">
                 رمز الغرفة (شاركه مع منافسك للانضمام):
               </div>
-              <div className="font-mono text-4xl md:text-5xl font-bold tracking-widest text-[#14543D]">
+              <div className="font-mono text-3xl sm:text-4xl md:text-5xl font-bold tracking-widest text-[#14543D]">
                 {currentRoom.code}
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-center gap-2.5 sm:gap-3 w-full md:w-auto">
               <button
                 type="button"
                 onClick={handleCopyCode}
-                className="px-5 py-3 rounded-xl bg-[#FFFFFF] hover:bg-[#EAF2EE] border border-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
+                className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-[#FFFFFF] hover:bg-[#EAF2EE] border border-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
               >
                 {copiedCode ? (
                   <>
@@ -1806,7 +1894,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               <button
                 type="button"
                 onClick={handleShareInviteLink}
-                className="px-5 py-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-xs font-bold text-[#FFFFFF] flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
+                className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-xs font-bold text-[#FFFFFF] flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
               >
                 {copiedLink ? (
                   <>
@@ -1923,12 +2011,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                       return (
                         <div
                           key={slotIdx}
-                          className="p-2.5 rounded-xl border border-[#14543D]/30 bg-[#EAF2EE] flex flex-col justify-between min-h-[75px] relative group"
+                          className="p-2.5 sm:p-3 rounded-xl border border-[#14543D]/30 bg-[#EAF2EE] flex flex-col justify-between min-h-[82px] relative group"
                         >
-                          <div className="text-[10px] text-[#777B73] line-clamp-1">
+                          <div className="text-[11px] font-bold text-[#14543D]/80 line-clamp-1 pl-6">
                             {subObj.mainCategory || 'فئة'}
                           </div>
-                          <div className="font-display text-xs font-bold text-[#14543D] line-clamp-2">
+                          <div className="font-display text-xs sm:text-sm font-bold text-[#14543D] leading-snug line-clamp-2 text-center my-auto py-0.5">
                             {subObj.name}
                           </div>
                           {isMyTeamChoice && (
@@ -1936,9 +2024,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                               type="button"
                               onClick={() => handleToggleCategoryPick(subId)}
                               title="إلغاء اختيار هذه الفئة"
-                              className="absolute top-1 left-1 w-5 h-5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                              className="absolute top-1 left-1 w-6 h-6 sm:w-5 sm:h-5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                             </button>
                           )}
                         </div>
@@ -2020,12 +2108,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                       return (
                         <div
                           key={slotIdx}
-                          className="p-2.5 rounded-xl border border-[#F07842]/30 bg-[#FEF2EC] flex flex-col justify-between min-h-[75px] relative group"
+                          className="p-2.5 sm:p-3 rounded-xl border border-[#F07842]/30 bg-[#FEF2EC] flex flex-col justify-between min-h-[82px] relative group"
                         >
-                          <div className="text-[10px] text-[#777B73] line-clamp-1">
+                          <div className="text-[11px] font-bold text-[#D9602B]/85 line-clamp-1 pl-6">
                             {subObj.mainCategory || 'فئة'}
                           </div>
-                          <div className="font-display text-xs font-bold text-[#F07842] line-clamp-2">
+                          <div className="font-display text-xs sm:text-sm font-bold text-[#252824] leading-snug line-clamp-2 text-center my-auto py-0.5">
                             {subObj.name}
                           </div>
                           {isMyTeamChoice && (
@@ -2033,9 +2121,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                               type="button"
                               onClick={() => handleToggleCategoryPick(subId)}
                               title="إلغاء اختيار هذه الفئة"
-                              className="absolute top-1 left-1 w-5 h-5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                              className="absolute top-1 left-1 w-6 h-6 sm:w-5 sm:h-5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                             </button>
                           )}
                         </div>
@@ -2060,7 +2148,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
         {/* INTERACTIVE CATEGORY SELECTION BROWSER (Hidden for Spectators) */}
         {!isSpectator && (
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EAF2EE] text-xs font-bold text-[#14543D] mb-1">
@@ -2116,10 +2204,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               <button
                 type="button"
                 onClick={() => setCategoryFilterMainId('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold shrink-0 transition-colors cursor-pointer ${
                   categoryFilterMainId === 'all'
                     ? 'bg-[#14543D] text-white shadow-xs'
-                    : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
+                    : 'bg-[#F3F5E9] text-[#252824] hover:bg-[#E5E8DD]'
                 }`}
               >
                 الكل ({activeSubcategories.length})
@@ -2139,12 +2227,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                           triggerComingSoonAlert();
                         }
                       }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      className={`min-h-[42px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
                         isSelected
                           ? 'bg-[#14543D] text-white shadow-xs'
                           : isComingSoon
                           ? 'bg-[#FEF2EC]/70 text-[#252824] border border-[#F07842]/35 hover:bg-[#FEF2EC]'
-                          : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
+                          : 'bg-[#F3F5E9] text-[#252824] hover:bg-[#E5E8DD]'
                       }`}
                     >
                       <span>{m.name}</span>
@@ -2166,7 +2254,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </div>
 
           {/* Subcategories Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[380px] overflow-y-auto p-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-3.5 max-h-[420px] overflow-y-auto p-1">
             {filteredSubcategories.map((sub) => {
               const comingSoon = isSubComingSoon(sub);
               const isPickedByTeam1 = team1Picks.includes(sub.id);
@@ -2182,11 +2270,11 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     type="button"
                     aria-disabled="true"
                     onClick={() => triggerComingSoonAlert()}
-                    className="p-3 rounded-2xl border-2 border-dashed border-[#D4D9CC] bg-[#F3F5E9]/85 text-right transition-all cursor-not-allowed relative flex flex-col justify-between min-h-[100px] select-none opacity-85 hover:border-[#F07842]/60"
+                    className="p-3.5 rounded-2xl border-2 border-dashed border-[#D4D9CC] bg-[#F3F5E9]/85 text-center transition-all cursor-not-allowed relative flex flex-col justify-between min-h-[116px] select-none opacity-85 hover:border-[#F07842]/60"
                   >
-                    <div>
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <span className="text-[10px] text-[#777B73] font-bold line-clamp-1">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] text-[#52574E] font-bold line-clamp-1">
                           {sub.mainCategory || 'تصنيف'}
                         </span>
                         <span className="px-2 py-0.5 rounded-md bg-[#F07842] text-white text-[10px] font-bold inline-flex items-center gap-1 shadow-xs">
@@ -2195,14 +2283,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                         </span>
                       </div>
 
-                      <div className="font-display text-xs font-bold text-[#252824] line-clamp-2">
+                      <div className="font-display text-sm sm:text-[15px] font-bold text-[#252824] leading-snug line-clamp-2 min-h-[2.5em] flex items-center justify-center">
                         {sub.name}
                       </div>
                     </div>
 
-                    <div className="pt-2 flex items-center justify-between text-[10px] font-bold text-[#D9602B]">
+                    <div className="pt-2 flex items-center justify-between text-[11px] font-bold text-[#D9602B]">
                       <span>غير متاحة حالياً</span>
-                      <Lock className="w-3 h-3 text-[#777B73]" />
+                      <Lock className="w-3.5 h-3.5 text-[#777B73]" />
                     </div>
                   </button>
                 );
@@ -2214,16 +2302,16 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   type="button"
                   disabled={isToggling}
                   onClick={() => handleToggleCategoryPick(sub.id)}
-                  className={`p-3 rounded-2xl border text-right transition-all cursor-pointer relative flex flex-col justify-between min-h-[95px] select-none ${
+                  className={`p-3.5 rounded-2xl border-2 text-center transition-all cursor-pointer relative flex flex-col justify-between min-h-[116px] select-none ${
                     isPickedByMyTeam
-                      ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
-                      : 'bg-[#FFFFFF] border-[#E5E8DD] hover:border-[#14543D]/40 hover:bg-[#F3F5E9]/50'
+                      ? 'bg-emerald-50/90 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                      : 'bg-[#FFFFFF] border-[#E5E8DD] hover:border-[#14543D]/50 hover:bg-[#F3F5E9]/50'
                   }`}
                 >
-                  <div>
+                  <div className="space-y-1.5">
                     {/* Top badging */}
-                    <div className="flex items-center justify-between gap-1 mb-1">
-                      <span className="text-[10px] text-[#777B73] font-bold line-clamp-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] text-[#14543D] font-bold line-clamp-1">
                         {sub.mainCategory || 'تصنيف'}
                       </span>
                       {isToggling && (
@@ -2231,16 +2319,16 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                       )}
                     </div>
 
-                    <div className="font-display text-xs font-bold text-[#252824] line-clamp-2">
+                    <div className="font-display text-sm sm:text-[15px] font-bold text-[#252824] leading-snug line-clamp-2 min-h-[2.5em] flex items-center justify-center">
                       {sub.name}
                     </div>
                   </div>
 
                   {/* Badges showing which team picked it */}
-                  <div className="pt-2 flex flex-wrap items-center gap-1">
+                  <div className="pt-2 flex flex-wrap items-center justify-center gap-1">
                     {isPickedByTeam1 && (
                       <span
-                        className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
+                        className="text-[10px] font-bold px-2 py-0.5 rounded text-white"
                         style={{ backgroundColor: team1.color }}
                       >
                         {team1.name} ✓
@@ -2248,7 +2336,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     )}
                     {isPickedByTeam2 && (
                       <span
-                        className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white"
+                        className="text-[10px] font-bold px-2 py-0.5 rounded text-white"
                         style={{ backgroundColor: team2.color }}
                       >
                         {team2.name} ✓
@@ -2257,12 +2345,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
                     {/* Action Hint */}
                     {isPickedByMyTeam ? (
-                      <span className="text-[10px] text-emerald-700 font-bold inline-flex items-center gap-0.5">
-                        <Check className="w-3 h-3" /> تم الاختيار
+                      <span className="text-[11px] text-emerald-700 font-bold inline-flex items-center gap-0.5">
+                        <Check className="w-3.5 h-3.5" /> تم الاختيار
                       </span>
                     ) : !isPickedByTeam1 && !isPickedByTeam2 ? (
                       <span
-                        className={`text-[10px] font-bold ${
+                        className={`text-[11px] font-bold ${
                           isMyTeamFull ? 'text-[#777B73]/50' : 'text-[#14543D]'
                         }`}
                       >
@@ -2318,7 +2406,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         )}
 
         {/* 5 CONDITIONS VALIDATION & START CHALLENGE BUTTON */}
-        <div className="bg-[#FFFFFF] border-2 border-[#14543D]/30 rounded-3xl p-6 md:p-8 space-y-5 shadow-sm">
+        <div className="bg-[#FFFFFF] border-2 border-[#14543D]/30 rounded-3xl p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5 shadow-sm">
           {/* Checklist header */}
           <div className="space-y-1">
             <h3 className="font-display text-base font-bold text-[#252824]">
@@ -2380,7 +2468,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               </div>
 
               {/* 5. Realtime sync */}
-              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+              <div className="col-span-2 sm:col-span-1 p-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>5. التزامن متصل</span>
               </div>
@@ -2388,7 +2476,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </div>
 
           {/* Action button row */}
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#E5E8DD]">
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 border-t border-[#E5E8DD]">
             <div className="text-xs text-[#777B73] text-center sm:text-right">
               {!hasOpponent
                 ? 'بانتظار انضمام المنافس لتفعيل إمكانية بدء التحدي.'
@@ -2402,7 +2490,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 type="button"
                 disabled={!isRoomReadyToStart || loading}
                 onClick={handleHostStartGameClick}
-                className={`px-8 py-4 text-base font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shrink-0 ${
+                className={`w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm sm:text-base font-bold rounded-2xl transition-all flex items-center justify-center gap-2 shrink-0 ${
                   isRoomReadyToStart && !loading
                     ? 'bg-[#14543D] text-[#FFFFFF] hover:bg-[#0E3D2C] cursor-pointer shadow-lg active:scale-95 animate-pulse'
                     : 'bg-zinc-200 text-zinc-500 border border-zinc-300 cursor-not-allowed opacity-75'
@@ -2473,19 +2561,44 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // -------------------------------------------------------------
   if (currentRoom.status === 'in_game' || (currentRoom.status as string) === 'playing') {
     return (
-      <div className="max-w-[1320px] mx-auto px-4 py-6 space-y-6">
-        {/* Toast Alert */}
-        {toastNotification && (
-          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#14543D] text-[#FFFFFF] px-5 py-2.5 rounded-2xl shadow-lg border border-[#FFFFFF]/20 text-xs font-bold flex items-center gap-2 animate-bounce">
-            <BellRing className="w-4 h-4 text-[#F07842]" />
+      <div className="max-w-[1320px] mx-auto px-3 sm:px-4 py-4 md:py-6 space-y-4 sm:space-y-6">
+        {/* Offline Connection Warning Banner */}
+        {!isOnline && (
+          <div className="p-4 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#9A3412] text-sm flex items-center gap-3">
+            <WifiOff className="w-5 h-5 shrink-0 text-[#F07842]" />
+            <p className="font-bold">
+              انقطع الاتصال بالإنترنت — يتطلب اللعب عن بُعد اتصالاً بالإنترنت، وستعود المزامنة تلقائياً فور استعادة الاتصال.
+            </p>
+          </div>
+        )}
+
+        {/* Synced Real-Time Answer Feedback Overlay (Correct / Wrong) */}
+        <AnimatePresence>
+          {onlineAnswerFeedback && (
+            <div className="pointer-events-none fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md">
+              <AnswerFeedbackBanner
+                type={onlineAnswerFeedback.type}
+                headline={onlineAnswerFeedback.headline}
+                detailText={onlineAnswerFeedback.detail}
+                effectKey={onlineAnswerFeedback.eventKey}
+                effects={effects}
+              />
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Toast Alert (non-answer notifications) */}
+        {toastNotification && !onlineAnswerFeedback && (
+          <div className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md bg-[#14543D] text-[#FFFFFF] px-4 py-2.5 rounded-2xl shadow-lg border border-[#FFFFFF]/20 text-xs font-bold flex items-center justify-center gap-2 text-center">
+            <BellRing className="w-4 h-4 text-[#F07842] shrink-0" />
             <span>{toastNotification}</span>
           </div>
         )}
 
         {/* TOP STATUS BAR: Teams Scores & Turn Indicator */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 md:p-6 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#E5E8DD] pb-4">
-            <div className="flex items-center gap-3 flex-wrap">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-3 sm:p-4 md:p-6 shadow-sm space-y-3 sm:space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-4 border-b border-[#E5E8DD] pb-3 sm:pb-4">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <span className="w-2.5 h-2.5 rounded-full bg-[#F07842]" />
               <span className="text-xs font-bold text-[#14543D]">
                 غرفة: <span className="font-mono">{currentRoom.code}</span>
@@ -2523,12 +2636,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             </div>
 
             {/* Sound, Invite & Host Controls */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap w-full sm:w-auto">
               {!isSpectator && (
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(true)}
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-[#14543D] text-white hover:bg-[#0E3D2C] cursor-pointer flex items-center gap-1.5"
+                  className="min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-lg bg-[#14543D] text-white hover:bg-[#0E3D2C] cursor-pointer flex items-center gap-1.5"
                 >
                   <Eye className="w-3.5 h-3.5 text-[#F07842]" />
                   <span>دعوة للمشاهدة</span>
@@ -2539,7 +2652,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 type="button"
                 onClick={() => soundFX.toggle()}
                 title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 border transition-colors ${
+                className={`min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 border transition-colors ${
                   soundEnabled
                     ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
                     : 'bg-[#F3F5E9] border-[#E5E8DD] text-[#777B73]'
@@ -2562,7 +2675,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 <button
                   type="button"
                   onClick={() => hostFinishGame(currentRoom.code, currentRoom.hostId)}
-                  className="px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer"
+                  className="min-h-[38px] px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer"
                 >
                   إنهاء المباراة
                 </button>
@@ -2572,7 +2685,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 <button
                   type="button"
                   onClick={handleLeaveRoom}
-                  className="px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer flex items-center gap-1"
+                  className="min-h-[38px] px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer flex items-center gap-1"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>مغادرة المشاهدة</span>
@@ -2582,26 +2695,28 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </div>
 
           {/* Teams Scores Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
             {currentRoom.teams.map((team, idx) => {
               const isTurn = idx === currentRoom.activeTeamIndex % currentRoom.teams.length;
               return (
                 <div
                   key={team.id}
-                  className={`p-3.5 rounded-xl border-2 transition-all flex items-center justify-between ${
+                  className={`p-2.5 sm:p-3.5 rounded-xl border-2 transition-all flex items-center justify-between gap-2 ${
+                    currentRoom.teams.length === 3 && idx === 2 ? 'col-span-2 md:col-span-1' : ''
+                  } ${
                     isTurn
                       ? 'bg-[#F3F5E9] shadow-sm'
                       : 'bg-[#FFFFFF] border-[#E5E8DD]'
                   }`}
                   style={{ borderColor: isTurn ? team.color : '#E5E8DD' }}
                 >
-                  <div className="space-y-0.5">
+                  <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span
-                        className="w-3 h-3 rounded-full"
+                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0"
                         style={{ backgroundColor: team.color }}
                       />
-                      <span className="text-xs font-bold text-[#252824] truncate max-w-[100px]">
+                      <span className="text-xs sm:text-sm font-bold text-[#252824] truncate">
                         {team.name}
                       </span>
                     </div>
@@ -2611,9 +2726,13 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="font-mono text-2xl font-bold text-[#14543D]">
-                    {team.score}
-                  </div>
+                  <AnimatedScoreCounter
+                    value={team.score}
+                    animateOnMount={false}
+                    motionEnabled={effects.motion && effects.correct}
+                    showDeltaBadge={effects.correct}
+                    className="font-mono text-xl sm:text-2xl font-bold text-[#14543D] shrink-0"
+                  />
                 </div>
               );
             })}
@@ -2651,87 +2770,163 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             );
           })()}
 
-        {/* GAME BOARD: Subcategory Columns × 5 Point Rows */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 md:p-6 shadow-sm overflow-x-auto">
-          <div
-            className="grid gap-3 min-w-[700px]"
-            style={{
-              gridTemplateColumns: `repeat(${onlineBoardColumns.length}, minmax(130px, 1fr))`,
-            }}
-          >
-            {/* Column Headers (Subcategories) */}
-            {onlineBoardColumns.map((col, idx) => (
+        {/* GAME BOARD: Mobile 2-Column Vertical Board + Desktop Subcategory Columns × 5 Point Rows */}
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-3 sm:p-4 md:p-6 shadow-sm">
+          {/* Mobile 2-Column Board (No horizontal scrolling on phones) */}
+          <div className="grid grid-cols-2 gap-2.5 md:hidden" data-testid="online-mobile-board">
+            {onlineBoardColumns.map((col, cIdx) => (
               <div
-                key={idx}
-                className="rounded-2xl p-3 border text-center space-y-1.5 shadow-xs"
-                style={{
-                  backgroundColor: col.bgTint,
-                  borderColor: `${col.borderTint}40`,
-                }}
+                key={`online_mob_${cIdx}`}
+                className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-2 flex flex-col gap-1.5 min-w-0"
               >
                 <div
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block text-white"
-                  style={{ backgroundColor: col.teamColor }}
+                  className="rounded-xl p-2.5 border text-center space-y-1.5 shadow-xs min-h-[84px] flex flex-col items-center justify-center"
+                  style={{
+                    backgroundColor: col.bgTint,
+                    borderColor: `${col.borderTint}40`,
+                  }}
                 >
-                  {col.teamName}
+                  <div
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block text-white max-w-full truncate"
+                    style={{ backgroundColor: col.teamColor }}
+                  >
+                    {col.teamName}
+                  </div>
+                  <div className="font-display font-bold text-sm text-[#252824] line-clamp-2 leading-snug text-center">
+                    {col.subName}
+                  </div>
                 </div>
-                <div className="font-display font-bold text-xs text-[#252824] line-clamp-2 min-h-[32px] flex items-center justify-center">
-                  {col.subName}
+
+                <div className="flex flex-col gap-1.5">
+                  {POINT_TIERS.map((points) => {
+                    const tileKey = `${col.subId}__${points}`;
+                    const isUsed = currentRoom.usedTileKeys.includes(tileKey);
+                    const hostSlot =
+                      !isUsed && isHost
+                        ? findSlotForTile(col.subId, col.subName, points, tileKey)
+                        : null;
+                    const isHostExhausted = Boolean(
+                      hostSlot && !hostSlot.question && hostSlot.isExhausted
+                    );
+
+                    return (
+                      <button
+                        key={`online_mob_${col.subId}_${points}`}
+                        type="button"
+                        disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
+                        onClick={() =>
+                          handleHostTileClick(col.subId, col.subName, points, tileKey)
+                        }
+                        aria-label={`${col.subName} ${points} نقطة`}
+                        className={`min-h-[44px] h-11 rounded-xl border-2 font-display text-base font-bold transition-all flex items-center justify-center cursor-pointer select-none ${
+                          isUsed
+                            ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
+                            : isHostExhausted
+                            ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-[10px]'
+                            : isHost
+                            ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] shadow-xs active:scale-95'
+                            : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
+                        }`}
+                      >
+                        {isUsed ? (
+                          <Check className="w-5 h-5 text-[#777B73]/40" />
+                        ) : isHostExhausted ? (
+                          <span className="text-[9px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
+                            خلصت الجديدة
+                          </span>
+                        ) : (
+                          <span>{points}</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
+          </div>
 
-            {/* 5 Point Rows (100, 200, 300, 400, 500) */}
-            {POINT_TIERS.map((points) => (
-              <React.Fragment key={points}>
-                {onlineBoardColumns.map((col, cIdx) => {
-                  const tileKey = `${col.subId}__${points}`;
-                  const isUsed = currentRoom.usedTileKeys.includes(tileKey);
-                  const hostSlot =
-                    !isUsed && isHost
-                      ? findSlotForTile(col.subId, col.subName, points, tileKey)
-                      : null;
-                  const isHostExhausted = Boolean(
-                    hostSlot && !hostSlot.question && hostSlot.isExhausted
-                  );
+          {/* Desktop & Tablet Classic Board */}
+          <div className="hidden md:block overflow-x-auto">
+            <div
+              className="grid gap-3 min-w-[700px]"
+              style={{
+                gridTemplateColumns: `repeat(${onlineBoardColumns.length}, minmax(130px, 1fr))`,
+              }}
+            >
+              {/* Column Headers (Subcategories) */}
+              {onlineBoardColumns.map((col, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-2xl p-3.5 border text-center space-y-2 shadow-xs flex flex-col items-center justify-center min-h-[96px]"
+                  style={{
+                    backgroundColor: col.bgTint,
+                    borderColor: `${col.borderTint}40`,
+                  }}
+                >
+                  <div
+                    className="text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-block text-white"
+                    style={{ backgroundColor: col.teamColor }}
+                  >
+                    {col.teamName}
+                  </div>
+                  <div className="font-display font-bold text-sm sm:text-base text-[#252824] leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center text-center">
+                    {col.subName}
+                  </div>
+                </div>
+              ))}
 
-                  return (
-                    <button
-                      key={`${col.subId}_${points}`}
-                      type="button"
-                      disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
-                      title={
-                        isHostExhausted
-                          ? 'خلصت الأسئلة الجديدة في هذي الفئة'
-                          : undefined
-                      }
-                      onClick={() =>
-                        handleHostTileClick(col.subId, col.subName, points, tileKey)
-                      }
-                      className={`h-20 md:h-24 rounded-2xl border-2 font-display text-2xl md:text-3xl font-bold transition-all flex flex-col items-center justify-center cursor-pointer select-none ${
-                        isUsed
-                          ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
-                          : isHostExhausted
-                          ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-xs'
-                          : isHost
-                          ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] hover:scale-[1.02] shadow-sm active:scale-95'
-                          : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
-                      }`}
-                    >
-                      {isUsed ? (
-                        <Check className="w-6 h-6 text-[#777B73]/40" />
-                      ) : isHostExhausted ? (
-                        <span className="text-[10px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
-                          خلصت الأسئلة الجديدة
-                        </span>
-                      ) : (
-                        <span>{points}</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </React.Fragment>
-            ))}
+              {/* 5 Point Rows (100, 200, 300, 400, 500) */}
+              {POINT_TIERS.map((points) => (
+                <React.Fragment key={points}>
+                  {onlineBoardColumns.map((col) => {
+                    const tileKey = `${col.subId}__${points}`;
+                    const isUsed = currentRoom.usedTileKeys.includes(tileKey);
+                    const hostSlot =
+                      !isUsed && isHost
+                        ? findSlotForTile(col.subId, col.subName, points, tileKey)
+                        : null;
+                    const isHostExhausted = Boolean(
+                      hostSlot && !hostSlot.question && hostSlot.isExhausted
+                    );
+
+                    return (
+                      <button
+                        key={`${col.subId}_${points}`}
+                        type="button"
+                        disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
+                        title={
+                          isHostExhausted
+                            ? 'خلصت الأسئلة الجديدة في هذي الفئة'
+                            : undefined
+                        }
+                        onClick={() =>
+                          handleHostTileClick(col.subId, col.subName, points, tileKey)
+                        }
+                        className={`h-20 md:h-24 rounded-2xl border-2 font-display text-2xl md:text-3xl font-bold transition-all flex flex-col items-center justify-center cursor-pointer select-none ${
+                          isUsed
+                            ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
+                            : isHostExhausted
+                            ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-xs'
+                            : isHost
+                            ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] hover:scale-[1.02] shadow-sm active:scale-95'
+                            : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
+                        }`}
+                      >
+                        {isUsed ? (
+                          <Check className="w-6 h-6 text-[#777B73]/40" />
+                        ) : isHostExhausted ? (
+                          <span className="text-[10px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
+                            خلصت الأسئلة الجديدة
+                          </span>
+                        ) : (
+                          <span>{points}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
 
           {/* Bottom notice for non-hosts */}
@@ -2747,8 +2942,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           const aq = currentRoom.activeQuestion;
 
           return (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-3xl p-6 md:p-8 max-w-2xl w-full max-h-[92vh] overflow-y-auto space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+              <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-3xl p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[94dvh] overflow-y-auto space-y-4 sm:space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                 {/* Modal Top Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
                   <div className="flex flex-wrap items-center gap-2">
@@ -2937,7 +3132,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                         type="button"
                         disabled={actionBusy}
                         onClick={handleHostReveal}
-                        className="w-full py-3.5 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] disabled:opacity-50 rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                        className="w-full min-h-[48px] py-3.5 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] disabled:opacity-50 rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm"
                       >
                         <Eye className="w-5 h-5 text-[#F07842]" />
                         <span>إظهار الإجابة للجميع</span>
@@ -2954,7 +3149,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                               type="button"
                               disabled={actionBusy}
                               onClick={() => handleHostAward(tIdx)}
-                              className="py-3 px-3 rounded-xl text-xs font-bold text-[#FFFFFF] hover:opacity-95 disabled:opacity-50 cursor-pointer shadow-xs transition-transform active:scale-95"
+                              className="min-h-[46px] py-3 px-3 rounded-xl text-xs font-bold text-[#FFFFFF] hover:opacity-95 disabled:opacity-50 cursor-pointer shadow-xs transition-transform active:scale-95"
                               style={{ backgroundColor: t.color }}
                             >
                               + {aq.points} لـ {t.name}
@@ -2967,7 +3162,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                             type="button"
                             disabled={actionBusy}
                             onClick={handleHostSkip}
-                            className="flex-1 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] disabled:opacity-50 text-xs font-bold text-[#777B73] cursor-pointer"
+                            className="flex-1 min-h-[44px] py-2.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] disabled:opacity-50 text-xs font-bold text-[#777B73] cursor-pointer"
                           >
                             تخطي بدون نقاط
                           </button>
@@ -2980,7 +3175,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                                 currentRoom.hostId
                               )
                             }
-                            className="py-2.5 px-4 rounded-xl border border-[#E5E8DD] text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                            className="min-h-[44px] py-2.5 px-4 rounded-xl border border-[#E5E8DD] text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
                           >
                             إغلاق
                           </button>
@@ -2994,11 +3189,11 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   </div>
                 ) : (
                   /* Non-Host Player Interactive Buttons */
-                  <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2">
                     <button
                       type="button"
                       onClick={() => handlePlayerBuzz('buzz_in')}
-                      className="flex-1 w-full py-3 text-xs font-bold rounded-xl bg-[#14543D] text-[#FFFFFF] hover:bg-[#0E3D2C] cursor-pointer flex items-center justify-center gap-2"
+                      className="flex-1 w-full min-h-[46px] py-3 text-xs font-bold rounded-xl bg-[#14543D] text-[#FFFFFF] hover:bg-[#0E3D2C] cursor-pointer flex items-center justify-center gap-2"
                     >
                       <Hand className="w-4 h-4 text-[#F07842]" />
                       <span>أنا جاهز للإجابة! (رفع اليد)</span>
@@ -3008,7 +3203,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                       <button
                         type="button"
                         onClick={() => handlePlayerBuzz('reveal_answer')}
-                        className="py-3 px-4 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] cursor-pointer"
+                        className="min-h-[46px] py-3 px-4 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] cursor-pointer"
                       >
                         طلب كشف الإجابة 📢
                       </button>
@@ -3022,20 +3217,20 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
         {onlineZoomedImageUrl && currentRoom.activeQuestion && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-[#252824]/90 backdrop-blur-xs"
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/90 backdrop-blur-xs"
             onClick={() => setOnlineZoomedImageUrl(null)}
             role="dialog"
             aria-modal="true"
             aria-label="عرض صورة السؤال بالحجم الكامل"
           >
             <div
-              className="relative max-w-5xl max-h-[90vh] flex flex-col items-center gap-3"
+              className="relative max-w-5xl max-h-[92dvh] flex flex-col items-center gap-3"
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 type="button"
                 onClick={() => setOnlineZoomedImageUrl(null)}
-                className="self-end px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                className="self-end min-h-[44px] px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <X className="w-4 h-4" />
                 <span>إغلاق التكبير</span>
@@ -3044,7 +3239,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 src={onlineZoomedImageUrl}
                 referrerPolicy="no-referrer"
                 alt={currentRoom.activeQuestion.imageDescription || 'صورة السؤال مكبرة'}
-                className="max-h-[80vh] max-w-[92vw] w-auto object-contain rounded-2xl border border-white/20 bg-[#FFFFFF] p-2 shadow-2xl"
+                className="max-h-[82dvh] max-w-[94vw] w-auto object-contain rounded-2xl border border-white/20 bg-[#FFFFFF] p-2 shadow-2xl"
               />
             </div>
           </div>
@@ -3064,69 +3259,104 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // -------------------------------------------------------------
   // RENDER: 4. RESULTS SCREEN (نهاية المباراة)
   // -------------------------------------------------------------
-  const sortedTeams = [...currentRoom.teams].sort((a, b) => b.score - a.score);
-  const winningTeam = sortedTeams[0];
+  const onlineOutcome = evaluateMatchOutcome(currentRoom.teams);
+  const onlineCelebrationKey = `online_${currentRoom.code}_${currentRoom.updatedAt || currentRoom.usedTileKeys.length}_${onlineOutcome.sortedTeams
+    .map((t) => `${t.id}:${t.score}`)
+    .join('_')}`;
 
   return (
-    <div className="max-w-[800px] mx-auto px-4 py-12 text-center space-y-8 animate-in fade-in">
-      <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-3xl p-8 md:p-12 space-y-6 shadow-xl">
-        <div className="w-20 h-20 rounded-3xl bg-[#FEF2EC] border border-[#F07842]/20 text-[#F07842] flex items-center justify-center mx-auto">
-          <Trophy className="w-10 h-10" />
-        </div>
-
-        <div className="space-y-2">
-          <div className="inline-block px-4 py-1 rounded-full bg-[#EAF2EE] text-xs font-bold text-[#14543D]">
-            انتهت المباراة أونلاين 🏁
-          </div>
-          <h1 className="font-display text-3xl md:text-4xl font-bold text-[#252824]">
-            مبروك الفوز لـ {winningTeam?.name}! 🏆
-          </h1>
-          <p className="text-sm text-[#777B73]">
-            برصيد{' '}
-            <span className="font-bold text-[#14543D]">
-              {winningTeam?.score} نقطة
-            </span>
-          </p>
-        </div>
+    <motion.div
+      initial={effects.motion ? { opacity: 0, y: 8 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      className="max-w-[800px] mx-auto px-3 sm:px-4 py-6 md:py-12 text-center space-y-6 md:space-y-8"
+    >
+      <div
+        className={`relative overflow-hidden bg-[#FFFFFF] border-2 rounded-3xl p-4 sm:p-8 md:p-12 space-y-5 sm:space-y-6 shadow-xl ${
+          onlineOutcome.isTie
+            ? 'border-amber-400'
+            : onlineOutcome.isZeroScore
+            ? 'border-[#E5E8DD]'
+            : 'border-[#14543D]'
+        }`}
+      >
+        <MatchCelebrationHeader
+          outcome={onlineOutcome}
+          celebrationKey={onlineCelebrationKey}
+          subtitleMeta={`أونلاين · غرفة ${currentRoom.code}`}
+          effects={effects}
+        />
 
         {/* Final Scoreboard */}
-        <div className="space-y-3 pt-4 max-w-md mx-auto">
-          {sortedTeams.map((team, idx) => (
-            <div
-              key={team.id}
-              className={`p-4 rounded-2xl border-2 flex items-center justify-between ${
-                idx === 0
-                  ? 'bg-[#EAF2EE] border-[#14543D]'
-                  : 'bg-[#F3F5E9] border-[#E5E8DD]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="font-bold text-sm text-[#777B73]">
-                  #{idx + 1}
-                </span>
-                <span
-                  className="w-3.5 h-3.5 rounded-full"
-                  style={{ backgroundColor: team.color }}
-                />
-                <span className="font-display font-bold text-sm text-[#252824]">
-                  {team.name}
-                </span>
-              </div>
-              <div className="font-mono text-xl font-bold text-[#14543D]">
-                {team.score} نقطة
-              </div>
-            </div>
-          ))}
+        <div className="space-y-3 pt-2 sm:pt-4 max-w-md mx-auto">
+          {onlineOutcome.sortedTeams.map((team, idx) => {
+            const isTop = team.score === onlineOutcome.topScore && onlineOutcome.topScore > 0;
+            const rankNum = onlineOutcome.teamRanks[idx] ?? idx + 1;
+            return (
+              <motion.div
+                key={team.id}
+                initial={
+                  effects.motion && effects.winner
+                    ? { opacity: 0, y: 10 }
+                    : false
+                }
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.26,
+                  delay: effects.motion ? Math.min(idx * 0.08, 0.32) : 0,
+                  ease: [0.16, 1, 0.3, 1],
+                }}
+                className={`p-3.5 sm:p-4 rounded-2xl border-2 flex items-center justify-between gap-2 ${
+                  isTop
+                    ? onlineOutcome.isTie
+                      ? 'bg-amber-50/70 border-amber-400 shadow-xs'
+                      : 'bg-[#EAF2EE] border-[#14543D] shadow-xs'
+                    : 'bg-[#F3F5E9] border-[#E5E8DD]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <span className="font-bold text-sm text-[#777B73] shrink-0">
+                    #{rankNum}
+                  </span>
+                  <span
+                    className="w-3.5 h-3.5 rounded-full shrink-0"
+                    style={{ backgroundColor: team.color }}
+                  />
+                  <span className="font-display font-bold text-sm text-[#252824] truncate">
+                    {team.name}
+                  </span>
+                  {isTop && (
+                    <span
+                      className={`text-[11px] font-bold shrink-0 ${
+                        onlineOutcome.isTie ? 'text-amber-700' : 'text-[#14543D]'
+                      }`}
+                    >
+                      {onlineOutcome.isTie ? '★ متعادل' : '★ الفائز'}
+                    </span>
+                  )}
+                </div>
+                <div className="font-mono text-lg sm:text-xl font-bold text-[#14543D] shrink-0 flex items-center gap-1">
+                  <AnimatedScoreCounter
+                    value={team.score}
+                    animateOnMount
+                    motionEnabled={effects.motion && effects.winner}
+                    durationMs={600}
+                  />
+                  <span className="text-xs font-medium text-[#777B73]">نقطة</span>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* Action Controls */}
-        <div className="pt-6 flex flex-wrap items-center justify-center gap-4">
+        <div className="pt-4 sm:pt-6 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 sm:gap-4">
           {isHost ? (
             <>
               <button
                 type="button"
                 onClick={() => hostRestartGame(currentRoom.code, currentRoom.hostId, false)}
-                className="px-6 py-3.5 rounded-xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer flex items-center gap-2 shadow-sm"
+                className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer flex items-center justify-center gap-2 shadow-sm"
               >
                 <RotateCcw className="w-4 h-4" />
                 <span>جولة جديدة بنفس الغرفة</span>
@@ -3135,7 +3365,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               <button
                 type="button"
                 onClick={() => hostRestartGame(currentRoom.code, currentRoom.hostId, true)}
-                className="px-6 py-3.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-sm font-bold text-[#252824] hover:bg-[#F3F5E9] cursor-pointer"
+                className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-sm font-bold text-[#252824] hover:bg-[#F3F5E9] cursor-pointer flex items-center justify-center"
               >
                 العودة لصالة الانتظار
               </button>
@@ -3153,13 +3383,13 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           <button
             type="button"
             onClick={handleLeaveRoom}
-            className="px-6 py-3.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold cursor-pointer flex items-center gap-2"
+            className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold cursor-pointer flex items-center justify-center gap-2"
           >
             <LogOut className="w-4 h-4" />
             <span>{isSpectator ? 'مغادرة المشاهدة' : 'مغادرة الغرفة'}</span>
           </button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };

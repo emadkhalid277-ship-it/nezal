@@ -227,6 +227,34 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidVisualEffectsSettings(data) {
+      return data.keys().hasAll([
+          'id',
+          'motionEffectsEnabled',
+          'correctAnswerEffect',
+          'wrongAnswerEffect',
+          'winnerCelebrationEffect',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'motionEffectsEnabled',
+          'correctAnswerEffect',
+          'wrongAnswerEffect',
+          'winnerCelebrationEffect',
+          'updatedBy',
+          'updatedAt'
+        ]) &&
+        data.id == 'visual_effects' &&
+        data.motionEffectsEnabled is bool &&
+        data.correctAnswerEffect is bool &&
+        data.wrongAnswerEffect is bool &&
+        data.winnerCelebrationEffect is bool &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.updatedAt is timestamp;
+    }
+
     function isValidDifficulty(diff) {
       return diff is string &&
         diff.size() >= 2 &&
@@ -445,7 +473,8 @@ service cloud.firestore {
         (
           (settingId == 'point_steal' && isValidPointStealSettings(incoming())) ||
           (settingId == 'question_dedup' && isValidQuestionDedupSettings(incoming())) ||
-          (settingId != 'point_steal' && settingId != 'question_dedup' && isValidContactSettings(incoming()))
+          (settingId == 'visual_effects' && isValidVisualEffectsSettings(incoming())) ||
+          (settingId != 'point_steal' && settingId != 'question_dedup' && settingId != 'visual_effects' && isValidContactSettings(incoming()))
         ) &&
         incoming().id == settingId &&
         incoming().updatedBy == request.auth.uid &&
@@ -457,7 +486,8 @@ service cloud.firestore {
         (
           (settingId == 'point_steal' && isValidPointStealSettings(incoming())) ||
           (settingId == 'question_dedup' && isValidQuestionDedupSettings(incoming())) ||
-          (settingId != 'point_steal' && settingId != 'question_dedup' && isValidContactSettings(incoming()))
+          (settingId == 'visual_effects' && isValidVisualEffectsSettings(incoming())) ||
+          (settingId != 'point_steal' && settingId != 'question_dedup' && settingId != 'visual_effects' && isValidContactSettings(incoming()))
         ) &&
         incoming().id == existing().id &&
         incoming().updatedBy == request.auth.uid &&

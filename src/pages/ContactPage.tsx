@@ -64,13 +64,13 @@ export const ContactPage: React.FC<ContactPageProps> = ({
   const activeSocials = socialLinks.filter((s) => s.url.length > 0);
 
   return (
-    <div className="max-w-[920px] mx-auto px-6 py-10 md:py-14 space-y-8">
+    <div className="max-w-[920px] mx-auto px-3 sm:px-6 py-5 md:py-14 space-y-6 md:space-y-8">
       {/* Top Back Bar */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
         <button
           type="button"
           onClick={() => onNavigate('home')}
-          className="px-4 py-2.5 rounded-xl bg-[#FFFFFF] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs sm:text-sm font-bold text-[#252824] flex items-center gap-2 transition-colors cursor-pointer"
+          className="min-h-[42px] px-4 py-2 rounded-xl bg-[#FFFFFF] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs sm:text-sm font-bold text-[#252824] flex items-center gap-2 transition-colors cursor-pointer"
         >
           <ArrowRight className="w-4 h-4 text-[#14543D]" />
           <span>الرجوع للرئيسية</span>
@@ -80,7 +80,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
           <button
             type="button"
             onClick={() => onNavigate('admin')}
-            className="px-4 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+            className="min-h-[42px] px-4 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
           >
             <Settings className="w-4 h-4" />
             <span>تعديل بيانات التواصل من لوحة المشرف</span>
@@ -89,17 +89,17 @@ export const ContactPage: React.FC<ContactPageProps> = ({
       </div>
 
       {/* Main Contact Card */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-8 md:p-12 space-y-10">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 sm:p-8 md:p-12 space-y-7 sm:space-y-10">
         {/* Heading & Short Inviting Message */}
         <div className="space-y-3 text-right max-w-2xl">
           <div className="inline-flex items-center gap-2 text-xs font-bold text-[#F07842]">
             <span className="w-2 h-2 rounded-full bg-[#F07842]" />
             <span>تواصل معنا · نِزال</span>
           </div>
-          <h1 className="font-display text-3xl md:text-4xl font-bold text-[#252824]">
+          <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#252824]">
             {contactSettings.heading || 'حنا هنا لمساعدتك!'}
           </h1>
-          <p className="text-base md:text-lg text-[#777B73] leading-relaxed">
+          <p className="text-sm sm:text-base md:text-lg text-[#777B73] leading-relaxed">
             {contactSettings.message ||
               'يسعدنا في «نِزال» استقبال استفساراتكم وملاحظاتكم واقتراحاتكم في أي وقت. تواصلوا معنا مباشرة عبر القنوات التالية:'}
           </p>

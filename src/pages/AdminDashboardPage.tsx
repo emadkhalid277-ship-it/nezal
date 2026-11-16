@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { AdminPlayerAnalytics } from '../components/AdminPlayerAnalytics';
 import { AdminSeenQuestionsSection } from '../components/AdminSeenQuestionsSection';
+import { AdminVisualEffectsSection } from '../components/AdminVisualEffectsSection';
 import { QuestionAudioPlayer } from '../components/QuestionAudioPlayer';
 import {
   ApprovalStatus,
@@ -52,7 +53,9 @@ import {
   TARGET_TOTAL_QUESTIONS,
   TriviaQuestion,
   UserContribution,
+  VisualEffectsSettings,
 } from '../types/game';
+import { DEFAULT_VISUAL_EFFECTS_SETTINGS } from '../services/visualEffectsService';
 import { DEFAULT_QUESTION_DEDUP_SETTINGS } from '../utils/questionDedupLogic';
 import {
   fetchAllContributionsForAdmin,
@@ -106,6 +109,8 @@ interface AdminDashboardPageProps {
   onRefreshMainCategories: () => Promise<void>;
   onRefreshContactSettings: () => Promise<void>;
   onRefreshQuestionDedupSettings?: () => Promise<void>;
+  visualEffectsSettings?: VisualEffectsSettings;
+  onRefreshVisualEffectsSettings?: () => Promise<void>;
   onSeedFoundationalPack: () => Promise<void>;
   seeding: boolean;
 }
@@ -117,6 +122,7 @@ type AdminTab =
   | 'questions'
   | 'contact'
   | 'question_dedup'
+  | 'visual_effects'
   | 'contributions'
   | 'player_analytics';
 
@@ -166,6 +172,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   onRefreshMainCategories,
   onRefreshContactSettings,
   onRefreshQuestionDedupSettings,
+  visualEffectsSettings = DEFAULT_VISUAL_EFFECTS_SETTINGS,
+  onRefreshVisualEffectsSettings,
   onSeedFoundationalPack,
   seeding,
 }) => {
@@ -1816,8 +1824,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   // 1. Not Logged In View
   if (!user) {
     return (
-      <div className="max-w-[680px] mx-auto px-6 py-16">
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-8 md:p-10 text-center space-y-6">
+      <div className="max-w-[680px] mx-auto px-3 sm:px-6 py-8 md:py-16">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-8 md:p-10 text-center space-y-6">
           <div className="w-14 h-14 rounded-2xl bg-[#F3F5E9] border border-[#E5E8DD] flex items-center justify-center mx-auto">
             <ShieldCheck className="w-7 h-7 text-[#14543D]" />
           </div>
@@ -1861,8 +1869,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   // 2. Logged In But Not Authorized Admin
   if (!isAdmin) {
     return (
-      <div className="max-w-[680px] mx-auto px-6 py-16">
-        <div className="bg-[#FFFFFF] border-2 border-[#F07842] rounded-2xl p-8 md:p-10 text-center space-y-6">
+      <div className="max-w-[680px] mx-auto px-3 sm:px-6 py-8 md:py-16">
+        <div className="bg-[#FFFFFF] border-2 border-[#F07842] rounded-2xl p-5 sm:p-8 md:p-10 text-center space-y-6">
           <AlertTriangle className="w-12 h-12 text-[#F07842] mx-auto" />
           <div className="space-y-2">
             <h1 className="font-display text-2xl font-bold text-[#252824]">
@@ -1907,7 +1915,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   // 3. Authorized Admin Dashboard
   return (
-    <div className="max-w-[1360px] mx-auto px-6 py-10 space-y-8">
+    <div className="max-w-[1360px] mx-auto px-3 sm:px-6 py-5 md:py-10 space-y-6 md:space-y-8">
       {/* Hidden File Input for Category Image Upload (JPG, JPEG, PNG, WEBP) */}
       <input
         ref={imageUploadInputRef}
@@ -1950,7 +1958,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       />
 
       {/* Top Admin Header */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
         <div className="space-y-1">
           <div className="text-xs font-bold text-[#14543D] flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4" />
@@ -2034,12 +2042,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         </div>
       </div>
 
-      {/* Mode Switcher Tabs (5 Sections) */}
-      <div className="flex flex-wrap items-center gap-2.5 border-b border-[#E5E8DD] pb-4">
+      {/* Mode Switcher Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-3 sm:flex-wrap sm:overflow-visible scrollbar-none border-b border-[#E5E8DD]">
         <button
           type="button"
           onClick={() => setAdminTab('main_categories')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'main_categories'
               ? 'bg-[#14543D] text-white'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -2052,7 +2060,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         <button
           type="button"
           onClick={() => setAdminTab('subcategories')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'subcategories'
               ? 'bg-[#14543D] text-white'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -2065,7 +2073,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         <button
           type="button"
           onClick={() => setAdminTab('images')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'images'
               ? 'bg-[#14543D] text-white'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -2080,7 +2088,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         <button
           type="button"
           onClick={() => setAdminTab('questions')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'questions'
               ? 'bg-[#14543D] text-white'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -2093,7 +2101,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         <button
           type="button"
           onClick={() => setAdminTab('contact')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'contact'
               ? 'bg-[#14543D] text-white'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -2109,7 +2117,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             setAdminTab('contributions');
             loadContributions();
           }}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'contributions'
               ? 'bg-[#14543D] text-white'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -2127,7 +2135,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         <button
           type="button"
           onClick={() => setAdminTab('question_dedup')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'question_dedup'
               ? 'bg-[#14543D] text-white shadow-xs'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -2139,8 +2147,21 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
         <button
           type="button"
+          onClick={() => setAdminTab('visual_effects')}
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
+            adminTab === 'visual_effects'
+              ? 'bg-[#14543D] text-white shadow-xs'
+              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-[#F07842]" />
+          <span>المؤثرات البصرية</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setAdminTab('player_analytics')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
             adminTab === 'player_analytics'
               ? 'bg-[#14543D] text-white shadow-xs'
               : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -3771,7 +3792,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
 
             {/* Search Input */}
-            <div className="relative min-w-[240px]">
+            <div className="relative min-w-0 w-full sm:w-auto sm:min-w-[240px]">
               <Search className="w-4 h-4 text-[#777B73] absolute right-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -3926,7 +3947,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       تم الإرسال: {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString('ar-SA') : 'مؤخراً'}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setPreviewContribution(item)}
@@ -4001,16 +4022,30 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         />
       )}
 
+      {/* SECTION 9: VISUAL EFFECTS & ANIMATIONS ADMIN SETTINGS */}
+      {adminTab === 'visual_effects' && (
+        <AdminVisualEffectsSection
+          adminUid={user?.uid || ''}
+          isAdmin={isAdmin}
+          visualEffectsSettings={visualEffectsSettings}
+          onRefreshVisualEffectsSettings={async () => {
+            if (onRefreshVisualEffectsSettings) {
+              await onRefreshVisualEffectsSettings();
+            }
+          }}
+        />
+      )}
+
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}
       {mainModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/65 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/65 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
-            <div className="bg-[#14543D] text-white px-6 py-4 flex items-center justify-between">
-              <h3 className="font-display text-lg font-bold">
+          <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col">
+            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+              <h3 className="font-display text-base sm:text-lg font-bold">
                 {editingMainCategory
                   ? `تعديل الفئة الرئيسية: ${editingMainCategory.name}`
                   : '+ إضافة فئة رئيسية جديدة'}
@@ -4018,7 +4053,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setMainModalOpen(false)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer"
+                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
               >
                 إغلاق
               </button>
@@ -4026,7 +4061,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
             <form
               onSubmit={handleSaveMainCategory}
-              className="p-6 overflow-y-auto space-y-5 text-xs"
+              className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs"
             >
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
                 {/* Right Column (Form Fields) */}
@@ -4264,11 +4299,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 2: WEBSITE CARD PREVIEW MODAL FOR MAIN CATEGORY */}
       {previewMainCategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md bg-[#F3F5E9] border-2 border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl p-6 space-y-5">
+          <div className="w-full max-w-md bg-[#F3F5E9] border-2 border-[#E5E8DD] rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
               <div>
                 <div className="text-[11px] font-bold text-[#F07842]">
@@ -4355,11 +4390,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 3: SAFE DELETE MAIN CATEGORY CONFIRMATION & REASSIGNMENT DIALOG */}
       {deletingMainCategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-hidden shadow-2xl p-6 space-y-5 text-xs">
+          <div className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5 text-xs">
             <div className="flex items-start gap-3">
               <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
                 <AlertTriangle className="w-6 h-6" />
@@ -4480,13 +4515,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 4: ADD / EDIT SUBCATEGORY MODAL */}
       {subModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/60 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[90vh] flex flex-col">
-            <div className="bg-[#14543D] text-white px-6 py-4 flex items-center justify-between">
-              <h3 className="font-display text-lg font-bold">
+          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col">
+            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+              <h3 className="font-display text-base sm:text-lg font-bold">
                 {editingSubcategory
                   ? 'تعديل وتنظيم الفئة الفرعية'
                   : 'إضافة فئة فرعية جديدة'}
@@ -4494,7 +4529,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setSubModalOpen(false)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer"
+                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
               >
                 إغلاق
               </button>
@@ -4502,7 +4537,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
             <form
               onSubmit={handleSaveSubcategory}
-              className="p-6 overflow-y-auto space-y-4 text-xs"
+              className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs"
             >
               <div className="space-y-1.5">
                 <label className="block font-bold text-[#252824]">
@@ -4803,19 +4838,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 6: ADD / EDIT QUESTION MODAL */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/60 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92vh] flex flex-col">
-            <div className="bg-[#14543D] text-white px-6 py-4 flex items-center justify-between shrink-0">
-              <h3 className="font-display text-lg font-bold">
+          <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col">
+            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+              <h3 className="font-display text-base sm:text-lg font-bold">
                 {editingQuestionId ? 'تعديل بيانات السؤال' : 'إضافة سؤال جديد'}
               </h3>
               <button
                 type="button"
                 onClick={handleCloseQuestionModal}
-                className="text-white/80 hover:text-white text-xs cursor-pointer"
+                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
               >
                 إغلاق
               </button>
@@ -4823,7 +4858,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
             <form
               onSubmit={handleSaveQuestion}
-              className="p-6 overflow-y-auto space-y-4 text-xs"
+              className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs"
             >
               {questionModalError && (
                 <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 space-y-2">
@@ -4856,20 +4891,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <label className="block font-bold text-[#252824]">
                   نوع السؤال
                 </label>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
                       setFormMediaType('text');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                       formMediaType === 'text'
                         ? 'bg-[#14543D] text-white border-[#14543D]'
                         : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
                     }`}
                   >
-                    <FileQuestion className="w-4 h-4" />
+                    <FileQuestion className="w-4 h-4 shrink-0" />
                     <span>سؤال نصي عادي</span>
                   </button>
 
@@ -4879,13 +4914,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       setFormMediaType('image');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                       formMediaType === 'image'
                         ? 'bg-[#F07842] text-white border-[#F07842]'
                         : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#F07842]/40'
                     }`}
                   >
-                    <ImageIcon className="w-4 h-4" />
+                    <ImageIcon className="w-4 h-4 shrink-0" />
                     <span>سؤال بصورة</span>
                   </button>
 
@@ -4895,13 +4930,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       setFormMediaType('audio');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                       formMediaType === 'audio'
                         ? 'bg-[#14543D] text-white border-[#14543D]'
                         : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
                     }`}
                   >
-                    <Volume2 className="w-4 h-4 text-[#F07842]" />
+                    <Volume2 className="w-4 h-4 text-[#F07842] shrink-0" />
                     <span>سؤال صوتي</span>
                   </button>
                 </div>
@@ -5326,12 +5361,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: REJECT CONTRIBUTION REASON */}
       {rejectModalContribution && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/65 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/65 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-rose-700 text-white px-6 py-4 flex items-center justify-between">
+          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-rose-700 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <XCircle className="w-4 h-4" />
                 <span>رفض مساهمة السؤال</span>
@@ -5339,13 +5374,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setRejectModalContribution(null)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer"
+                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
               >
                 إغلاق
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs">
               <div className="bg-[#F3F5E9] p-3 rounded-xl border border-[#E5E8DD] space-y-1">
                 <div className="font-bold text-[#252824]">السؤال:</div>
                 <div className="text-[#777B73] line-clamp-2">
@@ -5391,12 +5426,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: PREVIEW QUESTION IN GAME BOARD */}
       {previewContribution && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/75 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/75 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-[#14543D] text-white px-6 py-4 flex items-center justify-between">
+          <div className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <Eye className="w-4 h-4 text-[#F07842]" />
                 <span>معاينة السؤال كما يظهر في لوحة المنافسة</span>
@@ -5404,13 +5439,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewContribution(null)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer"
+                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
               >
                 إغلاق
               </button>
             </div>
 
-            <div className="p-6 space-y-5 text-right">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-right">
               {/* Fake Game Tile Header */}
               <div className="flex items-center justify-between bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl px-4 py-2.5 text-xs">
                 <div className="font-bold text-[#14543D]">

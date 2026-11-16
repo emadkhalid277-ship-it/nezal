@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Image as ImageIcon } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { MainCategoryName } from '../types/game';
 
 interface CategoryCardArtworkProps {
@@ -33,6 +33,8 @@ export const CategoryCardArtwork: React.FC<CategoryCardArtworkProps> = ({
           src={cleanUrl}
           alt={name}
           loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
@@ -40,17 +42,17 @@ export const CategoryCardArtwork: React.FC<CategoryCardArtworkProps> = ({
     );
   }
 
-  // Clean Nizal surface when no custom image has been uploaded yet by the admin
+  // Clean Nizal emerald surface when no custom image has been uploaded yet
   return (
     <div
-      className={`relative w-full h-full overflow-hidden bg-[#14543D] flex flex-col items-center justify-center p-4 text-center select-none ${className}`}
+      className={`relative w-full h-full overflow-hidden bg-gradient-to-br from-[#14543D] via-[#124833] to-[#0D3828] flex items-center justify-center p-3 select-none ${className}`}
     >
-      <div className="w-12 h-12 rounded-2xl bg-[#FFFFFF]/10 border border-[#FFFFFF]/15 flex items-center justify-center mb-2 text-[#F3F5E9]/70 transition-transform duration-300 group-hover:scale-105">
-        <ImageIcon className="w-6 h-6" />
+      <div
+        aria-hidden="true"
+        className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-[#FFFFFF]/10 border border-[#FFFFFF]/15 flex items-center justify-center text-[#F3F5E9]/70 transition-transform duration-300 group-hover:scale-105"
+      >
+        <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
       </div>
-      <span className="text-[11px] font-medium text-[#F3F5E9]/55">
-        بدون صورة مرفوعة
-      </span>
     </div>
   );
 };

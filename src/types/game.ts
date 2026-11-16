@@ -92,6 +92,16 @@ export interface QuestionDedupSettings {
   updatedAt?: string;
 }
 
+export interface VisualEffectsSettings {
+  id: string;
+  motionEffectsEnabled: boolean;
+  correctAnswerEffect: boolean;
+  wrongAnswerEffect: boolean;
+  winnerCelebrationEffect: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
 export interface SeenQuestionRecord {
   id: string;
   userId: string;

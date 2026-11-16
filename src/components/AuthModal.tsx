@@ -131,15 +131,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#131614]/65 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl max-w-md w-full p-6 md:p-8 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-right">
+    <div className="fixed inset-0 z-50 bg-[#131614]/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl max-w-md w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-6 md:p-8 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-right">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-4">
+        <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3.5">
           <div className="space-y-0.5">
             <div className="text-xs font-bold text-[#F07842]">
               منصة نِزال للتحدي
             </div>
-            <h2 className="font-display text-xl font-bold text-[#252824]">
+            <h2 className="font-display text-lg sm:text-xl font-bold text-[#252824]">
               {mode === 'login'
                 ? 'تسجيل الدخول'
                 : mode === 'register'
@@ -150,7 +150,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#F3F5E9] hover:bg-[#E5E8DD] flex items-center justify-center text-[#777B73] cursor-pointer transition-colors"
+            aria-label="إغلاق النافذة"
+            className="w-10 h-10 rounded-full bg-[#F3F5E9] hover:bg-[#E5E8DD] flex items-center justify-center text-[#777B73] cursor-pointer transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -171,9 +172,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               type="button"
               onClick={handleGoogleSignIn}
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl border border-[#E5E8DD] hover:bg-[#F3F5E9] bg-[#FFFFFF] text-xs font-bold text-[#252824] flex items-center justify-center gap-2.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-60"
+              className="w-full min-h-[44px] py-3 px-4 rounded-xl border border-[#E5E8DD] hover:bg-[#F3F5E9] bg-[#FFFFFF] text-xs font-bold text-[#252824] flex items-center justify-center gap-2.5 transition-colors cursor-pointer shadow-2xs disabled:opacity-60"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.88c2.27-2.09 3.665-5.17 3.665-9.09z"
@@ -212,7 +213,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setError(null);
                 setSuccessMessage(null);
               }}
-              className={`py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`min-h-[40px] py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                 mode === 'login'
                   ? 'bg-white text-[#14543D] shadow-xs'
                   : 'text-[#777B73] hover:text-[#252824]'
@@ -229,7 +230,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setError(null);
                 setSuccessMessage(null);
               }}
-              className={`py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`min-h-[40px] py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                 mode === 'register'
                   ? 'bg-white text-[#14543D] shadow-xs'
                   : 'text-[#777B73] hover:text-[#252824]'
@@ -334,7 +335,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-60"
+            className="w-full min-h-[46px] py-3 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-60"
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             <span>
