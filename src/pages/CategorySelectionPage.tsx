@@ -29,6 +29,7 @@ import { TEAM_COLOR_OPTIONS } from '../data/categoriesAndSeed';
 import { DEFAULT_TEAM_TEMPLATES } from '../App';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
 import { matchesSubcategoryQuestion } from '../services/questionService';
+import { isWalaKalimaCategory } from '../types/walaKalima';
 
 interface CategorySelectionPageProps {
   teams: TeamConfig[];
@@ -1215,7 +1216,16 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                             </div>
                           )}
 
-                          {qCount > 0 && (
+                          {isWalaKalimaCategory({
+                            subcategoryId: sub.id,
+                            subcategoryName: sub.name,
+                            mainCategoryId: sub.mainCategoryId,
+                            mainCategoryName: sub.mainCategory,
+                          }) ? (
+                            <span className="px-2 py-0.5 rounded-md font-sans text-[10px] sm:text-[11px] font-bold shadow-xs bg-[#F07842] text-white">
+                              QR تفاعلي
+                            </span>
+                          ) : qCount > 0 ? (
                             <span
                               className={`px-2 py-0.5 rounded-md font-mono text-[10px] sm:text-[11px] font-bold shadow-xs ${
                                 isSelectedByCurrentTeam
@@ -1225,7 +1235,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                             >
                               {qCount} س
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
 

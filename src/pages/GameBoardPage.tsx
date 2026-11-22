@@ -50,6 +50,13 @@ import {
   selectNextQuestionForSlot,
   SlotSelectionResult,
 } from '../utils/questionDedupLogic';
+import {
+  DEFAULT_WALA_KALIMA_SETTINGS,
+  isWalaKalimaCategory,
+  WalaKalimaSettings,
+} from '../types/walaKalima';
+import { WalaKalimaBoardModal } from '../components/WalaKalimaBoardModal';
+import { POINT_TO_DIFFICULTY } from '../types/game';
 
 interface OrderedTeamSelectionItem {
   subcategoryId: string;
@@ -105,6 +112,8 @@ interface GameBoardPageProps {
   seeding: boolean;
   onActiveQuestionChange?: (state: any) => void;
   visualEffectsSettings?: VisualEffectsSettings;
+  matchId?: string;
+  walaKalimaSettings?: WalaKalimaSettings;
 }
 
 const POINT_TIERS: PointValue[] = [100, 200, 300, 400, 500];
@@ -150,7 +159,16 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   onSeedQuestions,
   seeding,
   onActiveQuestionChange,
+  matchId = 'local_match',
+  walaKalimaSettings = DEFAULT_WALA_KALIMA_SETTINGS,
 }) => {
+  const [activeWalaKalimaTile, setActiveWalaKalimaTile] = useState<{
+    tileKey: string;
+    subcategoryId?: string;
+    subcategoryName: string;
+    mainCategoryName: string;
+    points: PointValue;
+  } | null>(null);
   // Pinned question IDs per tileKey for the current round so closing & reopening a tile keeps the same question
   const [pinnedTileQuestions, setPinnedTileQuestions] = useState<
     Record<string, string>
@@ -261,6 +279,10 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   } | null>(null);
 
   const isSubmittingRef = useRef(false);
+  const onActiveQuestionChangeRef = useRef(onActiveQuestionChange);
+  onActiveQuestionChangeRef.current = onActiveQuestionChange;
+  const onRecordQuestionSeenRef = useRef(onRecordQuestionSeen);
+  onRecordQuestionSeenRef.current = onRecordQuestionSeen;
   const effects = useEffectiveVisualEffects(visualEffectsSettings);
   const judgmentTimeoutRef = useRef<number | null>(null);
   const prevTimeLeftRef = useRef<number>(timeLeft);
@@ -331,7 +353,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     try {
       if (!activeSelection) {
         localStorage.removeItem(ACTIVE_MODAL_STORAGE_KEY);
-        onActiveQuestionChange?.(null);
+        onActiveQuestionChangeRef.current?.(null);
       } else {
         localStorage.setItem(
           ACTIVE_MODAL_STORAGE_KEY,
@@ -343,7 +365,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
             audioPlaysUsed,
           })
         );
-        onActiveQuestionChange?.({
+        onActiveQuestionChangeRef.current?.({
           tileKey: activeSelection.tileKey,
           subcategoryId: activeSelection.subcategoryId,
           subcategoryName: activeSelection.subcategoryName,
@@ -373,7 +395,6 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     timeLeft,
     timerPaused,
     audioPlaysUsed,
-    onActiveQuestionChange,
   ]);
 
   // If the currently open tile was already marked used (e.g. from another tab/action), close modal
@@ -556,11 +577,19 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
         let colPlayableUnused = 0;
         let colHasExhaustedUnused = false;
         const colKey = col.subId || col.subName;
+        const isWkCol = isWalaKalimaCategory({
+          subcategoryId: col.subId,
+          subcategoryName: col.subName,
+          mainCategoryName: col.mainCategoryName,
+        });
 
         for (const pts of POINT_TIERS) {
           const tileKey = `${col.subName}__${pts}`;
           if (usedTileKeys.includes(tileKey)) {
             count++;
+          } else if (isWkCol) {
+            count++;
+            colPlayableUnused++;
           } else {
             const slot = getSlotSelection(col.subName, pts, col.subId);
             if (slot.question) {
@@ -603,6 +632,25 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
   ) => {
     const tileKey = `${subcategoryName}__${points}`;
     if (usedTileKeys.includes(tileKey)) return;
+
+    if (
+      isWalaKalimaCategory({
+        subcategoryId,
+        subcategoryName,
+        mainCategoryName,
+      })
+    ) {
+      setExhaustionAlert(null);
+      soundFX.playTileOpen();
+      setActiveWalaKalimaTile({
+        tileKey,
+        subcategoryId,
+        subcategoryName,
+        mainCategoryName,
+        points,
+      });
+      return;
+    }
 
     const slot = getSlotSelection(subcategoryName, points, subcategoryId);
     if (!slot.question) {
@@ -712,10 +760,10 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
   // Record displayed question to persistent UID seen-history ONLY after it actually renders to the player
   useEffect(() => {
-    if (!activeSelection?.question?.id || !userId || !onRecordQuestionSeen) {
+    if (!activeSelection?.question?.id || !userId || !onRecordQuestionSeenRef.current) {
       return;
     }
-    void onRecordQuestionSeen({
+    void onRecordQuestionSeenRef.current({
       questionId: activeSelection.question.id,
       category:
         activeSelection.subcategoryName ||
@@ -736,7 +784,6 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     activeSelection?.question?.category,
     activeSelection?.question?.subcategoryId,
     userId,
-    onRecordQuestionSeen,
   ]);
 
   const handleCloseModalWithoutScoring = () => {
@@ -1074,11 +1121,19 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                     {POINT_TIERS.map((pts) => {
                       const tileKey = `${col.subName}__${pts}`;
                       const isUsed = usedTileKeys.includes(tileKey);
-                      const slot = isUsed
-                        ? null
-                        : getSlotSelection(col.subName, pts, col.subId);
-                      const availableQ = slot?.question || null;
-                      const isTileExhausted = Boolean(slot && !slot.question && slot.isExhausted);
+                      const isWkCol = isWalaKalimaCategory({
+                        subcategoryId: col.subId,
+                        subcategoryName: col.subName,
+                        mainCategoryName: col.mainCategoryName,
+                      });
+                      const slot =
+                        isUsed || isWkCol
+                          ? null
+                          : getSlotSelection(col.subName, pts, col.subId);
+                      const availableQ = isWkCol ? true : Boolean(slot?.question);
+                      const isTileExhausted = Boolean(
+                        !isWkCol && slot && !slot.question && slot.isExhausted
+                      );
                       const isDisabled = isUsed || !availableQ;
 
                       return (
@@ -1097,6 +1152,8 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                           aria-label={
                             isUsed
                               ? `${col.subName} ${pts} نقطة - تم استخدامه`
+                              : isWkCol
+                              ? `${col.subName} - جولة ولا كلمة QR`
                               : isTileExhausted
                               ? `${col.subName} ${pts} نقطة - خلصت الأسئلة الجديدة في هذي الفئة`
                               : !availableQ
@@ -1108,6 +1165,8 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                               ? 'bg-[#F3F5E9]/70 border-[#E5E8DD] text-[#777B73]/45 cursor-not-allowed'
                               : !availableQ
                               ? 'bg-[#F3F5E9]/40 border-dashed border-[#E5E8DD] text-[#777B73]/65 cursor-not-allowed text-[11px] font-sans'
+                              : isWkCol
+                              ? 'bg-[#FEF2EC] hover:bg-[#F07842] text-[#D9602B] hover:text-white border-[#F07842]/45 hover:border-[#F07842] cursor-pointer active:scale-[0.98]'
                               : 'bg-[#F3F5E9] hover:bg-[#F07842] text-[#14543D] hover:text-white border-[#E5E8DD] hover:border-[#F07842] cursor-pointer active:scale-[0.98]'
                           }`}
                         >
@@ -1120,6 +1179,10 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                           ) : !availableQ ? (
                             <span className="text-[10px] font-sans font-normal">
                               غير متوفر
+                            </span>
+                          ) : isWkCol ? (
+                            <span className="text-xs font-sans font-bold">
+                              جولة QR · {POINT_TO_DIFFICULTY[pts]}
                             </span>
                           ) : (
                             <span>{pts}</span>
@@ -1203,11 +1266,19 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                     {POINT_TIERS.map((pts) => {
                       const tileKey = `${col.subName}__${pts}`;
                       const isUsed = usedTileKeys.includes(tileKey);
-                      const slot = isUsed
-                        ? null
-                        : getSlotSelection(col.subName, pts, col.subId);
-                      const availableQ = slot?.question || null;
-                      const isTileExhausted = Boolean(slot && !slot.question && slot.isExhausted);
+                      const isWkCol = isWalaKalimaCategory({
+                        subcategoryId: col.subId,
+                        subcategoryName: col.subName,
+                        mainCategoryName: col.mainCategoryName,
+                      });
+                      const slot =
+                        isUsed || isWkCol
+                          ? null
+                          : getSlotSelection(col.subName, pts, col.subId);
+                      const availableQ = isWkCol ? true : Boolean(slot?.question);
+                      const isTileExhausted = Boolean(
+                        !isWkCol && slot && !slot.question && slot.isExhausted
+                      );
                       const isDisabled = isUsed || !availableQ;
 
                       return (
@@ -1231,6 +1302,8 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                           aria-label={
                             isUsed
                               ? `${col.subName} ${pts} نقطة - تم استخدامه`
+                              : isWkCol
+                              ? `${col.subName} - جولة ولا كلمة QR`
                               : isTileExhausted
                               ? `${col.subName} ${pts} نقطة - خلصت الأسئلة الجديدة في هذي الفئة`
                               : !availableQ
@@ -1242,6 +1315,8 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                               ? 'bg-[#F3F5E9]/70 border-[#E5E8DD] text-[#777B73]/45 cursor-not-allowed'
                               : !availableQ
                               ? 'bg-[#F3F5E9]/40 border-dashed border-[#E5E8DD] text-[#777B73]/65 cursor-not-allowed text-xs font-sans'
+                              : isWkCol
+                              ? 'bg-[#FEF2EC] hover:bg-[#F07842] text-[#D9602B] hover:text-white border-[#F07842]/45 hover:border-[#F07842] cursor-pointer active:scale-[0.98]'
                               : 'bg-[#F3F5E9] hover:bg-[#F07842] text-[#14543D] hover:text-white border-[#E5E8DD] hover:border-[#F07842] cursor-pointer active:scale-[0.98]'
                           }`}
                         >
@@ -1262,6 +1337,13 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                             <span className="text-[11px] font-sans font-normal">
                               غير متوفر
                             </span>
+                          ) : isWkCol ? (
+                            <div className="flex flex-col items-center leading-tight gap-0.5 font-sans">
+                              <span className="text-xs font-bold">ولا كلمة QR</span>
+                              <span className="text-[10px] opacity-85">
+                                {POINT_TO_DIFFICULTY[pts]}
+                              </span>
+                            </div>
                           ) : (
                             <span>{pts}</span>
                           )}
@@ -1621,6 +1703,42 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
             )}
           </div>
         </div>
+      )}
+      {/* 5. WALA KALIMA INTERACTIVE QR MODAL (Secret word strictly stays on player phone) */}
+      {activeWalaKalimaTile && activeTeam && (
+        <WalaKalimaBoardModal
+          matchId={matchId}
+          tileKey={activeWalaKalimaTile.tileKey}
+          subcategoryId={activeWalaKalimaTile.subcategoryId}
+          subcategoryName={activeWalaKalimaTile.subcategoryName}
+          preferredDifficulty={POINT_TO_DIFFICULTY[activeWalaKalimaTile.points]}
+          activeTeam={{
+            id: activeTeam.id,
+            name: activeTeam.name || `الفريق ${safeTeamIndex + 1}`,
+            color: activeTeam.color,
+            players: activeTeam.players,
+          }}
+          canControl={true}
+          settings={walaKalimaSettings}
+          onCommitResult={({ earnedPoints, tileKey, sessionId }) => {
+            if (earnedPoints > 0) {
+              soundFX.playCorrect();
+              onAwardPoints(
+                safeTeamIndex,
+                earnedPoints,
+                tileKey,
+                sessionId,
+                playableTilesCount
+              );
+            } else {
+              onMarkTileUsedNoPoints(tileKey, sessionId, playableTilesCount);
+            }
+            setActiveWalaKalimaTile(null);
+          }}
+          onCancel={() => {
+            setActiveWalaKalimaTile(null);
+          }}
+        />
       )}
     </div>
   );

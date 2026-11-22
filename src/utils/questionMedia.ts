@@ -99,3 +99,32 @@ export function validateQuestionAudioFile(file: {
   }
   return null;
 }
+
+export function isValidHttpUrl(rawUrl: unknown): boolean {
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+    return false;
+  }
+  return trimmed.startsWith('https://') || trimmed.startsWith('http://');
+}
+
+export function resolveQuestionImageMeta(file: {
+  name: string;
+  type: string;
+}): {
+  ext: 'jpg' | 'png' | 'webp';
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+} {
+  const lowerName = (file.name || '').toLowerCase();
+  const mime = (file.type || '').toLowerCase();
+
+  if (mime === 'image/png' || lowerName.endsWith('.png')) {
+    return { ext: 'png', contentType: 'image/png' };
+  }
+  if (mime === 'image/webp' || lowerName.endsWith('.webp')) {
+    return { ext: 'webp', contentType: 'image/webp' };
+  }
+  return { ext: 'jpg', contentType: 'image/jpeg' };
+}
+

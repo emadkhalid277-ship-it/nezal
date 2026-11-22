@@ -11,14 +11,18 @@ import {
   writeBatch,
   serverTimestamp,
   Timestamp,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import {
   ref,
   uploadBytes,
+  uploadBytesResumable,
   getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
 import {
+  auth,
   db,
   storage,
   handleFirestoreError,
@@ -42,17 +46,30 @@ import {
   INITIAL_SEED_QUESTIONS,
   MAIN_CATEGORIES,
 } from '../data/categoriesAndSeed';
-import { ALL_EXPANDED_QUESTIONS } from '../data/questions';
+
+let expandedQuestionsPromise: Promise<TriviaQuestion[]> | null = null;
+
+export async function loadExpandedQuestionsBank(): Promise<TriviaQuestion[]> {
+  if (!expandedQuestionsPromise) {
+    expandedQuestionsPromise = import('../data/questions').then(
+      (mod) => mod.ALL_EXPANDED_QUESTIONS
+    );
+  }
+  return expandedQuestionsPromise;
+}
 import {
   ALLOWED_QUESTION_AUDIO_TYPES,
   ALLOWED_QUESTION_IMAGE_TYPES,
   inferQuestionMediaType,
+  isValidHttpUrl,
   MAX_QUESTION_AUDIO_SIZE_BYTES,
   MAX_QUESTION_IMAGE_SIZE_BYTES,
   normalizeAudioMaxPlays,
+  resolveQuestionImageMeta,
   validateQuestionAudioFile,
   validateQuestionImageFile,
 } from '../utils/questionMedia';
+import { uploadQuestionImageToCloudinarySigned } from './cloudinaryService';
 
 export {
   ALLOWED_QUESTION_AUDIO_TYPES,
@@ -70,6 +87,8 @@ const SUBCATEGORIES_COLLECTION = 'subcategories';
 const MAIN_CATEGORIES_COLLECTION = 'mainCategories';
 const SETTINGS_COLLECTION = 'settings';
 const CONTACT_DOC_ID = 'contact';
+export const DELETED_BUILTIN_MANIFEST_DOC_ID = '__deleted_builtin_manifest__';
+const FIRESTORE_BATCH_LIMIT = 450;
 
 // Explicitly removed Movies & TV Shows references so they never appear
 export const REMOVED_MAIN_CATEGORY_IDS = new Set(['main-movies-series']);
@@ -471,6 +490,24 @@ export function mergeSubcategories(
     });
   }
 
+  // Always ensure interactive Wala Kalima content types exist even when Firestore already has legacy subcategories
+  const walaMain =
+    mainByName.get('ولا كلمة') ||
+    mainById.get('main-wala-kalima') ||
+    mainById.get('main-1793867682734-xevr');
+  for (const def of DEFAULT_SUBCATEGORIES) {
+    if (!def.id.startsWith('sub-wk-')) continue;
+    if (!byId.has(def.id)) {
+      byId.set(def.id, {
+        ...def,
+        mainCategoryId: walaMain ? walaMain.id : def.mainCategoryId,
+        mainCategory: walaMain ? walaMain.name : def.mainCategory,
+        imageUrl: def.imageUrl || '',
+        isDeleted: false,
+      });
+    }
+  }
+
   return Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
@@ -547,14 +584,15 @@ export async function fetchMainCategoriesFromFirestore(
         typeof data.isActive === 'boolean'
           ? data.isActive
           : existingDef?.isActive ?? true;
-      const resolvedIsComingSoon =
-        typeof data.isComingSoon === 'boolean'
-          ? data.isComingSoon
-          : Boolean(
-              existingDef?.isComingSoon ||
-                docId === 'main-1793867682734-xevr' ||
-                resolvedName === 'ولا كلمة'
-            );
+      const isWalaKalimaDoc =
+        docId === 'main-1793867682734-xevr' ||
+        docId === 'main-wala-kalima' ||
+        resolvedName === 'ولا كلمة';
+      const resolvedIsComingSoon = isWalaKalimaDoc
+        ? false
+        : typeof data.isComingSoon === 'boolean'
+        ? data.isComingSoon
+        : Boolean(existingDef?.isComingSoon);
 
       const validIcons: MainCategoryIconName[] = [
         'compass',
@@ -1182,14 +1220,18 @@ export async function saveSubcategoryToFirestore(
         payload.imageUrl !== undefined
           ? payload.imageUrl.trim().slice(0, 500000)
           : String(existingData.imageUrl || '');
+      const safeSortOrder = Math.max(
+        0,
+        Math.min(10000, Math.round(Number(payload.sortOrder) || 1))
+      );
 
-      await updateDoc(docRef, {
+      const updatePayload: Record<string, any> = {
         name: cleanName,
         mainCategoryId: cleanMainCatId,
         mainCategory: cleanMainCat,
         description: (payload.description || '').trim().slice(0, 240),
-        sortOrder: Math.max(0, Math.min(10000, Math.round(payload.sortOrder))),
-        isActive: payload.isActive,
+        sortOrder: safeSortOrder,
+        isActive: Boolean(payload.isActive),
         isComingSoon:
           payload.isComingSoon !== undefined
             ? Boolean(payload.isComingSoon)
@@ -1197,16 +1239,32 @@ export async function saveSubcategoryToFirestore(
         isDeleted: false,
         imageUrl: resolvedImageUrl,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (!existingData.id) {
+        updatePayload.id = docId;
+      }
+      if (!existingData.authorId) {
+        updatePayload.authorId = authorId.slice(0, 128);
+      }
+      if (!existingData.createdAt) {
+        updatePayload.createdAt = serverTimestamp();
+      }
+
+      await updateDoc(docRef, updatePayload);
     } else {
+      const safeSortOrder = Math.max(
+        0,
+        Math.min(10000, Math.round(Number(payload.sortOrder) || 1))
+      );
       await setDoc(docRef, {
         id: docId,
         name: cleanName,
         mainCategoryId: cleanMainCatId,
         mainCategory: cleanMainCat,
         description: (payload.description || '').trim().slice(0, 240),
-        sortOrder: Math.max(0, Math.min(10000, Math.round(payload.sortOrder))),
-        isActive: payload.isActive,
+        sortOrder: safeSortOrder,
+        isActive: Boolean(payload.isActive),
         isComingSoon: Boolean(payload.isComingSoon),
         isDeleted: false,
         imageUrl: (payload.imageUrl || '').trim().slice(0, 500000),
@@ -1358,6 +1416,7 @@ export async function fetchApprovedQuestions(
       .map((d) => mapDocToQuestion(d.id, d.data()))
       .filter(
         (item) =>
+          item.id !== DELETED_BUILTIN_MANIFEST_DOC_ID &&
           item.status !== 'rejected' &&
           !REMOVED_SUBCATEGORY_NAMES.has(item.category)
       );
@@ -1381,12 +1440,119 @@ export async function fetchAllQuestionsForAdmin(
   try {
     const snap = await getDocs(collection(db, QUESTIONS_COLLECTION));
     const result = snap.docs
+      .filter((d) => d.id !== DELETED_BUILTIN_MANIFEST_DOC_ID)
       .map((d) => mapDocToQuestion(d.id, d.data()))
       .filter((item) => !REMOVED_SUBCATEGORY_NAMES.has(item.category));
     serviceCache.set('admin_questions', result);
     return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, QUESTIONS_COLLECTION);
+  }
+}
+
+export async function fetchDeletedBuiltinQuestionIds(
+  forceRefresh = false
+): Promise<Set<string>> {
+  if (!forceRefresh) {
+    const cached = serviceCache.get<string[]>('deleted_builtin_ids');
+    if (Array.isArray(cached)) {
+      return new Set(cached);
+    }
+  }
+
+  try {
+    const manifestSnap = await getDoc(
+      doc(db, QUESTIONS_COLLECTION, DELETED_BUILTIN_MANIFEST_DOC_ID)
+    );
+    if (!manifestSnap.exists()) {
+      serviceCache.set('deleted_builtin_ids', []);
+      return new Set();
+    }
+    const data = manifestSnap.data();
+    const ids = Array.isArray(data?.deletedIds)
+      ? data.deletedIds.map((id: unknown) => String(id).trim()).filter(Boolean)
+      : [];
+    serviceCache.set('deleted_builtin_ids', ids);
+    return new Set(ids);
+  } catch (error) {
+    console.warn('Could not read deleted built-in questions manifest:', error);
+    return new Set();
+  }
+}
+
+export function mergeActiveQuestionsWithManifest(params: {
+  firestoreQuestions: TriviaQuestion[];
+  builtinQuestions: TriviaQuestion[];
+  deletedBuiltinIds: Set<string>;
+}): TriviaQuestion[] {
+  const { firestoreQuestions, builtinQuestions, deletedBuiltinIds } = params;
+  const firestoreMap = new Map<string, TriviaQuestion>();
+  firestoreQuestions.forEach((q) => {
+    if (q.id !== DELETED_BUILTIN_MANIFEST_DOC_ID) {
+      firestoreMap.set(q.id, q);
+    }
+  });
+
+  const builtinIds = new Set<string>();
+  const mergedList: TriviaQuestion[] = [];
+
+  for (const builtin of builtinQuestions) {
+    const cleanBuiltinId = sanitizeId(builtin.id);
+    builtinIds.add(builtin.id);
+    builtinIds.add(cleanBuiltinId);
+    if (
+      deletedBuiltinIds.has(builtin.id) ||
+      deletedBuiltinIds.has(cleanBuiltinId)
+    ) {
+      continue;
+    }
+    mergedList.push(
+      firestoreMap.get(builtin.id) || firestoreMap.get(cleanBuiltinId) || builtin
+    );
+  }
+
+  firestoreQuestions.forEach((fq) => {
+    if (fq.id === DELETED_BUILTIN_MANIFEST_DOC_ID) return;
+    const cleanFqId = sanitizeId(fq.id);
+    if (
+      !builtinIds.has(fq.id) &&
+      !builtinIds.has(cleanFqId) &&
+      !deletedBuiltinIds.has(fq.id) &&
+      !deletedBuiltinIds.has(cleanFqId)
+    ) {
+      mergedList.push(fq);
+    }
+  });
+
+  return mergedList;
+}
+
+async function getAllBuiltinQuestionIdsSet(): Promise<Set<string>> {
+  const expanded = await loadExpandedQuestionsBank();
+  const ids = new Set<string>(expanded.map((q) => sanitizeId(q.id)));
+  INITIAL_SEED_QUESTIONS.forEach((q) => ids.add(sanitizeId(q.id)));
+  return ids;
+}
+
+async function removeQuestionIdFromDeletedManifestBestEffort(
+  questionId: string
+): Promise<void> {
+  try {
+    const manifestRef = doc(
+      db,
+      QUESTIONS_COLLECTION,
+      DELETED_BUILTIN_MANIFEST_DOC_ID
+    );
+    const snap = await getDoc(manifestRef);
+    if (snap.exists()) {
+      await updateDoc(manifestRef, {
+        deletedIds: arrayRemove(questionId),
+        updatedAt: serverTimestamp(),
+      });
+      serviceCache.invalidate('deleted_builtin_ids');
+    }
+  } catch {
+    // Non-fatal if caller does not manage manifest
   }
 }
 
@@ -1444,62 +1610,152 @@ export async function uploadQuestionImageToStorage(
     throw new Error(validationError);
   }
 
-  const lowerName = file.name.toLowerCase();
-  let ext = 'jpg';
-  if (file.type === 'image/png' || lowerName.endsWith('.png')) {
-    ext = 'png';
-  } else if (file.type === 'image/webp' || lowerName.endsWith('.webp')) {
-    ext = 'webp';
+  // 1. Read and verify selected file bytes before uploading
+  try {
+    const buffer = await file.arrayBuffer();
+    if (!buffer || buffer.byteLength <= 0) {
+      throw new Error('تعذر قراءة ملف الصورة المختار أو أن الملف فارغ.');
+    }
+  } catch (readErr: any) {
+    throw new Error(
+      readErr instanceof Error && readErr.message
+        ? readErr.message
+        : 'تعذر قراءة ملف الصورة المختار من الجهاز.'
+    );
   }
 
+  const { ext, contentType } = resolveQuestionImageMeta(file);
   const safeFolder = sanitizeId(subcategoryIdOrCategory || 'general');
   const safeQuestionPrefix = sanitizeId(questionIdHint || 'q');
   const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const storagePath = `question-images/${safeFolder}/${safeQuestionPrefix}-${uniqueToken}.${ext}`;
 
-  try {
-    const storageRef = ref(storage, storagePath);
-    const uploadPromise = (async () => {
-      const snapshot = await uploadBytes(storageRef, file, {
-        contentType: file.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-      });
-      return await getDownloadURL(snapshot.ref);
-    })();
+  const storageRef = ref(storage, storagePath);
+  const uploadTask = uploadBytesResumable(storageRef, file, {
+    contentType,
+  });
 
-    const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(
-        () =>
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+
+  try {
+    const snapshot = await new Promise<typeof uploadTask.snapshot>(
+      (resolve, reject) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          try {
+            uploadTask.cancel();
+          } catch {
+            // ignore cancel error
+          }
           reject(
             new Error(
-              'انتهت مهلة رفع الصورة إلى Firebase Storage. تأكد من تفعيل خدمة Storage في مشروع Firebase ومن اتصال الإنترنت.'
+              'انتهت مهلة رفع الصورة إلى Firebase Storage. تأكد من تفعيل خدمة Firebase Storage في المشروع ومن استقرار الاتصال بالإنترنت.'
             )
-          ),
-        12000
-      )
+          );
+        }, 15000);
+
+        uploadTask.on(
+          'state_changed',
+          undefined,
+          (error) => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            reject(error);
+          },
+          () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            resolve(uploadTask.snapshot);
+          }
+        );
+      }
     );
 
-    const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
-    if (!downloadUrl || !downloadUrl.startsWith('http')) {
-      throw new Error('لم يتم استلام رابط صالح للصورة من Firebase Storage.');
+    // 3. Extract verified HTTPS Download URL only after upload completes
+    const downloadUrl = await getDownloadURL(snapshot.ref);
+    if (!isValidHttpUrl(downloadUrl)) {
+      throw new Error(
+        'لم يتم استلام رابط تنزيل صالح (HTTPS) للصورة من Firebase Storage.'
+      );
     }
 
     return {
-      imageUrl: downloadUrl,
+      imageUrl: downloadUrl.trim(),
       imageStoragePath: storagePath,
     };
   } catch (err: any) {
-    const code = err?.code || '';
-    if (code === 'storage/unauthorized') {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    const code = String(err?.code || 'unknown');
+    const status = err?.status_ ?? err?.customData?.status ?? null;
+    const rawMsg = String(err?.message || '');
+    const serverResp = String(err?.serverResponse || err?.customData?.serverResponse || '');
+    const combinedDetails = `${code} ${status ?? ''} ${rawMsg} ${serverResp}`.toLowerCase();
+    const bucket = storage.app.options.storageBucket || 'unknown';
+    const projectId = storage.app.options.projectId || 'unknown';
+
+    console.error('[NIZAL Firebase Storage Upload Error]', {
+      code,
+      status,
+      message: rawMsg,
+      customData: err?.customData,
+      serverResponse: serverResp,
+      bucket,
+      projectId,
+      storagePath,
+      contentType,
+      fileName: file.name,
+      fileSize: file.size,
+      authUser: auth.currentUser
+        ? {
+            uid: auth.currentUser.uid,
+            email: auth.currentUser.email,
+            emailVerified: auth.currentUser.emailVerified,
+          }
+        : null,
+    });
+
+    if (timedOut) {
+      throw new Error(`[storage/timeout] ${rawMsg}`);
+    }
+    if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
       throw new Error(
-        'غير مصرح برفع الصورة إلى Firebase Storage (تأكد من تسجيل الدخول بحساب المشرف وضبط قواعد Storage).'
+        `[${code}] غير مصرح برفع الصورة إلى Firebase Storage. تأكد من تسجيل الدخول بحساب المشرف المفعّل ونشر قواعد الأمان (storage.rules).`
+      );
+    }
+    if (
+      code === 'storage/bucket-not-found' ||
+      code === 'storage/project-not-found' ||
+      status === 404 ||
+      combinedDetails.includes('bucket does not exist') ||
+      combinedDetails.includes('"code": 404') ||
+      combinedDetails.includes('not found')
+    ) {
+      throw new Error(
+        `[${code}${status ? ` | HTTP ${status}` : ''}] تعذر الرفع لأن حاوية التخزين (${bucket}) غير موجودة أو خدمة Firebase Storage غير مفعّلة في المشروع (${projectId}).`
+      );
+    }
+    if (code === 'storage/retry-limit-exceeded') {
+      throw new Error(
+        `[storage/retry-limit-exceeded] تعذر إكمال رفع الصورة بسبب انقطاع أو بطء الاتصال بخادم Firebase Storage.`
       );
     }
     throw new Error(
-      err instanceof Error
-        ? err.message
-        : 'تعذر رفع الصورة إلى Firebase Storage. بيانات السؤال النصية محفوظة في النموذج ويمكنك إعادة المحاولة.'
+      rawMsg
+        ? `[${code}] فشل رفع الصورة إلى Firebase Storage: ${rawMsg}`
+        : `[${code}] تعذر رفع الصورة إلى Firebase Storage. بيانات السؤال النصية محفوظة في النموذج ويمكنك إعادة المحاولة.`
     );
   }
+}
+
+export async function uploadQuestionImageToCloudinary(
+  file: File,
+  subcategoryIdOrCategory: string,
+  questionIdHint?: string
+): Promise<{ imageUrl: string; imageStoragePath: string }> {
+  return uploadQuestionImageToCloudinarySigned(file, {
+    scope: 'admin_question',
+    folderHint: subcategoryIdOrCategory || 'general',
+    questionIdHint: questionIdHint || 'q',
+  });
 }
 
 export async function uploadQuestionAudioToStorage(
@@ -1588,6 +1844,7 @@ export async function deleteQuestionImageFromStorage(
   storagePath?: string
 ): Promise<void> {
   if (!storagePath || !storagePath.trim()) return;
+  if (storagePath.trim().startsWith('cloudinary:')) return;
   try {
     const storageRef = ref(storage, storagePath.trim());
     await deleteObject(storageRef);
@@ -1621,7 +1878,7 @@ export interface CreateQuestionPayload {
   audioMaxPlays?: number | null;
 }
 
-function sanitizeMediaFieldsForWrite(
+export function sanitizeMediaFieldsForWrite(
   payload: Omit<CreateQuestionPayload, 'id'>
 ): {
   mediaType: QuestionMediaType;
@@ -1633,22 +1890,32 @@ function sanitizeMediaFieldsForWrite(
   audioMaxPlays: number | null;
 } {
   const rawImageUrl = (payload.imageUrl || '').trim();
-  if (rawImageUrl.startsWith('data:')) {
-    throw new Error('لا يُسمح بتخزين الصور بصيغة Base64 داخل مستندات Firestore.');
+  if (rawImageUrl.startsWith('data:') || rawImageUrl.startsWith('blob:')) {
+    throw new Error('لا يُسمح بتخزين الصور المؤقتة أو بصيغة Base64 داخل مستندات Firestore.');
   }
   const rawAudioUrl = (payload.audioUrl || '').trim();
-  if (rawAudioUrl.startsWith('data:')) {
-    throw new Error('لا يُسمح بتخزين الملفات الصوتية بصيغة Base64 داخل مستندات Firestore.');
+  if (rawAudioUrl.startsWith('data:') || rawAudioUrl.startsWith('blob:')) {
+    throw new Error('لا يُسمح بتخزين الملفات الصوتية المؤقتة أو بصيغة Base64 داخل مستندات Firestore.');
   }
 
-  const validImageUrl =
-    rawImageUrl.startsWith('http://') || rawImageUrl.startsWith('https://')
-      ? rawImageUrl.slice(0, 2000)
-      : '';
-  const validAudioUrl =
-    rawAudioUrl.startsWith('http://') || rawAudioUrl.startsWith('https://')
-      ? rawAudioUrl.slice(0, 2000)
-      : '';
+  const validImageUrl = isValidHttpUrl(rawImageUrl)
+    ? rawImageUrl.slice(0, 2000)
+    : '';
+  const validAudioUrl = isValidHttpUrl(rawAudioUrl)
+    ? rawAudioUrl.slice(0, 2000)
+    : '';
+
+  // Never silently downgrade an image/audio question to text with an empty URL
+  if (payload.mediaType === 'image' && !validImageUrl) {
+    throw new Error(
+      'فشل التحقق من رابط الصورة: لا يمكن حفظ سؤال مصوّر بقيمة imageUrl فارغة أو غير صالحة.'
+    );
+  }
+  if (payload.mediaType === 'audio' && !validAudioUrl) {
+    throw new Error(
+      'فشل التحقق من الرابط الصوتي: لا يمكن حفظ سؤال صوتي بقيمة audioUrl فارغة أو غير صالحة.'
+    );
+  }
 
   const resolvedMediaType = inferQuestionMediaType({
     mediaType: payload.mediaType,
@@ -1745,6 +2012,7 @@ export async function createQuestionInFirestore(
 
   try {
     await setDoc(doc(db, QUESTIONS_COLLECTION, docId), docData);
+    await removeQuestionIdFromDeletedManifestBestEffort(docId);
     serviceCache.invalidate('approved_questions');
     serviceCache.invalidate('admin_questions');
     return docId;
@@ -1840,7 +2108,8 @@ export async function updateQuestionStatusInFirestore(
       });
     } else {
       // Document from expanded question bank being approved/reviewed for the first time
-      const fallback = ALL_EXPANDED_QUESTIONS.find((q) => q.id === questionId);
+      const expandedQuestions = await loadExpandedQuestionsBank();
+      const fallback = expandedQuestions.find((q) => q.id === questionId);
       if (fallback) {
         await setDoc(docRef, {
           id: cleanDocId,
@@ -1878,15 +2147,32 @@ export async function deleteQuestionFromFirestore(
   questionId: string,
   _imageStoragePath?: string
 ): Promise<void> {
+  const cleanId = sanitizeId(questionId);
+  if (!cleanId || cleanId === DELETED_BUILTIN_MANIFEST_DOC_ID) return;
+
   try {
-    await deleteDoc(doc(db, QUESTIONS_COLLECTION, questionId));
+    await deleteDoc(doc(db, QUESTIONS_COLLECTION, cleanId));
+    const builtinIds = await getAllBuiltinQuestionIdsSet();
+    if (builtinIds.has(cleanId)) {
+      await setDoc(
+        doc(db, QUESTIONS_COLLECTION, DELETED_BUILTIN_MANIFEST_DOC_ID),
+        {
+          id: DELETED_BUILTIN_MANIFEST_DOC_ID,
+          status: 'manifest',
+          deletedIds: arrayUnion(cleanId),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
     serviceCache.invalidate('approved_questions');
     serviceCache.invalidate('admin_questions');
+    serviceCache.invalidate('deleted_builtin_ids');
   } catch (error) {
     handleFirestoreError(
       error,
       OperationType.DELETE,
-      `${QUESTIONS_COLLECTION}/${questionId}`
+      `${QUESTIONS_COLLECTION}/${cleanId}`
     );
   }
 }
@@ -1895,15 +2181,23 @@ export async function bulkUpdateStatusInFirestore(
   questionIds: string[],
   status: ApprovalStatus
 ): Promise<void> {
-  const batch = writeBatch(db);
-  questionIds.forEach((id) => {
-    batch.update(doc(db, QUESTIONS_COLLECTION, id), {
-      status,
-      reviewedAt: serverTimestamp(),
-    });
-  });
+  const uniqueIds = Array.from(
+    new Set(questionIds.map((id) => sanitizeId(id)).filter(Boolean))
+  ).filter((id) => id !== DELETED_BUILTIN_MANIFEST_DOC_ID);
+  if (uniqueIds.length === 0) return;
+
   try {
-    await batch.commit();
+    for (let i = 0; i < uniqueIds.length; i += FIRESTORE_BATCH_LIMIT) {
+      const chunk = uniqueIds.slice(i, i + FIRESTORE_BATCH_LIMIT);
+      const batch = writeBatch(db);
+      chunk.forEach((id) => {
+        batch.update(doc(db, QUESTIONS_COLLECTION, id), {
+          status,
+          reviewedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
+    }
     serviceCache.invalidate('approved_questions');
     serviceCache.invalidate('admin_questions');
   } catch (error) {
@@ -1913,15 +2207,64 @@ export async function bulkUpdateStatusInFirestore(
 
 export async function bulkDeleteFromFirestore(
   questionIds: string[]
-): Promise<void> {
-  const batch = writeBatch(db);
-  questionIds.forEach((id) => {
-    batch.delete(doc(db, QUESTIONS_COLLECTION, id));
-  });
+): Promise<{
+  deletedCount: number;
+  batchCount: number;
+  suppressedBuiltinCount: number;
+}> {
+  const uniqueIds = Array.from(
+    new Set(questionIds.map((id) => sanitizeId(id)).filter(Boolean))
+  ).filter((id) => id !== DELETED_BUILTIN_MANIFEST_DOC_ID);
+
+  if (uniqueIds.length === 0) {
+    return { deletedCount: 0, batchCount: 0, suppressedBuiltinCount: 0 };
+  }
+
+  let batchCount = 0;
   try {
-    await batch.commit();
+    for (let i = 0; i < uniqueIds.length; i += FIRESTORE_BATCH_LIMIT) {
+      const chunk = uniqueIds.slice(i, i + FIRESTORE_BATCH_LIMIT);
+      const batch = writeBatch(db);
+      chunk.forEach((id) => {
+        batch.delete(doc(db, QUESTIONS_COLLECTION, id));
+      });
+      await batch.commit();
+      batchCount++;
+    }
+
+    const builtinIds = await getAllBuiltinQuestionIdsSet();
+    const builtinToSuppress = uniqueIds.filter((id) => builtinIds.has(id));
+    if (builtinToSuppress.length > 0) {
+      const manifestRef = doc(
+        db,
+        QUESTIONS_COLLECTION,
+        DELETED_BUILTIN_MANIFEST_DOC_ID
+      );
+      const manifestSnap = await getDoc(manifestRef);
+      const existingDeleted: string[] =
+        manifestSnap.exists() && Array.isArray(manifestSnap.data()?.deletedIds)
+          ? manifestSnap.data().deletedIds.map((id: unknown) => String(id))
+          : [];
+      const mergedDeletedIds = Array.from(
+        new Set([...existingDeleted, ...builtinToSuppress])
+      );
+      await setDoc(manifestRef, {
+        id: DELETED_BUILTIN_MANIFEST_DOC_ID,
+        status: 'manifest',
+        deletedIds: mergedDeletedIds,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
     serviceCache.invalidate('approved_questions');
     serviceCache.invalidate('admin_questions');
+    serviceCache.invalidate('deleted_builtin_ids');
+
+    return {
+      deletedCount: uniqueIds.length,
+      batchCount,
+      suppressedBuiltinCount: builtinToSuppress.length,
+    };
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, QUESTIONS_COLLECTION);
   }
@@ -1998,8 +2341,9 @@ export async function seedInitialQuestionsToFirestore(
     reviewedAt: new Date().toISOString(),
   }));
 
+  const expandedQuestions = await loadExpandedQuestionsBank();
   const combinedItems: TriviaQuestion[] = [
-    ...ALL_EXPANDED_QUESTIONS,
+    ...expandedQuestions,
     ...legacyItems,
   ];
 
@@ -2053,6 +2397,30 @@ export async function seedInitialQuestionsToFirestore(
       throw batchErr;
     }
   }
+
+  // Explicit admin seed restores built-in questions; clear any previous suppression manifest
+  try {
+    const manifestRef = doc(
+      db,
+      QUESTIONS_COLLECTION,
+      DELETED_BUILTIN_MANIFEST_DOC_ID
+    );
+    const manifestSnap = await getDoc(manifestRef);
+    if (manifestSnap.exists()) {
+      await setDoc(manifestRef, {
+        id: DELETED_BUILTIN_MANIFEST_DOC_ID,
+        status: 'manifest',
+        deletedIds: [],
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (err) {
+    console.warn('Could not reset deleted built-in manifest during seed:', err);
+  }
+
+  serviceCache.invalidate('approved_questions');
+  serviceCache.invalidate('admin_questions');
+  serviceCache.invalidate('deleted_builtin_ids');
 
   return addedCount;
 }

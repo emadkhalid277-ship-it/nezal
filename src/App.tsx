@@ -27,11 +27,9 @@ import {
 import { evaluateMatchOutcome } from './utils/matchOutcome';
 import {
   DEFAULT_SUBCATEGORIES,
-  INITIAL_SEED_QUESTIONS,
   MAIN_CATEGORIES,
   TEAM_COLOR_OPTIONS,
 } from './data/categoriesAndSeed';
-import { ALL_EXPANDED_QUESTIONS } from './data/questions';
 import {
   DEFAULT_CONTACT_SETTINGS,
   cleanupRemovedMoviesCategoryInFirestore,
@@ -41,8 +39,11 @@ import {
   fetchAllSubcategoriesForAdmin,
   fetchApprovedQuestions,
   fetchContactSettingsFromFirestore,
+  fetchDeletedBuiltinQuestionIds,
   fetchMainCategoriesFromFirestore,
+  loadExpandedQuestionsBank,
   matchesSubcategoryQuestion,
+  mergeActiveQuestionsWithManifest,
   recordGameSessionInFirestore,
   seedInitialQuestionsToFirestore,
 } from './services/questionService';
@@ -61,6 +62,14 @@ import { CategorySelectionPage } from './pages/CategorySelectionPage';
 import { GameBoardPage } from './pages/GameBoardPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { HowToPlayPage } from './pages/HowToPlayPage';
+import { WalaKalimaPlayerPage } from './pages/WalaKalimaPlayerPage';
+import {
+  DEFAULT_WALA_KALIMA_SETTINGS,
+  isWalaKalimaCategory,
+  resolveWalaKalimaContentType,
+  WalaKalimaSettings,
+} from './types/walaKalima';
+import { fetchWalaKalimaPublicConfig } from './services/walaKalimaService';
 
 // Code-split online-only & admin pages to keep initial bundle light
 const AdminDashboardPage = lazy(() =>
@@ -117,8 +126,10 @@ import { PWAInstallBanner } from './components/PWAInstallButton';
 import { OfflineSyncModal } from './components/OfflineSyncModal';
 import {
   OfflineDataStatus,
+  clearOfflineDatasetSnapshots,
   getOfflineDataStatus,
   loadActiveOfflineDataset,
+  precacheOfflineMediaInBackground,
   syncOfflineDatasetAtomically,
 } from './services/offlineStore';
 import { NizalLoadingScreen } from './components/NizalLoadingScreen';
@@ -168,8 +179,6 @@ const INITIAL_TEAMS: TeamConfig[] = DEFAULT_TEAM_TEMPLATES.slice(0, 2).map(
     score: 0,
   })
 );
-
-export const BUILTIN_FALLBACK_QUESTIONS: TriviaQuestion[] = ALL_EXPANDED_QUESTIONS;
 
 const GAME_SESSION_STORAGE_KEY = 'nizal_game_session_v1';
 const VALID_PAGES: PageView[] = [
@@ -330,9 +339,7 @@ export default function App() {
   );
 
   // Firestore Questions, Categories & Contact Settings State
-  const [allQuestions, setAllQuestions] = useState<TriviaQuestion[]>(
-    () => BUILTIN_FALLBACK_QUESTIONS
-  );
+  const [allQuestions, setAllQuestions] = useState<TriviaQuestion[]>([]);
   const [mainCategories, setMainCategories] =
     useState<MainCategoryMeta[]>(MAIN_CATEGORIES);
   const [subcategories, setSubcategories] = useState<SubcategoryItem[]>(
@@ -347,6 +354,24 @@ export default function App() {
     useState<QuestionDedupSettings>(DEFAULT_QUESTION_DEDUP_SETTINGS);
   const [visualEffectsSettings, setVisualEffectsSettings] =
     useState<VisualEffectsSettings>(() => loadCachedVisualEffectsSettings());
+  const [walaKalimaSettings, setWalaKalimaSettings] =
+    useState<WalaKalimaSettings>(DEFAULT_WALA_KALIMA_SETTINGS);
+  const [wkQrParams, setWkQrParams] = useState<{
+    sessionId: string;
+    qrToken: string;
+  } | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const s = params.get('wkSession')?.trim();
+      const t = params.get('wkToken')?.trim() || '';
+      if (s) {
+        return { sessionId: s, qrToken: t };
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
   const [seenQuestionIds, setSeenQuestionIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -374,6 +399,15 @@ export default function App() {
   >(null);
 
   const hasSyncedInitialSnapshotRef = useRef(false);
+  const deletedBuiltinIdsCountRef = useRef(0);
+  const mainCategoriesRef = useRef<MainCategoryMeta[]>(mainCategories);
+  mainCategoriesRef.current = mainCategories;
+  const subcategoriesRef = useRef<SubcategoryItem[]>(subcategories);
+  subcategoriesRef.current = subcategories;
+  const playModeRef = useRef<GamePlayMode>(playMode);
+  playModeRef.current = playMode;
+  const userRef = useRef<User | null>(user);
+  userRef.current = user;
 
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -383,6 +417,8 @@ export default function App() {
     const saved = loadSavedGameSession().isGameLocked;
     return Boolean(saved);
   });
+  const isGameLockedRef = useRef<boolean>(isGameLocked);
+  isGameLockedRef.current = isGameLocked;
 
   const [teams, setTeams] = useState<TeamConfig[]>(() => {
     const saved = loadSavedGameSession().teams;
@@ -479,26 +515,60 @@ export default function App() {
     }
   }, [teams.length, activeTeamIndex, selectingTeamIndex]);
 
+  const effectiveMainCategories = useMemo(() => {
+    const wkAvailable =
+      walaKalimaSettings.enabled &&
+      walaKalimaSettings.enabledContentTypes.length > 0;
+    return mainCategories.map((m) =>
+      isWalaKalimaCategory({ mainCategoryId: m.id, mainCategoryName: m.name })
+        ? { ...m, isActive: m.isActive && wkAvailable }
+        : m
+    );
+  }, [mainCategories, walaKalimaSettings]);
+
   // Only subcategories that are active AND belong to an active, non-deleted main category appear in new games
   const activeSubcategories = useMemo(() => {
     const visibleMainCategoryIds = new Set(
-      mainCategories
+      effectiveMainCategories
         .filter((m) => m.isActive && !m.isDeleted)
         .map((m) => m.id)
     );
     const visibleMainCategoryNames = new Set(
-      mainCategories
+      effectiveMainCategories
         .filter((m) => m.isActive && !m.isDeleted)
         .map((m) => m.name)
     );
-    return subcategories.filter(
-      (s) =>
-        s.isActive &&
-        !s.isDeleted &&
-        ((s.mainCategoryId && visibleMainCategoryIds.has(s.mainCategoryId)) ||
+    return subcategories.filter((s) => {
+      if (
+        !s.isActive ||
+        s.isDeleted ||
+        !((s.mainCategoryId && visibleMainCategoryIds.has(s.mainCategoryId)) ||
           visibleMainCategoryNames.has(s.mainCategory))
-    );
-  }, [subcategories, mainCategories]);
+      ) {
+        return false;
+      }
+
+      if (
+        isWalaKalimaCategory({
+          subcategoryId: s.id,
+          subcategoryName: s.name,
+          mainCategoryId: s.mainCategoryId,
+          mainCategoryName: s.mainCategory,
+        })
+      ) {
+        if (!walaKalimaSettings.enabled) return false;
+        const ct = resolveWalaKalimaContentType({
+          subcategoryId: s.id,
+          subcategoryName: s.name,
+        });
+        if (ct && !walaKalimaSettings.enabledContentTypes.includes(ct.id)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [subcategories, effectiveMainCategories, walaKalimaSettings]);
 
   // Playable subcategories exclude any Coming Soon main categories or subcategories
   const playableSubcategories = useMemo(() => {
@@ -690,39 +760,65 @@ export default function App() {
     [isGameLocked, teams, activeSubcategories]
   );
 
-  // Load questions from Firestore and merge seamlessly with the built-in expanded question bank
-  const loadQuestions = useCallback(async (adminAccess: boolean) => {
+  // Load questions from Firestore, respect deleted built-in manifest, and merge seamlessly
+  const loadQuestions = useCallback(async (adminAccess: boolean, forceRefresh = false) => {
     setLoadingQuestions(true);
     try {
-      const firestoreList = adminAccess
-        ? await fetchAllQuestionsForAdmin()
-        : await fetchApprovedQuestions();
+      const [firestoreList, builtinQuestions, deletedBuiltinIds] = await Promise.all([
+        adminAccess
+          ? fetchAllQuestionsForAdmin(forceRefresh)
+          : fetchApprovedQuestions(forceRefresh),
+        loadExpandedQuestionsBank(),
+        fetchDeletedBuiltinQuestionIds(forceRefresh),
+      ]);
 
-      const firestoreQuestions = firestoreList || [];
-      const firestoreMap = new Map<string, TriviaQuestion>();
-      firestoreQuestions.forEach((q) => {
-        firestoreMap.set(q.id, q);
-      });
+      deletedBuiltinIdsCountRef.current = deletedBuiltinIds.size;
 
-      // Merge: Firestore documents take precedence over built-in questions, preserving the full question bank
-      const mergedList = BUILTIN_FALLBACK_QUESTIONS.map((builtin) => {
-        return firestoreMap.get(builtin.id) || builtin;
-      });
-
-      // Also include any additional custom questions created in Firestore that are not in BUILTIN_FALLBACK_QUESTIONS
-      const builtinIds = new Set(BUILTIN_FALLBACK_QUESTIONS.map((b) => b.id));
-      firestoreQuestions.forEach((fq) => {
-        if (!builtinIds.has(fq.id)) {
-          mergedList.push(fq);
-        }
+      const mergedList = mergeActiveQuestionsWithManifest({
+        firestoreQuestions: firestoreList || [],
+        builtinQuestions,
+        deletedBuiltinIds,
       });
 
       setAllQuestions(mergedList);
+
+      if (forceRefresh) {
+        const activeQuestionsForOffline = mergedList.filter(
+          (q) => q.status !== 'rejected'
+        );
+        if (activeQuestionsForOffline.length === 0) {
+          await clearOfflineDatasetSnapshots();
+          const nextStatus = await getOfflineDataStatus();
+          setOfflineStatus({ ...nextStatus, syncing: false });
+        } else {
+          const syncRes = await syncOfflineDatasetAtomically(
+            {
+              mainCategories: mainCategoriesRef.current,
+              subcategories: subcategoriesRef.current,
+              questions: activeQuestionsForOffline,
+              source: 'firebase',
+            },
+            { precacheMedia: false }
+          );
+          if (syncRes.ok && !syncRes.skipped) {
+            const nextStatus = await getOfflineDataStatus();
+            setOfflineStatus({ ...nextStatus, syncing: false });
+          }
+        }
+      }
+
       return mergedList;
     } catch (err) {
       console.error('Failed to load questions from Firestore:', err);
-      setAllQuestions(BUILTIN_FALLBACK_QUESTIONS);
-      return BUILTIN_FALLBACK_QUESTIONS;
+      const [fallbackQuestions, deletedBuiltinIds] = await Promise.all([
+        loadExpandedQuestionsBank(),
+        fetchDeletedBuiltinQuestionIds(false).catch(() => new Set<string>()),
+      ]);
+      const filteredFallback = fallbackQuestions.filter(
+        (q) => !deletedBuiltinIds.has(q.id)
+      );
+      setAllQuestions((prev) => (prev.length > 0 ? prev : filteredFallback));
+      return filteredFallback;
     } finally {
       setLoadingQuestions(false);
     }
@@ -744,7 +840,7 @@ export default function App() {
   const loadSubcategories = useCallback(
     async (adminAccess: boolean, mainsOverride?: MainCategoryMeta[]) => {
       try {
-        const currentMains = mainsOverride ?? mainCategories;
+        const currentMains = mainsOverride ?? mainCategoriesRef.current;
         const subs = adminAccess
           ? await fetchAllSubcategoriesForAdmin(currentMains)
           : await fetchActiveSubcategories(currentMains);
@@ -755,7 +851,7 @@ export default function App() {
         return DEFAULT_SUBCATEGORIES;
       }
     },
-    [mainCategories]
+    []
   );
 
   // Load contact settings from Firestore
@@ -806,6 +902,22 @@ export default function App() {
 
   // Auth listener
   useEffect(() => {
+    let cancelDeferredSync: (() => void) | null = null;
+
+    const scheduleDeferredTask = (fn: () => void, fallbackDelayMs = 1200) => {
+      if (typeof window === 'undefined') return () => {};
+      const w = window as Window & {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (typeof w.requestIdleCallback === 'function') {
+        const idleId = w.requestIdleCallback(() => fn(), { timeout: 3000 });
+        return () => w.cancelIdleCallback?.(idleId);
+      }
+      const timerId = window.setTimeout(fn, fallbackDelayMs);
+      return () => window.clearTimeout(timerId);
+    };
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       const adminStatus = await checkUserIsAdmin(currentUser);
@@ -841,9 +953,11 @@ export default function App() {
         return;
       }
 
+      // Start question bank loading in parallel without blocking categories/home display
+      const questionsPromise = loadQuestions(adminStatus);
+
       const loadedMains = await loadMainCategories();
-      const [loadedQuestions, loadedSubs] = await Promise.all([
-        loadQuestions(adminStatus),
+      const [loadedSubs] = await Promise.all([
         loadSubcategories(adminStatus, loadedMains),
         loadContactSettings(),
         loadQuestionDedupSettings(),
@@ -851,28 +965,46 @@ export default function App() {
       ]);
       setCategoriesLoaded(true);
 
-      // Keep local IndexedDB copy safely up-to-date via atomic staging swap when online
+      const loadedQuestions = await questionsPromise;
+
+      // Defer checksum-guarded IndexedDB sync to idle background without eager image downloads
       if (!hasSyncedInitialSnapshotRef.current) {
         hasSyncedInitialSnapshotRef.current = true;
-        setOfflineStatus((prev) => ({ ...prev, syncing: true }));
-        const syncRes = await syncOfflineDatasetAtomically({
-          mainCategories: loadedMains,
-          subcategories: loadedSubs,
-          questions: (loadedQuestions || []).filter((q) => q.status !== 'rejected'),
-          source: 'firebase',
+        cancelDeferredSync?.();
+        cancelDeferredSync = scheduleDeferredTask(() => {
+          void (async () => {
+            const activeForOffline = (loadedQuestions || []).filter(
+              (q) => q.status !== 'rejected'
+            );
+            if (activeForOffline.length === 0 && deletedBuiltinIdsCountRef.current > 0) {
+              await clearOfflineDatasetSnapshots();
+              const nextStatus = await getOfflineDataStatus();
+              setOfflineStatus({ ...nextStatus, syncing: false });
+              return;
+            }
+            const syncRes = await syncOfflineDatasetAtomically(
+              {
+                mainCategories: loadedMains,
+                subcategories: loadedSubs,
+                questions: activeForOffline,
+                source: 'firebase',
+              },
+              { precacheMedia: false }
+            );
+            if (syncRes.ok) {
+              if (!syncRes.skipped) {
+                const nextStatus = await getOfflineDataStatus();
+                setOfflineStatus({ ...nextStatus, syncing: false });
+              }
+            } else {
+              console.warn('Offline snapshot sync skipped:', syncRes.reason);
+            }
+          })();
         });
-        const nextStatus = await getOfflineDataStatus();
-        setOfflineStatus({
-          ...nextStatus,
-          syncing: false,
-        });
-        if (!syncRes.ok) {
-          console.warn('Offline snapshot sync skipped:', syncRes.reason);
-        }
       }
 
       // Check if user has an unfinished active match from a previous session
-      if (currentUser && playMode !== 'offline_local') {
+      if (currentUser && playModeRef.current !== 'offline_local') {
         try {
           const match = await fetchActiveIncompleteMatch(currentUser.uid);
           if (match && match.status === 'in_progress') {
@@ -884,8 +1016,13 @@ export default function App() {
         }
       }
 
-      // Auto-seed foundational questions & subcategories once if an admin signs in to an empty database
-      if (adminStatus && currentUser && loadedQuestions.length === 0) {
+      // Auto-seed foundational questions & subcategories once ONLY on a genuinely uninitialized DB (never if admin deleted all questions)
+      if (
+        adminStatus &&
+        currentUser &&
+        loadedQuestions.length === 0 &&
+        deletedBuiltinIdsCountRef.current === 0
+      ) {
         setSeeding(true);
         try {
           await seedInitialQuestionsToFirestore(currentUser.uid, new Set());
@@ -902,7 +1039,10 @@ export default function App() {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      cancelDeferredSync?.();
+    };
   }, [
     loadQuestions,
     loadMainCategories,
@@ -912,25 +1052,41 @@ export default function App() {
     loadVisualEffectsSettings,
   ]);
 
-  // Load initial IndexedDB offline readiness status on startup
+  // Hydrate initial IndexedDB offline snapshot & readiness status immediately on startup
   useEffect(() => {
     let active = true;
     (async () => {
-      const status = await getOfflineDataStatus();
+      const snap = await loadActiveOfflineDataset();
       if (!active) return;
-      setOfflineStatus((prev) => ({ ...status, syncing: prev.syncing }));
-      if (
-        typeof navigator !== 'undefined' &&
-        navigator.onLine === false &&
-        status.ready
-      ) {
-        const snap = await loadActiveOfflineDataset();
-        if (active && snap) {
-          setMainCategories(snap.mainCategories);
-          setSubcategories(snap.subcategories);
-          setAllQuestions(snap.questions);
-          setCategoriesLoaded(true);
-        }
+
+      if (snap) {
+        setOfflineStatus((prev) => ({
+          ready: true,
+          syncing: prev.syncing,
+          questionsCount: snap.questions.length,
+          categoriesCount: snap.mainCategories.filter((m) => !m.isDeleted).length,
+          subcategoriesCount: snap.subcategories.filter((s) => !s.isDeleted).length,
+          syncedAt: snap.syncedAt,
+          source: snap.source,
+          mediaUrlsCached: snap.mediaUrlsCached,
+          mediaUrlsTotal: snap.mediaUrlsTotal,
+        }));
+        setMainCategories(snap.mainCategories);
+        setSubcategories(snap.subcategories);
+        setAllQuestions((prev) => (prev.length > 0 ? prev : snap.questions));
+        setCategoriesLoaded(true);
+      } else {
+        setOfflineStatus((prev) => ({
+          ready: false,
+          syncing: prev.syncing,
+          questionsCount: 0,
+          categoriesCount: 0,
+          subcategoriesCount: 0,
+          syncedAt: null,
+          source: null,
+          mediaUrlsCached: 0,
+          mediaUrlsTotal: 0,
+        }));
       }
     })();
     return () => {
@@ -938,17 +1094,32 @@ export default function App() {
     };
   }, []);
 
-  // Ensure initial branded splash displays smoothly without flicker and never stalls if network hangs
+  // Ensure initial branded splash displays smoothly without blocking home page startup
   useEffect(() => {
     const minTimer = window.setTimeout(() => {
       setInitialMinSplashDone(true);
-    }, 550);
+    }, 120);
     const safetyTimer = window.setTimeout(() => {
       setCategoriesLoaded(true);
-    }, 6500);
+    }, 1800);
     return () => {
       window.clearTimeout(minTimer);
       window.clearTimeout(safetyTimer);
+    };
+  }, []);
+
+  // Fetch public Wala Kalima QR rules & enabled content types from Express backend
+  useEffect(() => {
+    let active = true;
+    fetchWalaKalimaPublicConfig()
+      .then((cfg) => {
+        if (active && cfg) {
+          setWalaKalimaSettings(cfg);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -1069,7 +1240,12 @@ export default function App() {
 
   const handlePresenceActivityChange = useCallback(
     (status: 'online' | 'in_lobby' | 'in_match', roomCode?: string | null) => {
-      setOnlineActivity({ status, roomCode: roomCode || null });
+      const nextRoomCode = roomCode || null;
+      setOnlineActivity((prev) =>
+        prev.status === status && prev.roomCode === nextRoomCode
+          ? prev
+          : { status, roomCode: nextRoomCode }
+      );
     },
     []
   );
@@ -1098,7 +1274,7 @@ export default function App() {
       await seedInitialQuestionsToFirestore(user.uid, existingIds);
       const mains = await loadMainCategories();
       await Promise.all([
-        loadQuestions(true),
+        loadQuestions(true, true),
         loadSubcategories(true, mains),
       ]);
     } finally {
@@ -1184,6 +1360,22 @@ export default function App() {
     ]
   );
 
+  const autoSaveMatchRef = useRef(autoSaveMatch);
+  autoSaveMatchRef.current = autoSaveMatch;
+
+  const handleActiveQuestionChange = useCallback((st: any | null) => {
+    setActiveQuestionSaved((prev: any | null) => {
+      if (prev === null && st === null) return prev;
+      if (prev && st && JSON.stringify(prev) === JSON.stringify(st)) {
+        return prev;
+      }
+      return st;
+    });
+    if (userRef.current && isGameLockedRef.current) {
+      void autoSaveMatchRef.current({ activeQuestionState: st });
+    }
+  }, []);
+
   // Periodic auto-save to Firestore every 30 seconds ONLY when online and not in Local Offline Mode
   useEffect(() => {
     if (
@@ -1229,12 +1421,15 @@ export default function App() {
       ]);
       setCategoriesLoaded(true);
 
-      const syncRes = await syncOfflineDatasetAtomically({
-        mainCategories: mains,
-        subcategories: subs,
-        questions: (questions || []).filter((q) => q.status !== 'rejected'),
-        source: 'firebase',
-      });
+      const syncRes = await syncOfflineDatasetAtomically(
+        {
+          mainCategories: mains,
+          subcategories: subs,
+          questions: (questions || []).filter((q) => q.status !== 'rejected'),
+          source: 'firebase',
+        },
+        { precacheMedia: true, force: true }
+      );
       const nextStatus = await getOfflineDataStatus();
       setOfflineStatus({ ...nextStatus, syncing: false });
       return syncRes.ok;
@@ -1252,6 +1447,12 @@ export default function App() {
       if (!snapshot && isOnline) {
         await handleSyncOfflineData();
         snapshot = await loadActiveOfflineDataset();
+      } else if (
+        snapshot &&
+        isOnline &&
+        snapshot.mediaUrlsCached < snapshot.mediaUrlsTotal
+      ) {
+        precacheOfflineMediaInBackground(snapshot);
       }
 
       if (!snapshot) {
@@ -1700,6 +1901,30 @@ export default function App() {
 
   const showInitialLoadingScreen = !categoriesLoaded || !initialMinSplashDone;
 
+  // Dedicated Mobile QR Player View for "ولا كلمة"
+  if (wkQrParams) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <WalaKalimaPlayerPage
+          sessionId={wkQrParams.sessionId}
+          qrToken={wkQrParams.qrToken}
+          onExitToHome={() => {
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('wkSession');
+              url.searchParams.delete('wkToken');
+              window.history.replaceState({}, '', url.toString());
+            } catch {
+              // ignore
+            }
+            setWkQrParams(null);
+            setActivePage('home');
+          }}
+        />
+      </MotionConfig>
+    );
+  }
+
   return (
     <MotionConfig reducedMotion="user">
       <div
@@ -1764,7 +1989,7 @@ export default function App() {
                   void handleStartOfflineLocalPlay('categories');
                 }}
                 onNavigate={handleNavigate}
-                mainCategories={mainCategories}
+                mainCategories={effectiveMainCategories}
                 subcategories={activeSubcategories}
                 offlineStatus={offlineStatus}
                 isOnline={isOnline}
@@ -1788,7 +2013,7 @@ export default function App() {
                 onChangeSelectingTeamIndex={setSelectingTeamIndex}
                 teamSubcategoryIds={teamSubcategoryIds}
                 onUpdateTeamSubcategoryIds={handleUpdateTeamSubcategoryIds}
-                mainCategories={mainCategories}
+                mainCategories={effectiveMainCategories}
                 subcategories={activeSubcategories}
                 approvedQuestions={approvedQuestions}
                 initialMainCategoryId={initialMainCategoryId}
@@ -1813,7 +2038,7 @@ export default function App() {
                 activeTeamIndex={activeTeamIndex}
                 orderedTeamSelections={orderedTeamSelections}
                 selectedSubcategories={selectedSubcategories}
-                mainCategories={mainCategories}
+                mainCategories={effectiveMainCategories}
                 subcategories={activeSubcategories}
                 usedTileKeys={usedTileKeys}
                 roundUsedQuestionIds={roundUsedQuestionIds}
@@ -1838,13 +2063,10 @@ export default function App() {
                 isAdmin={isAdmin}
                 onSeedQuestions={handleSeedFoundationalPack}
                 seeding={seeding}
-                onActiveQuestionChange={(st) => {
-                  setActiveQuestionSaved(st);
-                  if (user && isGameLocked) {
-                    autoSaveMatch({ activeQuestionState: st });
-                  }
-                }}
+                onActiveQuestionChange={handleActiveQuestionChange}
                 visualEffectsSettings={visualEffectsSettings}
+                matchId={currentMatchId || 'local_match'}
+                walaKalimaSettings={walaKalimaSettings}
               />
             )}
 
@@ -1886,7 +2108,7 @@ export default function App() {
             {activePage === 'my_lists' && (
               <MyQuestionListsPage
                 user={user}
-                mainCategories={mainCategories}
+                mainCategories={effectiveMainCategories}
                 subcategories={activeSubcategories}
                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
                 onNavigateHome={() => handleNavigate('home')}
@@ -1915,7 +2137,7 @@ export default function App() {
             {activePage === 'online_multiplayer' && (
               <OnlineMultiplayerPage
                 user={user}
-                mainCategories={mainCategories}
+                mainCategories={effectiveMainCategories}
                 subcategories={activeSubcategories}
                 approvedQuestions={approvedQuestions}
                 seenQuestionIds={seenQuestionIds}
@@ -1929,6 +2151,7 @@ export default function App() {
                 autoJoinNonce={autoJoinNonce}
                 onPresenceActivityChange={handlePresenceActivityChange}
                 visualEffectsSettings={visualEffectsSettings}
+                walaKalimaSettings={walaKalimaSettings}
               />
             )}
 
@@ -1949,7 +2172,7 @@ export default function App() {
                   onOpenAuthModal={() => setIsAuthModalOpen(true)}
                   onLogout={handleLogout}
                   onRefreshQuestions={async () => {
-                    await loadQuestions(isAdmin);
+                    await loadQuestions(isAdmin, true);
                   }}
                   onRefreshMainCategories={async () => {
                     const mains = await loadMainCategories();
@@ -1967,6 +2190,7 @@ export default function App() {
                   onRefreshVisualEffectsSettings={async () => {
                     await loadVisualEffectsSettings(true);
                   }}
+                  onWalaKalimaSettingsUpdated={setWalaKalimaSettings}
                   onSeedFoundationalPack={handleSeedFoundationalPack}
                   seeding={seeding}
                 />
@@ -1985,7 +2209,7 @@ export default function App() {
                     void handleStartOfflineLocalPlay('categories');
                   }}
                   onNavigate={handleNavigate}
-                  mainCategories={mainCategories}
+                  mainCategories={effectiveMainCategories}
                   subcategories={activeSubcategories}
                   offlineStatus={offlineStatus}
                   isOnline={isOnline}

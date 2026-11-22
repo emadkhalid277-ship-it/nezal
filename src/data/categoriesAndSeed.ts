@@ -6,6 +6,11 @@ import {
   QuestionType,
   SubcategoryItem,
 } from '../types/game';
+import {
+  WALA_KALIMA_CONTENT_TYPES,
+  WALA_KALIMA_MAIN_CATEGORY_ID,
+  WALA_KALIMA_MAIN_CATEGORY_NAME,
+} from '../types/walaKalima';
 
 export const MAIN_CATEGORIES: MainCategoryMeta[] = [
   {
@@ -105,6 +110,21 @@ export const MAIN_CATEGORIES: MainCategoryMeta[] = [
     sortOrder: 7,
     isActive: true,
     iconName: 'gamepad',
+  },
+  {
+    id: WALA_KALIMA_MAIN_CATEGORY_ID,
+    name: WALA_KALIMA_MAIN_CATEGORY_NAME,
+    tagline: 'تحدي التمثيل والشرح التفاعلي عبر مسح رمز QR من الجوال',
+    description:
+      'يمسح اللاعب رمز QR بجواله لتظهر له الكلمة السرية والكلمات الممنوعة وحده، ويشرحها لفريقه قبل انتهاء الوقت!',
+    accentColor: '#F07842',
+    bgTint: '#FEF2EC',
+    borderTint: '#F7D4C4',
+    imageUrl: '',
+    sortOrder: 8,
+    isActive: true,
+    isComingSoon: false,
+    iconName: 'sparkles',
   },
 ];
 
@@ -563,6 +583,17 @@ export const DEFAULT_SUBCATEGORIES: SubcategoryItem[] = [
     sortOrder: 4,
     isActive: true,
   },
+
+  // 8. ولا كلمة (11 نوع محتوى تفاعلي عبر QR)
+  ...WALA_KALIMA_CONTENT_TYPES.map((ct, idx) => ({
+    id: ct.subcategoryId,
+    name: ct.subcategoryName,
+    mainCategoryId: WALA_KALIMA_MAIN_CATEGORY_ID,
+    mainCategory: WALA_KALIMA_MAIN_CATEGORY_NAME,
+    description: ct.description,
+    sortOrder: idx + 1,
+    isActive: true,
+  })),
 ];
 
 export const TEAM_COLOR_OPTIONS = [

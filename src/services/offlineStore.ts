@@ -39,6 +39,7 @@ export interface OfflineDataStatus {
 export interface SnapshotStorageAdapter {
   get: (key: string) => Promise<OfflineDatasetSnapshot | null>;
   set: (key: string, value: OfflineDatasetSnapshot) => Promise<void>;
+  delete?: (key: string) => Promise<void>;
 }
 
 const DISALLOWED_CACHE_HOSTS = [
@@ -73,7 +74,8 @@ export function isSafeMediaUrlForOfflineCache(rawUrl: unknown): boolean {
     const isFirebaseStorage =
       host.includes('firebasestorage.googleapis.com') ||
       host.includes('storage.googleapis.com');
-    return isSameOrigin || isFirebaseStorage;
+    const isCloudinary = host.includes('res.cloudinary.com');
+    return isSameOrigin || isFirebaseStorage || isCloudinary;
   } catch {
     return false;
   }
@@ -219,15 +221,21 @@ export function computeDatasetChecksum(params: {
   feed(`v${params.version}|`);
   feed(`m:${params.mainCategories.length}|`);
   for (const m of params.mainCategories) {
-    feed(`${m.id}:${m.name}:${m.imageUrl || ''}|`);
+    feed(
+      `${m.id}:${m.name}:${m.sortOrder}:${m.isActive}:${Boolean(m.isComingSoon)}:${m.imageUrl || ''}|`
+    );
   }
   feed(`s:${params.subcategories.length}|`);
   for (const s of params.subcategories) {
-    feed(`${s.id}:${s.name}:${s.imageUrl || ''}|`);
+    feed(
+      `${s.id}:${s.name}:${s.mainCategoryId || ''}:${s.sortOrder}:${s.isActive}:${Boolean(s.isComingSoon)}:${s.imageUrl || ''}|`
+    );
   }
   feed(`q:${params.questions.length}|`);
   for (const q of params.questions) {
-    feed(`${q.id}:${q.points}:${q.category}|`);
+    feed(
+      `${q.id}:${q.points}:${q.category}:${q.status}:${q.questionText.length}:${q.imageUrl || ''}|`
+    );
   }
 
   return `fnv1a_${(hash >>> 0).toString(16).padStart(8, '0')}`;
@@ -305,7 +313,38 @@ export const indexedDBSnapshotStorage: SnapshotStorageAdapter = {
       db.close();
     }
   },
+  async delete(key: string): Promise<void> {
+    const db = await openOfflineDB();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(OFFLINE_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(OFFLINE_STORE_NAME);
+        store.delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () =>
+          reject(tx.error || new Error('فشل حذف البيانات المحلية'));
+        tx.onabort = () =>
+          reject(tx.error || new Error('تم إلغاء حذف البيانات المحلية'));
+      });
+    } finally {
+      db.close();
+    }
+  },
 };
+
+export async function clearOfflineDatasetSnapshots(
+  storage: SnapshotStorageAdapter = indexedDBSnapshotStorage
+): Promise<void> {
+  if (!storage.delete) return;
+  try {
+    await Promise.all([
+      storage.delete(ACTIVE_KEY),
+      storage.delete(STAGING_KEY),
+    ]);
+  } catch {
+    // Non-fatal IndexedDB cleanup error
+  }
+}
 
 export async function precacheMediaUrls(
   urls: string[],
@@ -410,11 +449,72 @@ export async function getOfflineDataStatus(
   };
 }
 
+let backgroundMediaPrecacheInFlight = false;
+
+export function precacheOfflineMediaInBackground(
+  snapshot: OfflineDatasetSnapshot,
+  storage: SnapshotStorageAdapter = indexedDBSnapshotStorage,
+  onComplete?: (cachedCount: number) => void
+): void {
+  if (
+    typeof window === 'undefined' ||
+    backgroundMediaPrecacheInFlight ||
+    navigator.onLine === false
+  ) {
+    return;
+  }
+
+  const mediaUrls = collectSafeMediaUrls({
+    mainCategories: snapshot.mainCategories,
+    subcategories: snapshot.subcategories,
+    questions: snapshot.questions,
+  });
+
+  if (mediaUrls.length === 0) return;
+
+  const run = async () => {
+    if (backgroundMediaPrecacheInFlight) return;
+    backgroundMediaPrecacheInFlight = true;
+    try {
+      const cached = await precacheMediaUrls(mediaUrls, 3);
+      if (cached !== snapshot.mediaUrlsCached) {
+        const latestActive = await storage.get(ACTIVE_KEY).catch(() => null);
+        if (latestActive && latestActive.checksum === snapshot.checksum) {
+          await storage.set(ACTIVE_KEY, {
+            ...latestActive,
+            mediaUrlsCached: cached,
+            mediaUrlsTotal: mediaUrls.length,
+          });
+        }
+      }
+      onComplete?.(cached);
+    } catch {
+      // Non-fatal background cache error
+    } finally {
+      backgroundMediaPrecacheInFlight = false;
+    }
+  };
+
+  const w = window as Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+  };
+  if (typeof w.requestIdleCallback === 'function') {
+    w.requestIdleCallback(() => {
+      void run();
+    }, { timeout: 2500 });
+  } else {
+    window.setTimeout(() => {
+      void run();
+    }, 250);
+  }
+}
+
 /**
  * Atomic Staging Swap:
- * 1) Validates dataset completely.
- * 2) Writes candidate to 'staging' first and verifies readback checksum.
- * 3) Only then promotes candidate to 'active'.
+ * 1) Validates dataset completely and computes checksum.
+ * 2) Skips staging & active writes entirely when active snapshot already matches checksum.
+ * 3) Writes candidate to 'staging' first and verifies readback checksum.
+ * 4) Only then promotes candidate to 'active'.
  * If any step fails, the previous 'active' snapshot remains untouched.
  */
 export async function syncOfflineDatasetAtomically(
@@ -427,9 +527,10 @@ export async function syncOfflineDatasetAtomically(
   options?: {
     storage?: SnapshotStorageAdapter;
     precacheMedia?: boolean;
+    force?: boolean;
   }
 ): Promise<
-  | { ok: true; snapshot: OfflineDatasetSnapshot }
+  | { ok: true; snapshot: OfflineDatasetSnapshot; skipped?: boolean }
   | { ok: false; reason: string }
 > {
   const storage = options?.storage || indexedDBSnapshotStorage;
@@ -447,6 +548,35 @@ export async function syncOfflineDatasetAtomically(
     return validation;
   }
 
+  const candidateChecksum = computeDatasetChecksum({
+    version: OFFLINE_DATASET_VERSION,
+    mainCategories: cleanMains,
+    subcategories: cleanSubs,
+    questions: cleanQuestions,
+  });
+
+  const shouldPrecacheMedia = options?.precacheMedia === true;
+
+  if (!options?.force) {
+    try {
+      const existingActive = await storage.get(ACTIVE_KEY);
+      if (
+        existingActive &&
+        existingActive.version === OFFLINE_DATASET_VERSION &&
+        existingActive.checksum === candidateChecksum &&
+        existingActive.source === input.source &&
+        verifySnapshotIntegrity(existingActive)
+      ) {
+        if (shouldPrecacheMedia) {
+          precacheOfflineMediaInBackground(existingActive, storage);
+        }
+        return { ok: true, snapshot: existingActive, skipped: true };
+      }
+    } catch {
+      // Fall through to full atomic staging swap if active read fails
+    }
+  }
+
   const mediaUrls = collectSafeMediaUrls({
     mainCategories: cleanMains,
     subcategories: cleanSubs,
@@ -455,12 +585,7 @@ export async function syncOfflineDatasetAtomically(
 
   const candidate: OfflineDatasetSnapshot = {
     version: OFFLINE_DATASET_VERSION,
-    checksum: computeDatasetChecksum({
-      version: OFFLINE_DATASET_VERSION,
-      mainCategories: cleanMains,
-      subcategories: cleanSubs,
-      questions: cleanQuestions,
-    }),
+    checksum: candidateChecksum,
     syncedAt: Date.now(),
     source: input.source,
     mainCategories: cleanMains,
@@ -481,21 +606,15 @@ export async function syncOfflineDatasetAtomically(
       };
     }
 
-    // Best-effort media pre-caching in background/parallel without blocking text atomic swap
-    if (options?.precacheMedia !== false && mediaUrls.length > 0) {
-      const cached = await precacheMediaUrls(mediaUrls);
-      candidate.mediaUrlsCached = cached;
-      candidate.checksum = computeDatasetChecksum({
-        version: candidate.version,
-        mainCategories: candidate.mainCategories,
-        subcategories: candidate.subcategories,
-        questions: candidate.questions,
-      });
+    // Promote verified snapshot atomically to active without blocking on image downloads
+    await storage.set(ACTIVE_KEY, candidate);
+
+    // Media pre-caching only runs in background when explicitly requested (e.g. offline mode / manual sync)
+    if (shouldPrecacheMedia && mediaUrls.length > 0) {
+      precacheOfflineMediaInBackground(candidate, storage);
     }
 
-    // Promote verified snapshot atomically to active
-    await storage.set(ACTIVE_KEY, candidate);
-    return { ok: true, snapshot: candidate };
+    return { ok: true, snapshot: candidate, skipped: false };
   } catch (err) {
     console.warn('Offline dataset atomic sync failed; keeping previous snapshot:', err);
     return {

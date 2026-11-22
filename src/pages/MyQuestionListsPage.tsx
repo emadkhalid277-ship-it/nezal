@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FolderPlus,
   Plus,
@@ -42,8 +42,13 @@ import {
   updateUserQuestion,
   deleteUserQuestion,
   uploadUserQuestionImage,
+  uploadUserQuestionImageToCloudinary,
   submitQuestionToAdmin,
 } from '../services/contributionService';
+import {
+  isValidHttpUrl,
+  validateQuestionImageFile,
+} from '../utils/questionMedia';
 
 interface MyQuestionListsPageProps {
   user: User | null;
@@ -94,6 +99,9 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [questionModalError, setQuestionModalError] = useState<string | null>(null);
+  const isSavingQuestionRef = useRef(false);
+  const blobPreviewUrlRef = useRef<string | null>(null);
 
   // Feedback Notification Banner
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -266,12 +274,30 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
     }
   };
 
+  const revokeBlobPreview = () => {
+    if (blobPreviewUrlRef.current) {
+      URL.revokeObjectURL(blobPreviewUrlRef.current);
+      blobPreviewUrlRef.current = null;
+    }
+  };
+
+  const handleCloseQuestionModal = () => {
+    if (isSavingQuestionRef.current || actionLoading || uploadingImage) return;
+    revokeBlobPreview();
+    setImageFile(null);
+    setImagePreview(null);
+    setQuestionModalError(null);
+    setQuestionModalOpen(false);
+  };
+
   // Open Create/Edit Question Modal
   const openCreateQuestionModal = () => {
     if (!activeListId) {
       showFeedback('info', 'يرجى إنشاء قائمة أو اختيارها أولاً لإضافة الأسئلة.');
       return;
     }
+    revokeBlobPreview();
+    setQuestionModalError(null);
     setEditingQuestion(null);
     const defaultMain = mainCategories[0]?.id || '';
     setFormMainCatId(defaultMain);
@@ -291,6 +317,8 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
   };
 
   const openEditQuestionModal = (q: UserCustomQuestion) => {
+    revokeBlobPreview();
+    setQuestionModalError(null);
     setEditingQuestion(q);
     setFormMainCatId(q.mainCategoryId);
     setFormSubcatId(q.subcategoryId);
@@ -309,82 +337,96 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('حجم الصورة كبير جداً (الحد الأقصى 5 ميجابايت).');
+    const validationError = validateQuestionImageFile(file);
+    if (validationError) {
+      setQuestionModalError(validationError);
       return;
     }
 
+    setQuestionModalError(null);
+    revokeBlobPreview();
+    const previewUrl = URL.createObjectURL(file);
+    blobPreviewUrlRef.current = previewUrl;
     setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    setImagePreview(previewUrl);
   };
 
   const handleRemoveImage = () => {
+    revokeBlobPreview();
     setImageFile(null);
     setImagePreview(null);
     setFormImageUrl('');
     setFormImageStoragePath('');
     setFormImageDesc('');
+    setQuestionModalError(null);
   };
 
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !activeListId) return;
+    if (!user || !activeListId || isSavingQuestionRef.current || actionLoading || uploadingImage) return;
+    setQuestionModalError(null);
 
     const qText = formQuestionText.trim();
     const ans = formCorrectAnswer.trim();
     if (!qText || !ans) {
-      showFeedback('error', 'يرجى كتابة نص السؤال والإجابة الصحيحة.');
+      setQuestionModalError('يرجى كتابة نص السؤال والإجابة الصحيحة.');
       return;
     }
 
     const mainCat = mainCategories.find((m) => m.id === formMainCatId);
     const subcat = subcategories.find((s) => s.id === formSubcatId);
     if (!subcat) {
-      showFeedback('error', 'يرجى اختيار فئة فرعية صحيحة.');
+      setQuestionModalError('يرجى اختيار فئة فرعية صحيحة.');
       return;
     }
 
+    isSavingQuestionRef.current = true;
     setActionLoading(true);
-    let finalImageUrl = formImageUrl;
-    let finalStoragePath = formImageStoragePath;
-
-    // Upload new image if selected
-    if (imageFile) {
-      setUploadingImage(true);
-      try {
-        const uploadRes = await uploadUserQuestionImage(imageFile, user.uid);
-        finalImageUrl = uploadRes.downloadUrl;
-        finalStoragePath = uploadRes.storagePath;
-      } catch (uploadErr: any) {
-        showFeedback('error', uploadErr.message || 'فشل رفع الصورة.');
-        setActionLoading(false);
-        setUploadingImage(false);
-        return;
-      } finally {
-        setUploadingImage(false);
-      }
-    }
-
-    const payload = {
-      listId: activeListId,
-      mainCategoryId: formMainCatId,
-      mainCategory: mainCat?.name || '',
-      subcategoryId: subcat.id,
-      category: subcat.name,
-      questionText: qText,
-      correctAnswer: ans,
-      points: formPoints,
-      difficulty: POINT_TO_DIFFICULTY[formPoints],
-      explanation: formExplanation.trim(),
-      source: formSource.trim(),
-      imageUrl: finalImageUrl,
-      imageStoragePath: finalStoragePath,
-      imageDescription: formImageDesc.trim(),
-    };
+    let finalImageUrl = formImageUrl.trim();
+    let finalStoragePath = formImageStoragePath.trim();
 
     try {
+      // 1. Upload new image to Cloudinary (signed) and await verified HTTPS URL before saving to Firestore
+      if (imageFile) {
+        setUploadingImage(true);
+        try {
+          const uploadRes = await uploadUserQuestionImageToCloudinary(imageFile, user.uid);
+          if (!isValidHttpUrl(uploadRes.downloadUrl)) {
+            throw new Error('لم يتم استلام رابط صورة صالح من Cloudinary.');
+          }
+          finalImageUrl = uploadRes.downloadUrl;
+          finalStoragePath = uploadRes.storagePath;
+          setFormImageUrl(uploadRes.downloadUrl);
+          setFormImageStoragePath(uploadRes.storagePath);
+        } finally {
+          setUploadingImage(false);
+        }
+      }
+
+      if (imageFile && !isValidHttpUrl(finalImageUrl)) {
+        throw new Error('تعذر التحقق من رابط الصورة الصالح قبل حفظ السؤال.');
+      }
+
+      const payload = {
+        listId: activeListId,
+        mainCategoryId: formMainCatId,
+        mainCategory: mainCat?.name || '',
+        subcategoryId: subcat.id,
+        category: subcat.name,
+        questionText: qText,
+        correctAnswer: ans,
+        points: formPoints,
+        difficulty: POINT_TO_DIFFICULTY[formPoints],
+        explanation: formExplanation.trim(),
+        source: formSource.trim(),
+        imageUrl: finalImageUrl,
+        imageStoragePath: finalImageUrl ? finalStoragePath : '',
+        imageDescription: finalImageUrl ? formImageDesc.trim() : '',
+      };
+
       if (editingQuestion) {
         await updateUserQuestion(user.uid, editingQuestion.id, payload);
         setQuestions((prev) =>
@@ -398,17 +440,31 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               : q
           )
         );
-        showFeedback('success', 'تم تحديث السؤال بنجاح.');
+        showFeedback('success', 'تم تحديث السؤال وحفظه بنجاح.');
       } else {
         const createdQ = await createUserQuestion(user.uid, payload);
         setQuestions((prev) => [createdQ, ...prev]);
-        showFeedback('success', 'تمت إضافة السؤال الجديد إلى قائمتك.');
+        showFeedback(
+          'success',
+          finalImageUrl
+            ? 'تمت إضافة السؤال الجديد وحفظ الصورة وربطها بالسؤال بنجاح.'
+            : 'تمت إضافة السؤال الجديد إلى قائمتك.'
+        );
       }
+
+      revokeBlobPreview();
+      setImageFile(null);
+      setImagePreview(null);
       setQuestionModalOpen(false);
     } catch (err: any) {
       console.error('Error saving question:', err);
-      showFeedback('error', 'تعذر حفظ السؤال. يرجى المحاولة لاحقاً.');
+      const errMsg =
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذر حفظ السؤال. يرجى المحاولة لاحقاً.';
+      setQuestionModalError(errMsg);
     } finally {
+      isSavingQuestionRef.current = false;
       setActionLoading(false);
     }
   };
@@ -1032,14 +1088,21 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setQuestionModalOpen(false)}
-                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer"
+                disabled={actionLoading || uploadingImage}
+                onClick={handleCloseQuestionModal}
+                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer disabled:opacity-50"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveQuestion} className="space-y-4 text-right">
+              {questionModalError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{questionModalError}</span>
+                </div>
+              )}
               {/* Category Selectors */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -1192,8 +1255,9 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     </div>
                     <button
                       type="button"
+                      disabled={actionLoading || uploadingImage}
                       onClick={handleRemoveImage}
-                      className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer"
+                      className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-50"
                       title="حذف الصورة"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1206,7 +1270,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     <span className="text-[10px] text-[#777B73]">صيغ مدعومة: JPG, PNG, WEBP (حتى 5 ميجابايت)</span>
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                       onChange={handleImageChange}
                       className="hidden"
                     />
@@ -1218,8 +1282,9 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E8DD]">
                 <button
                   type="button"
-                  onClick={() => setQuestionModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#777B73] hover:bg-[#F3F5E9] cursor-pointer"
+                  disabled={actionLoading || uploadingImage}
+                  onClick={handleCloseQuestionModal}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#777B73] hover:bg-[#F3F5E9] cursor-pointer disabled:opacity-50"
                 >
                   إلغاء
                 </button>

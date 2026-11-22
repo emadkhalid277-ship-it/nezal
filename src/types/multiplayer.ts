@@ -61,6 +61,21 @@ export interface ActiveQuestionState {
   isAnswerRevealed: boolean;
   openedAt: number;
   openedByHostId: string;
+  isWalaKalima?: boolean;
+  walaKalimaMeta?: {
+    sessionId: string;
+    qrPath?: string;
+    teamId: string;
+    teamName: string;
+    playerName: string;
+    contentTypeLabel: string;
+    status: 'waiting_scan' | 'active' | 'finished' | 'expired' | 'cancelled';
+    correctCount: number;
+    skippedCount: number;
+    earnedPoints: number;
+    totalWords: number;
+    timerSeconds: number;
+  };
 }
 
 export interface PlayerRequest {

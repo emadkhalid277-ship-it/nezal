@@ -102,6 +102,14 @@ import {
   MatchCelebrationHeader,
   useEffectiveVisualEffects,
 } from '../components/GameVisualEffects';
+import {
+  DEFAULT_WALA_KALIMA_SETTINGS,
+  isWalaKalimaCategory,
+  WalaKalimaSettings,
+} from '../types/walaKalima';
+import { WalaKalimaBoardModal } from '../components/WalaKalimaBoardModal';
+import { POINT_TO_DIFFICULTY } from '../types/game';
+import { hostCloseActiveQuestion as closeOnlineActiveQuestion } from '../services/multiplayerService';
 
 interface OnlineMultiplayerPageProps {
   user: User | null;
@@ -128,6 +136,7 @@ interface OnlineMultiplayerPageProps {
     roomCode?: string | null
   ) => void;
   visualEffectsSettings?: VisualEffectsSettings;
+  walaKalimaSettings?: WalaKalimaSettings;
 }
 
 const POINT_TIERS: PointValue[] = [100, 200, 300, 400, 500];
@@ -148,9 +157,16 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   autoJoinNonce = 0,
   onPresenceActivityChange,
   visualEffectsSettings,
+  walaKalimaSettings = DEFAULT_WALA_KALIMA_SETTINGS,
 }) => {
   const { isOnline } = useOnlineStatus();
   const effects = useEffectiveVisualEffects(visualEffectsSettings);
+  const [activeOnlineWkTile, setActiveOnlineWkTile] = useState<{
+    subId: string;
+    subName: string;
+    points: PointValue;
+    tileKey: string;
+  } | null>(null);
   // Local profile & session
   const [playerProfile, setPlayerProfile] = useState(() =>
     getOrCreatePlayerProfile(user)
@@ -1036,6 +1052,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   ) => {
     if (!currentRoom || !isHost) return;
     if (currentRoom.usedTileKeys.includes(tileKey)) return;
+
+    if (isWalaKalimaCategory({ subcategoryId: subId, subcategoryName: subName })) {
+      setErrorMsg(null);
+      setActiveOnlineWkTile({ subId, subName, points, tileKey });
+      return;
+    }
 
     const slot = findSlotForTile(subId, subName, points, tileKey);
     const matchedQ = slot.question;
@@ -2744,6 +2766,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           !questionDedupSettings?.allowRepeatAfterExhaustion &&
           (() => {
             const exhaustedCols = onlineBoardColumns.filter((col) => {
+              if (
+                isWalaKalimaCategory({
+                  subcategoryId: col.subId,
+                  subcategoryName: col.subName,
+                  mainCategoryName: col.mainCategoryName,
+                })
+              ) {
+                return false;
+              }
               let hasPlayableUnused = false;
               let hasExhaustedUnused = false;
               for (const pts of POINT_TIERS) {
@@ -2801,12 +2832,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   {POINT_TIERS.map((points) => {
                     const tileKey = `${col.subId}__${points}`;
                     const isUsed = currentRoom.usedTileKeys.includes(tileKey);
+                    const isWkCol = isWalaKalimaCategory({
+                      subcategoryId: col.subId,
+                      subcategoryName: col.subName,
+                      mainCategoryName: col.mainCategoryName,
+                    });
                     const hostSlot =
-                      !isUsed && isHost
+                      !isUsed && !isWkCol && isHost
                         ? findSlotForTile(col.subId, col.subName, points, tileKey)
                         : null;
                     const isHostExhausted = Boolean(
-                      hostSlot && !hostSlot.question && hostSlot.isExhausted
+                      !isWkCol && hostSlot && !hostSlot.question && hostSlot.isExhausted
                     );
 
                     return (
@@ -2823,6 +2859,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                             ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
                             : isHostExhausted
                             ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-[10px]'
+                            : isWkCol && isHost
+                            ? 'bg-[#FEF2EC] hover:bg-[#F07842] hover:text-white border-[#F07842]/45 text-[#D9602B] shadow-xs active:scale-95'
                             : isHost
                             ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] shadow-xs active:scale-95'
                             : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
@@ -2833,6 +2871,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                         ) : isHostExhausted ? (
                           <span className="text-[9px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
                             خلصت الجديدة
+                          </span>
+                        ) : isWkCol ? (
+                          <span className="text-xs font-sans font-bold">
+                            ولا كلمة QR
                           </span>
                         ) : (
                           <span>{points}</span>
@@ -2881,12 +2923,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   {onlineBoardColumns.map((col) => {
                     const tileKey = `${col.subId}__${points}`;
                     const isUsed = currentRoom.usedTileKeys.includes(tileKey);
+                    const isWkCol = isWalaKalimaCategory({
+                      subcategoryId: col.subId,
+                      subcategoryName: col.subName,
+                      mainCategoryName: col.mainCategoryName,
+                    });
                     const hostSlot =
-                      !isUsed && isHost
+                      !isUsed && !isWkCol && isHost
                         ? findSlotForTile(col.subId, col.subName, points, tileKey)
                         : null;
                     const isHostExhausted = Boolean(
-                      hostSlot && !hostSlot.question && hostSlot.isExhausted
+                      !isWkCol && hostSlot && !hostSlot.question && hostSlot.isExhausted
                     );
 
                     return (
@@ -2907,6 +2954,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                             ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
                             : isHostExhausted
                             ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-xs'
+                            : isWkCol && isHost
+                            ? 'bg-[#FEF2EC] hover:bg-[#F07842] hover:text-white border-[#F07842]/45 text-[#D9602B] hover:scale-[1.02] shadow-sm active:scale-95'
                             : isHost
                             ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] hover:scale-[1.02] shadow-sm active:scale-95'
                             : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
@@ -2918,6 +2967,13 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                           <span className="text-[10px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
                             خلصت الأسئلة الجديدة
                           </span>
+                        ) : isWkCol ? (
+                          <div className="flex flex-col items-center gap-0.5 leading-tight">
+                            <span className="text-sm font-sans font-bold">ولا كلمة QR</span>
+                            <span className="text-[10px] font-sans opacity-80">
+                              {POINT_TO_DIFFICULTY[points]}
+                            </span>
+                          </div>
                         ) : (
                           <span>{points}</span>
                         )}
@@ -2937,8 +2993,125 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           )}
         </div>
 
+        {/* SYNCHRONIZED WALA KALIMA QR MODAL (HOST OR SYNCED ROOM PLAYERS) */}
+        {(activeOnlineWkTile || currentRoom.activeQuestion?.isWalaKalima) && (() => {
+          const aq = currentRoom.activeQuestion;
+          const activeTurnIdx = currentRoom.activeTeamIndex % currentRoom.teams.length;
+          const targetTeam = currentRoom.teams[activeTurnIdx] || currentRoom.teams[0];
+          const teamRoster = Object.values(currentRoom.players || {})
+            .filter((p) => p.teamId === targetTeam?.id)
+            .map((p) => p.name);
+          const wkTile = activeOnlineWkTile || {
+            subId: aq?.subcategoryId || '',
+            subName: aq?.subcategoryName || 'ولا كلمة',
+            points: (aq?.points as PointValue) || 100,
+            tileKey: aq?.tileKey || '',
+          };
+
+          return (
+            <WalaKalimaBoardModal
+              matchId={`online_${currentRoom.code}`}
+              tileKey={wkTile.tileKey}
+              subcategoryId={wkTile.subId}
+              subcategoryName={wkTile.subName}
+              preferredDifficulty={POINT_TO_DIFFICULTY[wkTile.points]}
+              activeTeam={{
+                id: targetTeam?.id || 'team_1',
+                name: targetTeam?.name || 'الفريق الحالي',
+                color: targetTeam?.color || '#14543D',
+                players: teamRoster,
+              }}
+              canControl={isHost}
+              settings={walaKalimaSettings}
+              sharedOnlineSession={!isHost && aq?.walaKalimaMeta ? aq.walaKalimaMeta : null}
+              onOnlineSessionCreated={async (created) => {
+                if (!isHost) return;
+                await hostSelectQuestion(currentRoom.code, currentRoom.hostId, {
+                  tileKey: wkTile.tileKey,
+                  questionId: created.sessionId,
+                  subcategoryId: wkTile.subId,
+                  subcategoryName: wkTile.subName,
+                  category: 'ولا كلمة',
+                  points: wkTile.points,
+                  difficulty: POINT_TO_DIFFICULTY[wkTile.points],
+                  questionText: `جولة ولا كلمة — ${created.contentTypeLabel}`,
+                  correctAnswer: '',
+                  isAnswerRevealed: false,
+                  openedAt: Date.now(),
+                  openedByHostId: currentRoom.hostId,
+                  isWalaKalima: true,
+                  walaKalimaMeta: {
+                    sessionId: created.sessionId,
+                    qrPath: created.qrPath,
+                    teamId: created.teamId,
+                    teamName: created.teamName,
+                    playerName: created.playerName,
+                    contentTypeLabel: created.contentTypeLabel,
+                    status: created.status,
+                    correctCount: created.correctCount,
+                    skippedCount: created.skippedCount,
+                    earnedPoints: created.earnedPoints,
+                    totalWords: created.totalWords,
+                    timerSeconds: created.timerSeconds,
+                  },
+                });
+              }}
+              onOnlineSessionStatusSync={async (status) => {
+                if (!isHost || !currentRoom.activeQuestion?.isWalaKalima) return;
+                await hostSelectQuestion(currentRoom.code, currentRoom.hostId, {
+                  ...currentRoom.activeQuestion,
+                  walaKalimaMeta: {
+                    ...currentRoom.activeQuestion.walaKalimaMeta,
+                    sessionId: status.sessionId,
+                    teamId: status.teamId,
+                    teamName: status.teamName,
+                    playerName: status.playerName,
+                    contentTypeLabel: status.contentTypeLabel,
+                    status: status.status,
+                    correctCount: status.correctCount,
+                    skippedCount: status.skippedCount,
+                    earnedPoints: status.earnedPoints,
+                    totalWords: status.totalWords,
+                    timerSeconds: status.timerSeconds,
+                  },
+                });
+              }}
+              onCommitResult={async ({ earnedPoints, tileKey, sessionId }) => {
+                if (!isHost) return;
+                const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
+                if (earnedPoints > 0) {
+                  await hostAwardPoints({
+                    code: currentRoom.code,
+                    hostId: currentRoom.hostId,
+                    awardedTeamIndex: activeTurnIdx,
+                    points: earnedPoints,
+                    tileKey,
+                    questionId: sessionId,
+                    totalPlayableTiles: totalTiles,
+                  });
+                } else {
+                  await hostMarkTileNoPoints({
+                    code: currentRoom.code,
+                    hostId: currentRoom.hostId,
+                    tileKey,
+                    questionId: sessionId,
+                    totalPlayableTiles: totalTiles,
+                  });
+                }
+                setActiveOnlineWkTile(null);
+              }}
+              onCancel={async () => {
+                if (isHost && currentRoom.activeQuestion?.isWalaKalima) {
+                  await closeOnlineActiveQuestion(currentRoom.code, currentRoom.hostId);
+                }
+                setActiveOnlineWkTile(null);
+              }}
+            />
+          );
+        })()}
+
         {/* SYNCHRONIZED QUESTION MODAL (POPS UP FOR ALL PLAYERS IN REAL TIME) */}
-        {currentRoom.activeQuestion && (() => {
+        {currentRoom.activeQuestion && !currentRoom.activeQuestion.isWalaKalima && (() => {
           const aq = currentRoom.activeQuestion;
 
           return (

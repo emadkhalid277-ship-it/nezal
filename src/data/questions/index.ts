@@ -18,11 +18,72 @@ interface SubcategoryMeta {
 function normalizeName(name: string): string {
   return name
     .trim()
+    .toLowerCase()
     .replace(/[أإآ]/g, 'ا')
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
+    .replace(/[×✕]/g, 'x')
     .replace(/\s+/g, ' ');
 }
+
+/**
+ * Verified, unambiguous mapping between raw question dictionary keys and
+ * canonical DEFAULT_SUBCATEGORIES IDs.
+ * Ambiguous/multi-category keys are intentionally excluded rather than guessed.
+ */
+const EXPLICIT_SUBCATEGORY_KEY_MAP: Record<string, string> = {
+  // Anime
+  'هنتر x هنتر': 'sub-hxh',
+
+  // Football
+  'كرة القدم': 'sub-football-general',
+  'الدوري الانجليزي': 'sub-football-general',
+  'الدوريات الخمس الكبرى': 'sub-football-general',
+  'الدوري الاسباني': 'sub-football-general',
+  'كرة القدم السعودية': 'sub-saudi-league',
+
+  // Games
+  'العاب عام': 'sub-video-games',
+  'ماين كرافت': 'sub-video-games',
+  'فيفا': 'sub-esports-fifa',
+  'روكيت ليق': 'sub-esports-fifa',
+  'فورتنايت': 'sub-esports-fifa',
+  'ريد ديد': 'sub-story-games',
+  'رزدننت ايفل': 'sub-story-games',
+  'الدن رينق': 'sub-story-games',
+  'ميتل قير': 'sub-story-games',
+
+  // General
+  'علوم وطب': 'sub-science',
+  'تطبيقات': 'sub-tech',
+  'عالم الشعر': 'sub-arabic',
+
+  // Geography & History
+  'جغرافيا': 'sub-geo-history-general',
+  'خرائط': 'sub-geo-history-general',
+  'الحرب العالمية': 'sub-geo-history-general',
+  'دول وعواصم': 'sub-world-capitals',
+  'اعلام': 'sub-flags-landmarks',
+
+  // Religion
+  'القران الكريم': 'sub-quran-sciences',
+  'جزء عم': 'sub-quran-sciences',
+  'اكمل الاية': 'sub-quran-sciences',
+  'السيرة النبوية': 'sub-seerah-prophets',
+  'قصص الانبياء': 'sub-seerah-prophets',
+  'الصحابة': 'sub-companions-history',
+  'احاديث': 'sub-islamic-general',
+
+  // Sports
+  'كرة السلة': 'sub-basketball-tennis',
+  'تنس': 'sub-basketball-tennis',
+  'فورملا ون': 'sub-motorsports',
+  'ملاكمة ufc': 'sub-combat-sports',
+};
+
+const NORMALIZED_EXPLICIT_KEY_MAP = new Map<string, string>(
+  Object.entries(EXPLICIT_SUBCATEGORY_KEY_MAP).map(([k, id]) => [normalizeName(k), id])
+);
 
 // Visual category helpers with verified Wikimedia / official CDN images
 const VISUAL_IMAGES_MAP: Record<string, { url: string; desc: string }> = {
@@ -107,8 +168,10 @@ const VISUAL_IMAGES_MAP: Record<string, { url: string; desc: string }> = {
 export function buildExpandedQuestionBank(): TriviaQuestion[] {
   const subcategories: SubcategoryMeta[] = DEFAULT_SUBCATEGORIES;
   const normalizedMap = new Map<string, SubcategoryMeta>();
+  const subById = new Map<string, SubcategoryMeta>();
   subcategories.forEach(sub => {
     normalizedMap.set(normalizeName(sub.name), sub);
+    subById.set(sub.id, sub);
   });
 
   const allDicts: Record<string, QuestionTemplate[]>[] = [
@@ -121,50 +184,75 @@ export function buildExpandedQuestionBank(): TriviaQuestion[] {
     SPORTS_QUESTIONS
   ];
 
-  const results: TriviaQuestion[] = [];
+  const exactEntries: Array<{ meta: SubcategoryMeta; qList: QuestionTemplate[] }> = [];
+  const mappedEntries: Array<{ meta: SubcategoryMeta; qList: QuestionTemplate[] }> = [];
 
   for (const dict of allDicts) {
     for (const [subName, qList] of Object.entries(dict)) {
-      const meta = normalizedMap.get(normalizeName(subName));
-      if (!meta) continue;
+      const normalizedKey = normalizeName(subName);
+      const exactMeta = normalizedMap.get(normalizedKey);
+      if (exactMeta) {
+        exactEntries.push({ meta: exactMeta, qList });
+        continue;
+      }
 
-      qList.forEach((q, idx) => {
-        const id = `q-${meta.id}-${q.points}-${idx + 1}`;
-
-        // Check if question benefits from a visual illustration
-        let imageUrl: string | undefined = undefined;
-        let imageDescription: string | undefined = undefined;
-
-        for (const [keyword, visual] of Object.entries(VISUAL_IMAGES_MAP)) {
-          if (q.questionText.includes(keyword) || q.correctAnswer.includes(keyword)) {
-            imageUrl = visual.url;
-            imageDescription = visual.desc;
-            break;
-          }
-        }
-
-        results.push({
-          id,
-          subcategoryId: meta.id,
-          category: meta.name,
-          questionText: q.questionText,
-          questionType: 'direct',
-          difficulty: q.difficulty,
-          points: q.points,
-          options: [],
-          correctAnswer: q.correctAnswer,
-          explanation: q.explanation || '',
-          source: q.source || 'بنك أسئلة نِزال المعتمد',
-          status: 'pending',
-          imageUrl,
-          imageDescription,
-          authorId: 'system',
-          createdAt: '2026-11-06T00:00:00.000Z',
-          reviewedAt: '2026-11-06T00:00:00.000Z'
-        });
-      });
+      const explicitSubId = NORMALIZED_EXPLICIT_KEY_MAP.get(normalizedKey);
+      const mappedMeta = explicitSubId ? subById.get(explicitSubId) : undefined;
+      if (mappedMeta) {
+        mappedEntries.push({ meta: mappedMeta, qList });
+      }
     }
   }
+
+  const results: TriviaQuestion[] = [];
+  const perSubcategoryCount = new Map<string, number>();
+
+  const appendBatch = ({ meta, qList }: { meta: SubcategoryMeta; qList: QuestionTemplate[] }) => {
+    const startOffset = perSubcategoryCount.get(meta.id) ?? 0;
+
+    qList.forEach((q, idx) => {
+      const id = `q-${meta.id}-${q.points}-${startOffset + idx + 1}`;
+
+      // Check if question benefits from a visual illustration
+      let imageUrl: string | undefined = undefined;
+      let imageDescription: string | undefined = undefined;
+
+      for (const [keyword, visual] of Object.entries(VISUAL_IMAGES_MAP)) {
+        if (q.questionText.includes(keyword) || q.correctAnswer.includes(keyword)) {
+          imageUrl = visual.url;
+          imageDescription = visual.desc;
+          break;
+        }
+      }
+
+      results.push({
+        id,
+        subcategoryId: meta.id,
+        category: meta.name,
+        questionText: q.questionText,
+        questionType: 'direct',
+        difficulty: q.difficulty,
+        points: q.points,
+        options: [],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation || '',
+        source: q.source || 'بنك أسئلة نِزال المعتمد',
+        status: 'pending',
+        imageUrl,
+        imageDescription,
+        authorId: 'system',
+        createdAt: '2026-11-06T00:00:00.000Z',
+        reviewedAt: '2026-11-06T00:00:00.000Z'
+      });
+    });
+
+    perSubcategoryCount.set(meta.id, startOffset + qList.length);
+  };
+
+  // Process direct exact matches first so all original 675 question IDs stay identical,
+  // then append confirmed mapped keys with non-overlapping per-subcategory offsets.
+  exactEntries.forEach(appendBatch);
+  mappedEntries.forEach(appendBatch);
 
   return results;
 }

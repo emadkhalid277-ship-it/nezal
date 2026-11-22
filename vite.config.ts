@@ -98,7 +98,8 @@ export default defineConfig(() => {
                 }
                 const isStorageMedia =
                   url.hostname.includes('firebasestorage.googleapis.com') ||
-                  url.hostname.includes('storage.googleapis.com');
+                  url.hostname.includes('storage.googleapis.com') ||
+                  url.hostname.includes('res.cloudinary.com');
                 const isImageExt = /\.(png|jpg|jpeg|webp|gif|svg)(\?.*)?$/i.test(
                   url.pathname
                 );
@@ -136,6 +137,7 @@ export default defineConfig(() => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            if (id.includes('src/data/categoriesAndSeed')) return 'categories-seed';
             if (id.includes('src/data/questions')) return 'questions-data';
             if (id.includes('node_modules')) {
               if (id.includes('firebase')) return 'vendor-firebase';

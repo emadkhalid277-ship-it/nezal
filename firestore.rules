@@ -28,9 +28,9 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
+      return isVerifiedUser() && (
         request.auth.token.email == 'emadkhalid277@gmail.com' ||
-        (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)))
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
@@ -130,7 +130,7 @@ service cloud.firestore {
         (!('isDeleted' in data) || data.isDeleted is bool) &&
         (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 500000)) &&
         data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
-        data.createdAt is timestamp &&
+        (data.createdAt is timestamp || (data.createdAt is string && data.createdAt.size() <= 64) || isNumberVal(data.createdAt)) &&
         data.updatedAt is timestamp;
     }
 
@@ -442,11 +442,12 @@ service cloud.firestore {
       allow update: if isVerifiedUser() &&
         isValidId(subcategoryId) &&
         isValidSubcategory(incoming()) &&
-        incoming().id == existing().id &&
-        incoming().authorId == existing().authorId &&
-        incoming().createdAt == existing().createdAt &&
+        (!('id' in existing()) ? incoming().id == subcategoryId : incoming().id == existing().id) &&
+        (!('authorId' in existing()) ? incoming().authorId == request.auth.uid : incoming().authorId == existing().authorId) &&
+        (!('createdAt' in existing()) ? incoming().createdAt == request.time : incoming().createdAt == existing().createdAt) &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
+          'id',
           'name',
           'mainCategoryId',
           'mainCategory',
@@ -456,6 +457,8 @@ service cloud.firestore {
           'isComingSoon',
           'isDeleted',
           'imageUrl',
+          'authorId',
+          'createdAt',
           'updatedAt'
         ]) &&
         isAdmin();

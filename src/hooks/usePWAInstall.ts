@@ -109,8 +109,8 @@ export function usePWAInstall() {
     };
 
     promptSubscribers.add(handlePromptUpdate);
-    if (earlyDeferredPrompt && !deferredPrompt) {
-      setDeferredPrompt(earlyDeferredPrompt);
+    if (earlyDeferredPrompt) {
+      setDeferredPrompt((prev) => prev ?? earlyDeferredPrompt);
     }
 
     // Check installed related apps on supporting browsers (Chrome/Android)
@@ -139,7 +139,7 @@ export function usePWAInstall() {
       mediaQuery?.removeEventListener?.('change', handleDisplayChange);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
-  }, [deferredPrompt]);
+  }, []);
 
   const canPromptNative = Boolean(deferredPrompt) && !isInstalled;
   const shouldShowHeaderButton = !isInstalled;

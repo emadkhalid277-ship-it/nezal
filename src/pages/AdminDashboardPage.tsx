@@ -30,11 +30,14 @@ import {
   BarChart3,
   Clock,
   Volume2,
+  QrCode,
 } from 'lucide-react';
 import { AdminPlayerAnalytics } from '../components/AdminPlayerAnalytics';
 import { AdminSeenQuestionsSection } from '../components/AdminSeenQuestionsSection';
 import { AdminVisualEffectsSection } from '../components/AdminVisualEffectsSection';
+import { AdminWalaKalimaSection } from '../components/AdminWalaKalimaSection';
 import { QuestionAudioPlayer } from '../components/QuestionAudioPlayer';
+import { WalaKalimaSettings } from '../types/walaKalima';
 import {
   ApprovalStatus,
   ContactSettings,
@@ -86,10 +89,12 @@ import {
   updateQuestionStatusInFirestore,
   uploadCategoryImageToFirebase,
   uploadQuestionAudioToStorage,
+  uploadQuestionImageToCloudinary,
   uploadQuestionImageToStorage,
   validateQuestionAudioFile,
   validateQuestionImageFile,
 } from '../services/questionService';
+import { isValidHttpUrl } from '../utils/questionMedia';
 
 interface AdminDashboardPageProps {
   user: User | null;
@@ -111,6 +116,7 @@ interface AdminDashboardPageProps {
   onRefreshQuestionDedupSettings?: () => Promise<void>;
   visualEffectsSettings?: VisualEffectsSettings;
   onRefreshVisualEffectsSettings?: () => Promise<void>;
+  onWalaKalimaSettingsUpdated?: (next: WalaKalimaSettings) => void;
   onSeedFoundationalPack: () => Promise<void>;
   seeding: boolean;
 }
@@ -120,6 +126,7 @@ type AdminTab =
   | 'subcategories'
   | 'images'
   | 'questions'
+  | 'wala_kalima'
   | 'contact'
   | 'question_dedup'
   | 'visual_effects'
@@ -174,6 +181,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   onRefreshQuestionDedupSettings,
   visualEffectsSettings = DEFAULT_VISUAL_EFFECTS_SETTINGS,
   onRefreshVisualEffectsSettings,
+  onWalaKalimaSettingsUpdated,
   onSeedFoundationalPack,
   seeding,
 }) => {
@@ -203,10 +211,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     searchQuery,
   ]);
 
-  // Bulk Selection State
+  // Bulk Selection & Delete Confirmation State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    mode: 'single' | 'bulk';
+    ids: string[];
+    previewText?: string;
+    scopeLabel: string;
+  } | null>(null);
+  const [deleteModalError, setDeleteModalError] = useState<string | null>(null);
 
   // Main Category Add / Edit Modal State
   const [mainModalOpen, setMainModalOpen] = useState(false);
@@ -293,6 +308,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [questionModalError, setQuestionModalError] = useState<string | null>(
     null
   );
+  const isSavingQuestionRef = useRef(false);
 
   // Image Management States
   const [imgMainFilter, setImgMainFilter] = useState<string>('الكل');
@@ -557,6 +573,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     1,
     Math.ceil(filteredQuestions.length / questionsPerPage)
   );
+
+  const selectedIdsSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  // Prune stale selectedIds when questions list changes and clamp active page
+  useEffect(() => {
+    const validIdSet = new Set(questions.map((q) => q.id));
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => validIdSet.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [questions]);
+
+  useEffect(() => {
+    if (questionsPage > totalQuestionPages) {
+      setQuestionsPage(totalQuestionPages);
+    }
+  }, [questionsPage, totalQuestionPages]);
 
   const paginatedQuestions = useMemo(() => {
     const start = (questionsPage - 1) * questionsPerPage;
@@ -1110,6 +1143,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           ? `تم إظهار الفئة الفرعية «${sub.name}» للاعبين.`
           : `تم إخفاء الفئة الفرعية «${sub.name}» عن الألعاب الجديدة.`
       );
+    } catch (err) {
+      setStatusBanner(
+        `تعذر تحديث حالة الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
+      );
     } finally {
       setActionLoading(false);
     }
@@ -1140,6 +1177,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           ? `تم تحويل الفئة الفرعية «${sub.name}» إلى وضع «قريباً» مع حفظ كافة أسئلتها.`
           : `تم تفعيل الفئة الفرعية «${sub.name}» وإتاحتها للعب.`
       );
+    } catch (err) {
+      setStatusBanner(
+        `تعذر تحديث وضع «قريباً» للفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
+      );
     } finally {
       setActionLoading(false);
     }
@@ -1169,6 +1210,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         user.uid
       );
       await onRefreshSubcategories();
+    } catch (err) {
+      setStatusBanner(
+        `تعذر تعديل ترتيب الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
+      );
     } finally {
       setActionLoading(false);
     }
@@ -1293,6 +1338,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   };
 
   const handleCloseQuestionModal = () => {
+    if (isSavingQuestionRef.current || actionLoading) return;
     clearPendingQuestionImage();
     clearPendingQuestionAudio();
     setQuestionModalError(null);
@@ -1408,8 +1454,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || isSavingQuestionRef.current || actionLoading) return;
     setQuestionModalError(null);
+    setStatusBanner(null);
 
     if (formQuestionText.trim().length < 3 || !formCorrectAnswer.trim()) {
       setQuestionModalError(
@@ -1433,8 +1480,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       formMediaType === 'image' &&
       !pendingQuestionImageFile &&
       formImageUrl.trim() &&
-      !formImageUrl.trim().startsWith('http://') &&
-      !formImageUrl.trim().startsWith('https://')
+      !isValidHttpUrl(formImageUrl)
     ) {
       setQuestionModalError('يجب أن يبدأ رابط الصورة بـ https:// أو http://');
       return;
@@ -1455,8 +1501,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       formMediaType === 'audio' &&
       !pendingQuestionAudioFile &&
       formAudioUrl.trim() &&
-      !formAudioUrl.trim().startsWith('http://') &&
-      !formAudioUrl.trim().startsWith('https://')
+      !isValidHttpUrl(formAudioUrl)
     ) {
       setQuestionModalError('يجب أن يبدأ الرابط الصوتي بـ https:// أو http://');
       return;
@@ -1466,6 +1511,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       (s) => s.name === formCategory.trim()
     );
 
+    isSavingQuestionRef.current = true;
     setActionLoading(true);
     let finalImageUrl = formMediaType === 'image' ? formImageUrl.trim() : '';
     let finalImageStoragePath =
@@ -1475,26 +1521,52 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       formMediaType === 'audio' ? formAudioStoragePath.trim() : '';
 
     try {
-      // 1. Upload newly selected image or audio file to Firebase Storage (never auto-delete old Storage files)
+      // 1. Read, upload to Cloudinary (signed), await completion, and extract secure HTTPS URL first
       if (formMediaType === 'image' && pendingQuestionImageFile) {
-        const uploaded = await uploadQuestionImageToStorage(
+        const uploaded = await uploadQuestionImageToCloudinary(
           pendingQuestionImageFile,
           matchedSub?.id || formCategory.trim(),
           editingQuestionId || undefined
         );
+        if (!isValidHttpUrl(uploaded.imageUrl)) {
+          throw new Error(
+            'فشل استخراج رابط صورة صالح من Cloudinary.'
+          );
+        }
         finalImageUrl = uploaded.imageUrl;
         finalImageStoragePath = uploaded.imageStoragePath;
+        setFormImageUrl(uploaded.imageUrl);
+        setFormImageStoragePath(uploaded.imageStoragePath);
       } else if (formMediaType === 'audio' && pendingQuestionAudioFile) {
         const uploaded = await uploadQuestionAudioToStorage(
           pendingQuestionAudioFile,
           matchedSub?.id || formCategory.trim(),
           editingQuestionId || undefined
         );
+        if (!isValidHttpUrl(uploaded.audioUrl)) {
+          throw new Error(
+            'فشل استخراج رابط تنزيل صالح للمقطع الصوتي من Firebase Storage.'
+          );
+        }
         finalAudioUrl = uploaded.audioUrl;
         finalAudioStoragePath = uploaded.audioStoragePath;
+        setFormAudioUrl(uploaded.audioUrl);
+        setFormAudioStoragePath(uploaded.audioStoragePath);
       }
 
-      // 2. Construct payload (never Base64)
+      // 2. Strictly verify media URL is never empty/invalid before Firestore write
+      if (formMediaType === 'image' && !isValidHttpUrl(finalImageUrl)) {
+        throw new Error(
+          'تعذر التحقق من رابط الصورة الصالح قبل حفظ السؤال في Firestore.'
+        );
+      }
+      if (formMediaType === 'audio' && !isValidHttpUrl(finalAudioUrl)) {
+        throw new Error(
+          'تعذر التحقق من الرابط الصوتي الصالح قبل حفظ السؤال في Firestore.'
+        );
+      }
+
+      // 3. Construct payload (never Base64 or empty media URLs)
       const payload: CreateQuestionPayload = {
         subcategoryId: matchedSub?.id,
         category: formCategory.trim(),
@@ -1522,40 +1594,44 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             : null,
       };
 
+      const isEditing = Boolean(editingQuestionId);
       if (editingQuestionId) {
         await updateQuestionInFirestore(
           editingQuestionId,
           payload,
           user?.uid || 'system'
         );
-        setStatusBanner(
-          formMediaType === 'audio'
-            ? 'تم تحديث السؤال الصوتي وحفظ المقطع الصوتي بنجاح.'
-            : formMediaType === 'image'
-            ? 'تم تحديث سؤال الصورة وحفظه بنجاح.'
-            : 'تم تحديث السؤال النصي المباشر بنجاح في قاعدة البيانات.'
-        );
       } else {
         await createQuestionInFirestore(payload, user.uid);
-        setStatusBanner(
-          formMediaType === 'audio'
-            ? 'تمت إضافة السؤال الصوتي الجديد بنجاح إلى Firestore.'
-            : formMediaType === 'image'
-            ? 'تمت إضافة سؤال الصورة الجديد بنجاح إلى Firestore.'
-            : 'تمت إضافة السؤال النصي المباشر الجديد بنجاح إلى Firestore.'
-        );
       }
 
+      // 4. Refresh fresh Firestore list before closing modal & showing completion message
       clearPendingQuestionImage();
       clearPendingQuestionAudio();
       setModalOpen(false);
       await onRefreshQuestions();
+
+      setStatusBanner(
+        isEditing
+          ? formMediaType === 'audio'
+            ? 'تم تحديث السؤال الصوتي وحفظ المقطع الصوتي بنجاح.'
+            : formMediaType === 'image'
+            ? 'تم تحديث سؤال الصورة وحفظ رابط الصورة بنجاح في Firestore.'
+            : 'تم تحديث السؤال النصي المباشر بنجاح في قاعدة البيانات.'
+          : formMediaType === 'audio'
+          ? 'تمت إضافة السؤال الصوتي الجديد بنجاح إلى Firestore.'
+          : formMediaType === 'image'
+          ? 'تمت إضافة سؤال الصورة الجديد وحفظ الصورة وربطها بالسؤال بنجاح.'
+          : 'تمت إضافة السؤال النصي المباشر الجديد بنجاح إلى Firestore.'
+      );
     } catch (err) {
-      // Preserve all question form fields inside the open modal so no data is lost
+      console.error('[NIZAL Save Question Error]', err);
+      // Preserve all question form fields inside the open modal and never show a success banner on failure
       const errMsg =
         err instanceof Error ? err.message : 'حدث خطأ غير متوقع أثناء الحفظ.';
       setQuestionModalError(errMsg);
     } finally {
+      isSavingQuestionRef.current = false;
       setActionLoading(false);
     }
   };
@@ -1595,46 +1671,105 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     status: ApprovalStatus
   ) => {
     setActionLoading(true);
+    setStatusBanner(null);
     try {
       await updateQuestionStatusInFirestore(id, status);
       await onRefreshQuestions();
+    } catch (err) {
+      console.error('[NIZAL Update Question Status Error]', err);
+      setStatusBanner(
+        `تعذر تحديث حالة السؤال: ${err instanceof Error ? err.message : 'تحقق من صلاحيات المشرف أو الاتصال'}`
+      );
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleSingleDelete = async (id: string) => {
-    setActionLoading(true);
-    try {
-      await deleteQuestionFromFirestore(id);
-      setSelectedIds((prev) => prev.filter((item) => item !== id));
-      await onRefreshQuestions();
-    } finally {
-      setActionLoading(false);
-    }
+  const requestSingleDelete = (question: TriviaQuestion) => {
+    setDeleteModalError(null);
+    setDeleteConfirmModal({
+      mode: 'single',
+      ids: [question.id],
+      previewText: question.questionText,
+      scopeLabel: `حذف سؤال واحد من فئة «${question.category}»`,
+    });
   };
 
   const handleBulkStatus = async (status: ApprovalStatus) => {
     if (selectedIds.length === 0) return;
+    const count = selectedIds.length;
     setActionLoading(true);
+    setStatusBanner(null);
     try {
       await bulkUpdateStatusInFirestore(selectedIds, status);
-      setStatusBanner(`تم تحديث حالة ${selectedIds.length} سؤال بنجاح.`);
+      setStatusBanner(`تم تحديث حالة ${count} سؤال بنجاح.`);
       setSelectedIds([]);
       await onRefreshQuestions();
+    } catch (err) {
+      console.error('[NIZAL Bulk Status Error]', err);
+      setStatusBanner(
+        `تعذر تحديث حالة الأسئلة: ${err instanceof Error ? err.message : 'تحقق من صلاحيات المشرف أو الاتصال'}`
+      );
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleBulkDelete = async () => {
+  const requestBulkDelete = () => {
     if (selectedIds.length === 0) return;
+    setDeleteModalError(null);
+    const allTotalSelected =
+      questions.length > 0 && selectedIds.length === questions.length;
+    const allFilteredSelected =
+      filteredQuestions.length > 0 &&
+      filteredQuestions.every((q) => selectedIdsSet.has(q.id)) &&
+      selectedIds.length === filteredQuestions.length;
+
+    const scopeLabel = allTotalSelected
+      ? `حذف جميع أسئلة المنصة المعروضة (${selectedIds.length} سؤال)`
+      : allFilteredSelected
+      ? `حذف جميع الأسئلة المطابقة للتصفية الحالية (${selectedIds.length} سؤال)`
+      : `حذف الأسئلة المحددة (${selectedIds.length} سؤال)`;
+
+    setDeleteConfirmModal({
+      mode: 'bulk',
+      ids: [...selectedIds],
+      scopeLabel,
+    });
+  };
+
+  const handleExecuteConfirmedDelete = async () => {
+    if (!deleteConfirmModal || deleteConfirmModal.ids.length === 0) return;
+    const targetIds = deleteConfirmModal.ids;
+    const mode = deleteConfirmModal.mode;
+
     setActionLoading(true);
+    setDeleteModalError(null);
+    setStatusBanner(null);
+
     try {
-      await bulkDeleteFromFirestore(selectedIds);
-      setStatusBanner(`تم حذف ${selectedIds.length} سؤال من قاعدة البيانات.`);
-      setSelectedIds([]);
+      if (mode === 'single') {
+        await deleteQuestionFromFirestore(targetIds[0]);
+        setSelectedIds((prev) => prev.filter((item) => item !== targetIds[0]));
+        setStatusBanner('تم حذف السؤال بنجاح من قاعدة البيانات وبشكل دائم.');
+      } else {
+        const res = await bulkDeleteFromFirestore(targetIds);
+        setSelectedIds([]);
+        setStatusBanner(
+          `تم حذف ${res.deletedCount} سؤال بنجاح بشكل دائم (عبر ${res.batchCount} دفعة آمنة) دون المساس بالفئات أو الصور أو المباريات.`
+        );
+      }
+
+      setDeleteConfirmModal(null);
       await onRefreshQuestions();
+    } catch (err) {
+      console.error('[NIZAL Delete Questions Error]', err);
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذر تنفيذ الحذف. تأكد من صلاحيات المشرف واتصالك بالإنترنت.';
+      setDeleteModalError(`فشل الحذف: ${message}`);
+      setStatusBanner(`تعذر إتمام حذف الأسئلة: ${message}`);
     } finally {
       setActionLoading(false);
     }
@@ -2156,6 +2291,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <Sparkles className="w-4 h-4 text-[#F07842]" />
           <span>المؤثرات البصرية</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAdminTab('wala_kalima')}
+          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
+            adminTab === 'wala_kalima'
+              ? 'bg-[#14543D] text-white shadow-xs'
+              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
+          }`}
+        >
+          <QrCode className="w-4 h-4 text-[#F07842]" />
+          <span>كلمات ولا كلمة (QR)</span>
         </button>
 
         <button
@@ -3252,10 +3400,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     disabled={actionLoading}
-                    onClick={handleBulkDelete}
-                    className="px-2.5 py-1 text-xs font-bold bg-rose-700 text-white rounded-md cursor-pointer"
+                    onClick={requestBulkDelete}
+                    className="px-2.5 py-1 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-md cursor-pointer"
                   >
-                    حذف الكل
+                    حذف الكل ({selectedIds.length})
                   </button>
                 </div>
               )}
@@ -3272,7 +3420,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="checkbox"
                         checked={
                           filteredQuestions.length > 0 &&
-                          selectedIds.length === filteredQuestions.length
+                          filteredQuestions.every((q) => selectedIdsSet.has(q.id))
                         }
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -3307,7 +3455,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   ) : (
                     paginatedQuestions.map((q) => {
                       const isDup = duplicateIdsSet.has(q.id);
-                      const isChecked = selectedIds.includes(q.id);
+                      const isChecked = selectedIdsSet.has(q.id);
                       const parentMain = subcategoryToMainMap.get(q.category);
                       return (
                         <tr
@@ -3381,6 +3529,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 <img
                                   src={q.imageUrl}
                                   alt={q.imageDescription || 'صورة السؤال'}
+                                  referrerPolicy="no-referrer"
                                   className="w-9 h-9 rounded-lg object-cover border border-[#E5E8DD] bg-[#F3F5E9] shrink-0"
                                 />
                                 <div>
@@ -3459,7 +3608,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleSingleDelete(q.id)}
+                                onClick={() => requestSingleDelete(q)}
                                 title="حذف السؤال"
                                 className="p-1.5 text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer"
                               >
@@ -4034,6 +4183,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             }
           }}
         />
+      )}
+
+      {/* SECTION 10: WALA KALIMA QR WORD BANK & SETTINGS */}
+      {adminTab === 'wala_kalima' && (
+        <AdminWalaKalimaSection onSettingsUpdated={onWalaKalimaSettingsUpdated} />
       )}
 
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}
@@ -4849,8 +5003,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </h3>
               <button
                 type="button"
+                disabled={actionLoading}
                 onClick={handleCloseQuestionModal}
-                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
+                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2 disabled:opacity-50"
               >
                 إغلاق
               </button>
@@ -4894,11 +5049,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
                   <button
                     type="button"
+                    disabled={actionLoading}
                     onClick={() => {
                       setFormMediaType('text');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'text'
                         ? 'bg-[#14543D] text-white border-[#14543D]'
                         : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
@@ -4910,11 +5066,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
                   <button
                     type="button"
+                    disabled={actionLoading}
                     onClick={() => {
                       setFormMediaType('image');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'image'
                         ? 'bg-[#F07842] text-white border-[#F07842]'
                         : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#F07842]/40'
@@ -4926,11 +5083,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
                   <button
                     type="button"
+                    disabled={actionLoading}
                     onClick={() => {
                       setFormMediaType('audio');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'audio'
                         ? 'bg-[#14543D] text-white border-[#14543D]'
                         : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
@@ -5101,6 +5259,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             formImageDescription ||
                             'معاينة صورة السؤال قبل الحفظ'
                           }
+                          referrerPolicy="no-referrer"
                           className="max-h-52 w-auto max-w-full object-contain rounded-lg border border-[#E5E8DD]"
                         />
                       </div>
@@ -5334,15 +5493,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <div className="pt-4 border-t border-[#E5E8DD] flex items-center justify-end gap-3">
                 <button
                   type="button"
+                  disabled={actionLoading}
                   onClick={handleCloseQuestionModal}
-                  className="px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer disabled:opacity-50"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {actionLoading
                     ? pendingQuestionImageFile
@@ -5494,6 +5654,93 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   className="px-6 py-2 rounded-xl bg-[#14543D] text-white font-bold text-xs cursor-pointer hover:bg-[#0E3D2C]"
                 >
                   إغلاق المعاينة
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM QUESTION(S) PERMANENT DELETE */}
+      {deleteConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/70 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col">
+            <div className="bg-rose-700 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <AlertTriangle className="w-4 h-4" />
+                <span>تأكيد الحذف النهائي للأسئلة</span>
+              </div>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => {
+                  setDeleteConfirmModal(null);
+                  setDeleteModalError(null);
+                }}
+                className="text-white/85 hover:text-white text-xs cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs text-right overflow-y-auto">
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-1.5">
+                <div className="font-bold text-rose-900 text-sm">
+                  {deleteConfirmModal.scopeLabel}
+                </div>
+                <div className="text-rose-800">
+                  عدد الأسئلة التي سيتم حذفها نهائياً:{' '}
+                  <strong className="font-mono text-sm">
+                    {deleteConfirmModal.ids.length}
+                  </strong>{' '}
+                  سؤال
+                </div>
+              </div>
+
+              {deleteConfirmModal.previewText && (
+                <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3 text-[#252824]">
+                  <span className="font-bold">نص السؤال: </span>
+                  {deleteConfirmModal.previewText}
+                </div>
+              )}
+
+              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3.5 text-[#777B73] space-y-1 leading-relaxed">
+                <div className="font-bold text-[#252824]">نطاق الحماية والحذف:</div>
+                <div>• سيتم حذف مستندات هذه الأسئلة من Firestore ومنع عودة أسئلة البنك المدمج المحذوفة عند تحديث الصفحة.</div>
+                <div>• لن يتم حذف أي فئة رئيسية أو فرعية، ولا صور Cloudinary، ولا بيانات المباريات أو المستخدمين.</div>
+              </div>
+
+              {deleteModalError && (
+                <div className="bg-rose-50 border border-rose-300 text-rose-800 rounded-xl p-3 font-semibold">
+                  {deleteModalError}
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-[#E5E8DD] flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => {
+                    setDeleteConfirmModal(null);
+                    setDeleteModalError(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={handleExecuteConfirmedDelete}
+                  className="px-5 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer disabled:opacity-60"
+                >
+                  {actionLoading
+                    ? 'جاري تنفيذ الحذف...'
+                    : `تأكيد حذف (${deleteConfirmModal.ids.length})`}
                 </button>
               </div>
             </div>

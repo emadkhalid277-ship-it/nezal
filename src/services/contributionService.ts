@@ -14,11 +14,11 @@ import {
 } from 'firebase/firestore';
 import {
   ref,
-  uploadBytes,
+  uploadBytesResumable,
   getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
-import { db, storage, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db, storage, handleFirestoreError, OperationType } from '../lib/firebase';
 import {
   UserQuestionList,
   UserCustomQuestion,
@@ -28,6 +28,12 @@ import {
   DifficultyLevel,
 } from '../types/game';
 import { serviceCache } from './questionService';
+import {
+  isValidHttpUrl,
+  resolveQuestionImageMeta,
+  validateQuestionImageFile,
+} from '../utils/questionMedia';
+import { uploadQuestionImageToCloudinarySigned } from './cloudinaryService';
 
 const USER_LISTS_COLLECTION = 'userQuestionLists';
 const USER_QUESTIONS_COLLECTION = 'userCustomQuestions';
@@ -317,7 +323,7 @@ export async function deleteUserQuestion(
   const cleanId = sanitizeId(questionId);
   try {
     await deleteDoc(doc(db, USER_QUESTIONS_COLLECTION, cleanId));
-    if (imageStoragePath) {
+    if (imageStoragePath && !imageStoragePath.trim().startsWith('cloudinary:')) {
       try {
         const fileRef = ref(storage, imageStoragePath);
         await deleteObject(fileRef);
@@ -338,28 +344,141 @@ export async function uploadUserQuestionImage(
   file: File,
   userId: string
 ): Promise<{ downloadUrl: string; storagePath: string }> {
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('حجم الصورة يتجاوز الحد الأقصى المسموح به (5 ميجابايت).');
+  const validationError = validateQuestionImageFile(file);
+  if (validationError) {
+    throw new Error(validationError);
   }
 
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  if (!allowedTypes.includes(file.type)) {
-    throw new Error('صيغة الصورة غير مدعومة. يرجى اختيار ملف JPG أو PNG أو WEBP.');
+  try {
+    const buffer = await file.arrayBuffer();
+    if (!buffer || buffer.byteLength <= 0) {
+      throw new Error('تعذر قراءة ملف الصورة المختار أو أن الملف فارغ.');
+    }
+  } catch (readErr: any) {
+    throw new Error(
+      readErr instanceof Error && readErr.message
+        ? readErr.message
+        : 'تعذر قراءة ملف الصورة المختار من الجهاز.'
+    );
   }
 
-  const ext = file.name.split('.').pop() || 'jpg';
+  const { ext, contentType } = resolveQuestionImageMeta(file);
   const fileName = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const storagePath = `user-question-images/${userId}/${fileName}`;
   const fileRef = ref(storage, storagePath);
+  const uploadTask = uploadBytesResumable(fileRef, file, { contentType });
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
 
   try {
-    await uploadBytes(fileRef, file, { contentType: file.type });
-    const downloadUrl = await getDownloadURL(fileRef);
-    return { downloadUrl, storagePath };
+    const snapshot = await new Promise<typeof uploadTask.snapshot>(
+      (resolve, reject) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          try {
+            uploadTask.cancel();
+          } catch {
+            // ignore cancel error
+          }
+          reject(
+            new Error(
+              'انتهت مهلة رفع الصورة إلى Firebase Storage. تأكد من تفعيل خدمة Storage ومن استقرار الاتصال بالإنترنت.'
+            )
+          );
+        }, 15000);
+
+        uploadTask.on(
+          'state_changed',
+          undefined,
+          (error) => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            reject(error);
+          },
+          () => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            resolve(uploadTask.snapshot);
+          }
+        );
+      }
+    );
+
+    const downloadUrl = await getDownloadURL(snapshot.ref);
+    if (!isValidHttpUrl(downloadUrl)) {
+      throw new Error('لم يتم استلام رابط تنزيل صالح (HTTPS) للصورة من Firebase Storage.');
+    }
+
+    return { downloadUrl: downloadUrl.trim(), storagePath };
   } catch (err: any) {
-    console.error('Storage upload error:', err);
-    throw new Error('تعذر رفع الصورة إلى خادم التخزين. يرجى التحقق من اتصال الإنترنت وحجم الصورة.');
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    const code = String(err?.code || 'unknown');
+    const status = err?.status_ ?? err?.customData?.status ?? null;
+    const rawMsg = String(err?.message || '');
+    const serverResp = String(err?.serverResponse || err?.customData?.serverResponse || '');
+    const combinedDetails = `${code} ${status ?? ''} ${rawMsg} ${serverResp}`.toLowerCase();
+    const bucket = storage.app.options.storageBucket || 'unknown';
+    const projectId = storage.app.options.projectId || 'unknown';
+
+    console.error('[NIZAL User Storage Upload Error]', {
+      code,
+      status,
+      message: rawMsg,
+      customData: err?.customData,
+      serverResponse: serverResp,
+      bucket,
+      projectId,
+      storagePath,
+      contentType,
+      fileName: file.name,
+      fileSize: file.size,
+      authUser: auth.currentUser
+        ? {
+            uid: auth.currentUser.uid,
+            email: auth.currentUser.email,
+            emailVerified: auth.currentUser.emailVerified,
+          }
+        : null,
+    });
+
+    if (timedOut) {
+      throw new Error(`[storage/timeout] ${rawMsg}`);
+    }
+    if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
+      throw new Error(`[${code}] غير مصرح برفع الصورة إلى Firebase Storage. يرجى التأكد من تسجيل الدخول.`);
+    }
+    if (
+      code === 'storage/bucket-not-found' ||
+      code === 'storage/project-not-found' ||
+      status === 404 ||
+      combinedDetails.includes('bucket does not exist') ||
+      combinedDetails.includes('"code": 404') ||
+      combinedDetails.includes('not found')
+    ) {
+      throw new Error(
+        `[${code}${status ? ` | HTTP ${status}` : ''}] تعذر الرفع لأن حاوية التخزين (${bucket}) غير موجودة أو خدمة Firebase Storage غير مفعّلة في المشروع (${projectId}).`
+      );
+    }
+    throw new Error(
+      rawMsg
+        ? `[${code}] فشل رفع الصورة إلى Firebase Storage: ${rawMsg}`
+        : `[${code}] تعذر رفع الصورة إلى خادم التخزين. يرجى التحقق من اتصال الإنترنت وحجم الصورة.`
+    );
   }
+}
+
+export async function uploadUserQuestionImageToCloudinary(
+  file: File,
+  userId: string
+): Promise<{ downloadUrl: string; storagePath: string }> {
+  const uploaded = await uploadQuestionImageToCloudinarySigned(file, {
+    scope: 'user_question',
+    folderHint: userId,
+    questionIdHint: 'uq',
+  });
+  return {
+    downloadUrl: uploaded.imageUrl,
+    storagePath: uploaded.imageStoragePath,
+  };
 }
 
 // -------------------------------------------------------------
@@ -478,6 +597,10 @@ export async function approveAndPublishContribution(
   const targetDocRef = doc(db, QUESTIONS_COLLECTION, publishedId);
   const contribRef = doc(db, CONTRIBUTIONS_COLLECTION, contribution.id);
 
+  const validImageUrl = isValidHttpUrl(contribution.imageUrl)
+    ? contribution.imageUrl!.trim().slice(0, 2000)
+    : '';
+
   // Payload for global questions bank
   const publishedData = {
     id: publishedId,
@@ -487,6 +610,7 @@ export async function approveAndPublishContribution(
     mainCategory: contribution.mainCategory,
     questionText: contribution.questionText.trim().slice(0, 600),
     questionType: 'direct',
+    mediaType: validImageUrl ? 'image' : 'text',
     difficulty: contribution.difficulty,
     points: Number(contribution.points),
     options: [],
@@ -494,9 +618,13 @@ export async function approveAndPublishContribution(
     explanation: (contribution.explanation || '').trim().slice(0, 800),
     source: (contribution.source || `مساهمة من ${contribution.userName}`).trim().slice(0, 300),
     status: 'approved',
-    imageUrl: contribution.imageUrl || '',
-    imageStoragePath: contribution.imageStoragePath || '',
-    imageDescription: contribution.imageDescription || '',
+    imageUrl: validImageUrl,
+    imageStoragePath: validImageUrl
+      ? (contribution.imageStoragePath || '').trim().slice(0, 500)
+      : '',
+    imageDescription: validImageUrl
+      ? (contribution.imageDescription || '').trim().slice(0, 300)
+      : '',
     authorId: contribution.userId || adminId,
     createdAt: serverTimestamp(),
     reviewedAt: serverTimestamp(),
