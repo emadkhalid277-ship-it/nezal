@@ -114,9 +114,9 @@ export const MAIN_CATEGORIES: MainCategoryMeta[] = [
   {
     id: WALA_KALIMA_MAIN_CATEGORY_ID,
     name: WALA_KALIMA_MAIN_CATEGORY_NAME,
-    tagline: 'تحدي التمثيل والشرح التفاعلي عبر مسح رمز QR من الجوال',
+    tagline: 'لعبة التمثيل الصامت التفاعلية عبر مسح رمز QR من الجوال',
     description:
-      'يمسح اللاعب رمز QR بجواله لتظهر له الكلمة السرية والكلمات الممنوعة وحده، ويشرحها لفريقه قبل انتهاء الوقت!',
+      'يمسح أحد أعضاء الفريق رمز QR بجواله لتظهر له الكلمة السرية وحده، ويمثلها بالحركات والإشارات وتعبيرات الوجه دون كلام خلال 45 ثانية!',
     accentColor: '#F07842',
     bgTint: '#FEF2EC',
     borderTint: '#F7D4C4',

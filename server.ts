@@ -534,6 +534,7 @@ async function startServer() {
     const updated = updateAdminWalaKalimaSettings({
       enabled: body.enabled !== undefined ? Boolean(body.enabled) : undefined,
       timerSeconds: body.timerSeconds !== undefined ? Number(body.timerSeconds) : undefined,
+      maxSkips: body.maxSkips !== undefined ? Number(body.maxSkips) : undefined,
       wordsPerRound: body.wordsPerRound !== undefined ? Number(body.wordsPerRound) : undefined,
       pointsPerCorrectWord:
         body.pointsPerCorrectWord !== undefined ? Number(body.pointsPerCorrectWord) : undefined,
@@ -620,7 +621,12 @@ async function startServer() {
       const hostSecret = String(
         req.headers['x-wk-host-secret'] || body.hostSecret || ''
       ).trim();
-      const action = body.action === 'cancel' ? 'cancel' : 'finish';
+      const action =
+        body.action === 'cancel'
+          ? 'cancel'
+          : body.action === 'correct'
+          ? 'correct'
+          : 'finish';
       const updated = performHostSessionAction(
         String(req.params.id || ''),
         hostSecret,

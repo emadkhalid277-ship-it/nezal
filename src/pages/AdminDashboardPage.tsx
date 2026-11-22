@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import {
   ShieldCheck,
@@ -71,6 +71,7 @@ import { ImageCropModal } from '../components/ImageCropModal';
 import {
   bulkDeleteFromFirestore,
   bulkUpdateStatusInFirestore,
+  computeQuestionCountsBySubcategory,
   convertExistingQuestionsToDirectInFirestore,
   createQuestionInFirestore,
   CreateQuestionPayload,
@@ -160,6 +161,157 @@ function normalizeArabicText(text: string): string {
     .replace(/[^\u0600-\u06FFa-zA-Z0-9\s]/g, '')
     .replace(/\s+/g, ' ');
 }
+
+interface SubcategoryAdminRowProps {
+  sub: SubcategoryItem;
+  qCount: number;
+  actionLoading: boolean;
+  onToggleComingSoon: (sub: SubcategoryItem) => void;
+  onSelectImage: (sub: SubcategoryItem) => void;
+  onMoveOrder: (sub: SubcategoryItem, direction: 'up' | 'down') => void;
+  onToggleActive: (sub: SubcategoryItem) => void;
+  onEdit: (sub: SubcategoryItem) => void;
+  onDelete: (sub: SubcategoryItem) => void;
+}
+
+const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
+  ({
+    sub,
+    qCount,
+    actionLoading,
+    onToggleComingSoon,
+    onSelectImage,
+    onMoveOrder,
+    onToggleActive,
+    onEdit,
+    onDelete,
+  }) => (
+    <div
+      className={`py-3 flex items-center justify-between gap-3 [content-visibility:auto] [contain-intrinsic-size:auto_68px] ${
+        !sub.isActive ? 'opacity-50' : ''
+      }`}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        {sub.imageUrl ? (
+          <img
+            src={sub.imageUrl}
+            alt={sub.name}
+            loading="lazy"
+            decoding="async"
+            className="w-10 h-10 rounded-lg object-cover border border-[#E5E8DD] shrink-0"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] flex items-center justify-center text-[#777B73] shrink-0">
+            <ImageIcon className="w-4 h-4" />
+          </div>
+        )}
+        <div className="space-y-0.5 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-[#777B73] bg-[#F3F5E9] px-1.5 py-0.5 rounded">
+              #{sub.sortOrder}
+            </span>
+            <span className="font-display text-sm font-bold text-[#252824] truncate">
+              {sub.name}
+            </span>
+            {sub.isComingSoon && (
+              <span className="text-[10px] font-bold text-white bg-[#F07842] px-2 py-0.5 rounded">
+                قريباً
+              </span>
+            )}
+            {!sub.isActive && (
+              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
+                مخفية
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-[#777B73] truncate">
+            {sub.description || 'بدون وصف'} ·{' '}
+            <strong className="text-[#14543D]">{qCount} سؤال</strong>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={() => onToggleComingSoon(sub)}
+          title={
+            sub.isComingSoon
+              ? 'تفعيل الفئة وإزالة شارة قريباً'
+              : 'تعطيل مؤقت بشارة قريباً'
+          }
+          className={`p-1.5 rounded-lg cursor-pointer ${
+            sub.isComingSoon
+              ? 'bg-[#FEF2EC] text-[#F07842] hover:bg-[#FDE4D7]'
+              : 'text-[#777B73] hover:text-[#F07842] hover:bg-[#FEF2EC]'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={() => onSelectImage(sub)}
+          title="رفع أو تغيير صورة الفئة الفرعية"
+          className="p-1.5 text-[#F07842] hover:bg-[#FEF2EC] rounded-lg cursor-pointer"
+        >
+          <ImageIcon className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={() => onMoveOrder(sub, 'up')}
+          title="تقديم الترتيب"
+          className="p-1.5 text-[#777B73] hover:text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
+        >
+          <ArrowUp className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={() => onMoveOrder(sub, 'down')}
+          title="تأخير الترتيب"
+          className="p-1.5 text-[#777B73] hover:text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
+        >
+          <ArrowDown className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={() => onToggleActive(sub)}
+          title={
+            sub.isActive ? 'إخفاء الفئة الفرعية' : 'إظهار الفئة الفرعية'
+          }
+          className="p-1.5 text-[#14543D] hover:bg-[#EAF2EE] rounded-lg cursor-pointer"
+        >
+          {sub.isActive ? (
+            <Eye className="w-3.5 h-3.5" />
+          ) : (
+            <EyeOff className="w-3.5 h-3.5" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => onEdit(sub)}
+          title="تعديل أو إعادة تسمية أو نقل الفئة"
+          className="p-1.5 text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
+        >
+          <Edit3 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          disabled={actionLoading}
+          onClick={() => onDelete(sub)}
+          title="حذف الفئة الفرعية"
+          className="p-1.5 text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  )
+);
 
 export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   user,
@@ -252,6 +404,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   // Subcategory Management States
   const [subMainFilter, setSubMainFilter] = useState<string>('الكل');
+  const [subSearchQuery, setSubSearchQuery] = useState<string>('');
   const [subModalOpen, setSubModalOpen] = useState(false);
   const [editingSubcategory, setEditingSubcategory] =
     useState<SubcategoryItem | null>(null);
@@ -475,29 +628,130 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     [subcategories]
   );
 
-  const getSubcategoriesForMain = (mainCat: MainCategoryMeta) =>
-    subcategories
-      .filter(
-        (s) =>
-          s.mainCategoryId === mainCat.id || s.mainCategory === mainCat.name
-      )
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+  const subcategoriesByMainIdMap = useMemo(() => {
+    const map = new Map<string, SubcategoryItem[]>();
+    for (const mainCat of sortedMainCategories) {
+      map.set(mainCat.id, []);
+    }
+    const nameToMainId = new Map<string, string>();
+    for (const mainCat of sortedMainCategories) {
+      nameToMainId.set(mainCat.name, mainCat.id);
+    }
 
-  const getQuestionsForSubcategory = (sub: SubcategoryItem) =>
-    questions.filter((q) =>
-      matchesSubcategoryQuestion(q.category, sub.name, q.subcategoryId, sub.id)
-    );
+    for (const sub of subcategories) {
+      const targetMainId = map.has(sub.mainCategoryId)
+        ? sub.mainCategoryId
+        : nameToMainId.get(sub.mainCategory);
+      if (targetMainId) {
+        map.get(targetMainId)!.push(sub);
+      }
+    }
 
-  const getQuestionsForMainCategory = (mainCat: MainCategoryMeta) => {
-    const subs = getSubcategoriesForMain(mainCat);
-    const subIds = new Set(subs.map((s) => s.id));
-    const subNames = new Set(subs.map((s) => s.name));
-    return questions.filter(
-      (q) =>
-        (q.subcategoryId && subIds.has(q.subcategoryId)) ||
-        subNames.has(q.category)
+    map.forEach((list) => {
+      list.sort((a, b) => a.sortOrder - b.sortOrder);
+    });
+    return map;
+  }, [sortedMainCategories, subcategories]);
+
+  const getSubcategoriesForMain = useCallback(
+    (mainCat: MainCategoryMeta) =>
+      subcategoriesByMainIdMap.get(mainCat.id) || [],
+    [subcategoriesByMainIdMap]
+  );
+
+  const questionCountBySubIdMap = useMemo(
+    () => computeQuestionCountsBySubcategory(questions, subcategories),
+    [questions, subcategories]
+  );
+
+  const questionCountByMainIdMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const mainCat of sortedMainCategories) {
+      const subs = subcategoriesByMainIdMap.get(mainCat.id) || [];
+      const subIds = new Set(subs.map((s) => s.id));
+      const subNames = new Set(subs.map((s) => s.name));
+      let count = 0;
+      for (const q of questions) {
+        if (
+          (q.subcategoryId && subIds.has(q.subcategoryId)) ||
+          subNames.has(q.category)
+        ) {
+          count++;
+        }
+      }
+      map.set(mainCat.id, count);
+    }
+    return map;
+  }, [sortedMainCategories, subcategoriesByMainIdMap, questions]);
+
+  const getQuestionsForSubcategory = useCallback(
+    (sub: SubcategoryItem) =>
+      questions.filter((q) =>
+        matchesSubcategoryQuestion(q.category, sub.name, q.subcategoryId, sub.id)
+      ),
+    [questions]
+  );
+
+  const getQuestionsForMainCategory = useCallback(
+    (mainCat: MainCategoryMeta) => {
+      const subs = getSubcategoriesForMain(mainCat);
+      const subIds = new Set(subs.map((s) => s.id));
+      const subNames = new Set(subs.map((s) => s.name));
+      return questions.filter(
+        (q) =>
+          (q.subcategoryId && subIds.has(q.subcategoryId)) ||
+          subNames.has(q.category)
+      );
+    },
+    [getSubcategoriesForMain, questions]
+  );
+
+  const filteredSubcategoryMainGroups = useMemo(() => {
+    return sortedMainCategories.filter(
+      (mc) =>
+        subMainFilter === 'الكل' ||
+        mc.id === subMainFilter ||
+        mc.name === subMainFilter
     );
-  };
+  }, [sortedMainCategories, subMainFilter]);
+
+  const { singlePageSubcategoryGroups, filteredSubcategoriesCount } = useMemo(() => {
+    const term = subSearchQuery.trim().toLowerCase();
+    const groups: {
+      mainCat: MainCategoryMeta;
+      subs: SubcategoryItem[];
+      totalInMain: number;
+    }[] = [];
+    let count = 0;
+
+    for (const mainCat of filteredSubcategoryMainGroups) {
+      const allInMain = subcategoriesByMainIdMap.get(mainCat.id) || [];
+      const matchedSubs = term
+        ? allInMain.filter(
+            (sub) =>
+              sub.name.toLowerCase().includes(term) ||
+              (sub.description || '').toLowerCase().includes(term) ||
+              mainCat.name.toLowerCase().includes(term)
+          )
+        : allInMain;
+
+      if (term && matchedSubs.length === 0) {
+        continue;
+      }
+
+      count += matchedSubs.length;
+      groups.push({
+        mainCat,
+        subs: matchedSubs,
+        totalInMain: allInMain.length,
+      });
+    }
+
+    return {
+      singlePageSubcategoryGroups: groups,
+      filteredSubcategoriesCount: count,
+    };
+  }, [filteredSubcategoryMainGroups, subcategoriesByMainIdMap, subSearchQuery]);
 
   const duplicateIdsSet = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -624,14 +878,24 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   }, [questions, duplicateIdsSet]);
 
   // Trigger device file picker for a specific Main Category, Subcategory, or Form Draft
-  const triggerSelectCategoryImage = (target: {
-    kind: 'main' | 'sub' | 'main_draft' | 'sub_draft';
-    mainCat?: MainCategoryMeta;
-    subCat?: SubcategoryItem;
-  }) => {
-    pendingImageTargetRef.current = target;
-    imageUploadInputRef.current?.click();
-  };
+  const triggerSelectCategoryImage = useCallback(
+    (target: {
+      kind: 'main' | 'sub' | 'main_draft' | 'sub_draft';
+      mainCat?: MainCategoryMeta;
+      subCat?: SubcategoryItem;
+    }) => {
+      pendingImageTargetRef.current = target;
+      imageUploadInputRef.current?.click();
+    },
+    []
+  );
+
+  const triggerSubcategoryImagePicker = useCallback(
+    (sub: SubcategoryItem) => {
+      triggerSelectCategoryImage({ kind: 'sub', subCat: sub });
+    },
+    [triggerSelectCategoryImage]
+  );
 
   const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1055,22 +1319,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setSubModalOpen(true);
   };
 
-  const openEditSubcategoryModal = (sub: SubcategoryItem) => {
-    const parentMain =
-      sortedMainCategories.find(
-        (m) => m.id === sub.mainCategoryId || m.name === sub.mainCategory
-      ) || sortedMainCategories[0];
+  const openEditSubcategoryModal = useCallback(
+    (sub: SubcategoryItem) => {
+      const parentMain =
+        sortedMainCategories.find(
+          (m) => m.id === sub.mainCategoryId || m.name === sub.mainCategory
+        ) || sortedMainCategories[0];
 
-    setEditingSubcategory(sub);
-    setSubFormName(sub.name);
-    setSubFormMainCategoryId(parentMain?.id || sub.mainCategoryId || 'main-general');
-    setSubFormDescription(sub.description);
-    setSubFormSortOrder(sub.sortOrder);
-    setSubFormIsActive(sub.isActive);
-    setSubFormIsComingSoon(Boolean(sub.isComingSoon));
-    setSubFormImageUrl(sub.imageUrl || '');
-    setSubModalOpen(true);
-  };
+      setEditingSubcategory(sub);
+      setSubFormName(sub.name);
+      setSubFormMainCategoryId(
+        parentMain?.id || sub.mainCategoryId || 'main-general'
+      );
+      setSubFormDescription(sub.description);
+      setSubFormSortOrder(sub.sortOrder);
+      setSubFormIsActive(sub.isActive);
+      setSubFormIsComingSoon(Boolean(sub.isComingSoon));
+      setSubFormImageUrl(sub.imageUrl || '');
+      setSubModalOpen(true);
+    },
+    [sortedMainCategories]
+  );
 
   const handleSaveSubcategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1103,8 +1372,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         editingSubcategory?.name
       );
 
+      const wasRenamed = Boolean(
+        editingSubcategory &&
+          editingSubcategory.name.trim() &&
+          editingSubcategory.name.trim() !== cleanName
+      );
       setSubModalOpen(false);
-      await Promise.all([onRefreshSubcategories(), onRefreshQuestions()]);
+      await onRefreshSubcategories();
+      if (wasRenamed) {
+        await onRefreshQuestions();
+      }
       setStatusBanner(
         editingSubcategory
           ? `تم تحديث الفئة الفرعية «${cleanName}» بنجاح.`
@@ -1119,118 +1396,127 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
   };
 
-  const handleToggleSubcategoryActive = async (sub: SubcategoryItem) => {
-    if (!user) return;
-    setActionLoading(true);
-    try {
-      await saveSubcategoryToFirestore(
-        {
-          id: sub.id,
-          name: sub.name,
-          mainCategoryId: sub.mainCategoryId,
-          mainCategory: sub.mainCategory,
-          description: sub.description,
-          sortOrder: sub.sortOrder,
-          isActive: !sub.isActive,
-          isComingSoon: sub.isComingSoon,
-          imageUrl: sub.imageUrl,
-        },
-        user.uid
-      );
-      await onRefreshSubcategories();
-      setStatusBanner(
-        !sub.isActive
-          ? `تم إظهار الفئة الفرعية «${sub.name}» للاعبين.`
-          : `تم إخفاء الفئة الفرعية «${sub.name}» عن الألعاب الجديدة.`
-      );
-    } catch (err) {
-      setStatusBanner(
-        `تعذر تحديث حالة الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const handleToggleSubcategoryActive = useCallback(
+    async (sub: SubcategoryItem) => {
+      if (!user) return;
+      setActionLoading(true);
+      try {
+        await saveSubcategoryToFirestore(
+          {
+            id: sub.id,
+            name: sub.name,
+            mainCategoryId: sub.mainCategoryId,
+            mainCategory: sub.mainCategory,
+            description: sub.description,
+            sortOrder: sub.sortOrder,
+            isActive: !sub.isActive,
+            isComingSoon: sub.isComingSoon,
+            imageUrl: sub.imageUrl,
+          },
+          user.uid
+        );
+        await onRefreshSubcategories();
+        setStatusBanner(
+          !sub.isActive
+            ? `تم إظهار الفئة الفرعية «${sub.name}» للاعبين.`
+            : `تم إخفاء الفئة الفرعية «${sub.name}» عن الألعاب الجديدة.`
+        );
+      } catch (err) {
+        setStatusBanner(
+          `تعذر تحديث حالة الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [user, onRefreshSubcategories]
+  );
 
-  const handleToggleSubcategoryComingSoon = async (sub: SubcategoryItem) => {
-    if (!user) return;
-    const nextComingSoon = !sub.isComingSoon;
-    setActionLoading(true);
-    try {
-      await saveSubcategoryToFirestore(
-        {
-          id: sub.id,
-          name: sub.name,
-          mainCategoryId: sub.mainCategoryId,
-          mainCategory: sub.mainCategory,
-          description: sub.description,
-          sortOrder: sub.sortOrder,
-          isActive: nextComingSoon ? sub.isActive : true,
-          isComingSoon: nextComingSoon,
-          imageUrl: sub.imageUrl,
-        },
-        user.uid
-      );
-      await onRefreshSubcategories();
-      setStatusBanner(
-        nextComingSoon
-          ? `تم تحويل الفئة الفرعية «${sub.name}» إلى وضع «قريباً» مع حفظ كافة أسئلتها.`
-          : `تم تفعيل الفئة الفرعية «${sub.name}» وإتاحتها للعب.`
-      );
-    } catch (err) {
-      setStatusBanner(
-        `تعذر تحديث وضع «قريباً» للفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const handleToggleSubcategoryComingSoon = useCallback(
+    async (sub: SubcategoryItem) => {
+      if (!user) return;
+      const nextComingSoon = !sub.isComingSoon;
+      setActionLoading(true);
+      try {
+        await saveSubcategoryToFirestore(
+          {
+            id: sub.id,
+            name: sub.name,
+            mainCategoryId: sub.mainCategoryId,
+            mainCategory: sub.mainCategory,
+            description: sub.description,
+            sortOrder: sub.sortOrder,
+            isActive: nextComingSoon ? sub.isActive : true,
+            isComingSoon: nextComingSoon,
+            imageUrl: sub.imageUrl,
+          },
+          user.uid
+        );
+        await onRefreshSubcategories();
+        setStatusBanner(
+          nextComingSoon
+            ? `تم تحويل الفئة الفرعية «${sub.name}» إلى وضع «قريباً» مع حفظ كافة أسئلتها.`
+            : `تم تفعيل الفئة الفرعية «${sub.name}» وإتاحتها للعب.`
+        );
+      } catch (err) {
+        setStatusBanner(
+          `تعذر تحديث وضع «قريباً» للفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [user, onRefreshSubcategories]
+  );
 
-  const handleMoveSubcategoryOrder = async (
-    sub: SubcategoryItem,
-    direction: 'up' | 'down'
-  ) => {
-    if (!user) return;
-    const delta = direction === 'up' ? -1 : 1;
-    const newOrder = Math.max(1, sub.sortOrder + delta);
-    setActionLoading(true);
-    try {
-      await saveSubcategoryToFirestore(
-        {
-          id: sub.id,
-          name: sub.name,
-          mainCategoryId: sub.mainCategoryId,
-          mainCategory: sub.mainCategory,
-          description: sub.description,
-          sortOrder: newOrder,
-          isActive: sub.isActive,
-          isComingSoon: sub.isComingSoon,
-          imageUrl: sub.imageUrl,
-        },
-        user.uid
-      );
-      await onRefreshSubcategories();
-    } catch (err) {
-      setStatusBanner(
-        `تعذر تعديل ترتيب الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const handleMoveSubcategoryOrder = useCallback(
+    async (sub: SubcategoryItem, direction: 'up' | 'down') => {
+      if (!user) return;
+      const delta = direction === 'up' ? -1 : 1;
+      const newOrder = Math.max(1, sub.sortOrder + delta);
+      setActionLoading(true);
+      try {
+        await saveSubcategoryToFirestore(
+          {
+            id: sub.id,
+            name: sub.name,
+            mainCategoryId: sub.mainCategoryId,
+            mainCategory: sub.mainCategory,
+            description: sub.description,
+            sortOrder: newOrder,
+            isActive: sub.isActive,
+            isComingSoon: sub.isComingSoon,
+            imageUrl: sub.imageUrl,
+          },
+          user.uid
+        );
+        await onRefreshSubcategories();
+      } catch (err) {
+        setStatusBanner(
+          `تعذر تعديل ترتيب الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
+        );
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [user, onRefreshSubcategories]
+  );
 
-  const openDeleteSubcategoryDialog = (sub: SubcategoryItem) => {
-    const otherSubs = subcategories.filter((s) => s.id !== sub.id);
-    const relatedQs = getQuestionsForSubcategory(sub);
-    setDeletingSubcategory(sub);
-    setDeleteSubTargetId(otherSubs[0]?.id || '');
-    setDeleteSubMode(
-      relatedQs.length > 0 && otherSubs.length > 0
-        ? 'reassign_questions'
-        : 'keep_questions'
-    );
-    setDeleteSubConfirmQuestions(false);
-  };
+  const openDeleteSubcategoryDialog = useCallback(
+    (sub: SubcategoryItem) => {
+      const otherSubs = subcategories.filter((s) => s.id !== sub.id);
+      const relatedQs = getQuestionsForSubcategory(sub);
+      setDeletingSubcategory(sub);
+      setDeleteSubTargetId(otherSubs[0]?.id || '');
+      setDeleteSubMode(
+        relatedQs.length > 0 && otherSubs.length > 0
+          ? 'reassign_questions'
+          : 'keep_questions'
+      );
+      setDeleteSubConfirmQuestions(false);
+    },
+    [subcategories, getQuestionsForSubcategory]
+  );
 
   const handleConfirmDeleteSubcategory = async () => {
     if (!user || !deletingSubcategory) return;
@@ -1269,8 +1555,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       );
 
       const deletedName = deletingSubcategory.name;
+      const shouldRefreshQuestions =
+        relatedQs.length > 0 && deleteSubMode !== 'keep_questions';
       setDeletingSubcategory(null);
-      await Promise.all([onRefreshSubcategories(), onRefreshQuestions()]);
+      await onRefreshSubcategories();
+      if (shouldRefreshQuestions) {
+        await onRefreshQuestions();
+      }
       setStatusBanner(`تم حذف الفئة الفرعية «${deletedName}» بنجاح.`);
     } catch (err) {
       setStatusBanner(
@@ -2376,7 +2667,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {sortedMainCategories.map((mainCat, index) => {
                 const subsInMain = getSubcategoriesForMain(mainCat);
-                const qsInMain = getQuestionsForMainCategory(mainCat);
+                const qsInMainCount =
+                  questionCountByMainIdMap.get(mainCat.id) ?? 0;
                 const hasImg = Boolean(
                   mainCat.imageUrl && mainCat.imageUrl.trim().length > 0
                 );
@@ -2511,7 +2803,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             {mainCat.name}
                           </span>
                           <span className="font-mono text-[11px] text-[#14543D] font-bold">
-                            {subsInMain.length} فئة فرعية · {qsInMain.length} سؤال
+                            {subsInMain.length} فئة فرعية · {qsInMainCount} سؤال
                           </span>
                         </div>
                         <p className="text-[#777B73] line-clamp-2 leading-relaxed">
@@ -2636,6 +2928,26 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </button>
             </div>
 
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between pt-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={subSearchQuery}
+                  onChange={(e) => setSubSearchQuery(e.target.value)}
+                  placeholder="ابحث في الفئات الفرعية بالاسم أو الوصف..."
+                  className="w-full pr-10 pl-3.5 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none focus:border-[#14543D]"
+                />
+              </div>
+              <div className="text-xs text-[#777B73] font-semibold">
+                إجمالي النتائج:{' '}
+                <strong className="font-mono text-[#14543D]">
+                  {filteredSubcategoriesCount}
+                </strong>{' '}
+                فئة فرعية
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -2672,21 +2984,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {sortedMainCategories
-              .filter(
-                (mc) =>
-                  subMainFilter === 'الكل' ||
-                  mc.id === subMainFilter ||
-                  mc.name === subMainFilter
-              )
-              .map((mainCat) => {
-                const groupSubs = getSubcategoriesForMain(mainCat);
-
+          {singlePageSubcategoryGroups.length === 0 ? (
+            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl py-12 text-center text-xs text-[#777B73]">
+              لا توجد فئات فرعية مطابقة لمعايير البحث الحالية.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {singlePageSubcategoryGroups.map(({ mainCat, subs: groupSubs, totalInMain }) => {
                 return (
                   <div
                     key={mainCat.id}
-                    className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 flex flex-col justify-between space-y-4"
+                    className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 flex flex-col justify-between space-y-4 [content-visibility:auto] [contain-intrinsic-size:auto_380px]"
                   >
                     <div className="space-y-4">
                       <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
@@ -2720,7 +3028,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               )}
                             </div>
                             <p className="text-[11px] text-[#777B73]">
-                              {groupSubs.length} فئة فرعية مسجلة
+                              {totalInMain} فئة فرعية مسجلة
                             </p>
                           </div>
                         </div>
@@ -2741,158 +3049,28 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         </div>
                       ) : (
                         <div className="divide-y divide-[#E5E8DD]">
-                          {groupSubs.map((sub) => {
-                            const qCount = getQuestionsForSubcategory(sub).length;
-                            return (
-                              <div
-                                key={sub.id}
-                                className={`py-3 flex items-center justify-between gap-3 ${
-                                  !sub.isActive ? 'opacity-50' : ''
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  {sub.imageUrl ? (
-                                    <img
-                                      src={sub.imageUrl}
-                                      alt={sub.name}
-                                      className="w-10 h-10 rounded-lg object-cover border border-[#E5E8DD] shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="w-10 h-10 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] flex items-center justify-center text-[#777B73] shrink-0">
-                                      <ImageIcon className="w-4 h-4" />
-                                    </div>
-                                  )}
-                                  <div className="space-y-0.5 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono text-[11px] text-[#777B73] bg-[#F3F5E9] px-1.5 py-0.5 rounded">
-                                        #{sub.sortOrder}
-                                      </span>
-                                      <span className="font-display text-sm font-bold text-[#252824] truncate">
-                                        {sub.name}
-                                      </span>
-                                      {sub.isComingSoon && (
-                                        <span className="text-[10px] font-bold text-white bg-[#F07842] px-2 py-0.5 rounded">
-                                          قريباً
-                                        </span>
-                                      )}
-                                      {!sub.isActive && (
-                                        <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
-                                          مخفية
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-[11px] text-[#777B73] truncate">
-                                      {sub.description || 'بدون وصف'} ·{' '}
-                                      <strong className="text-[#14543D]">
-                                        {qCount} سؤال
-                                      </strong>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    type="button"
-                                    disabled={actionLoading}
-                                    onClick={() =>
-                                      handleToggleSubcategoryComingSoon(sub)
-                                    }
-                                    title={
-                                      sub.isComingSoon
-                                        ? 'تفعيل الفئة وإزالة شارة قريباً'
-                                        : 'تعطيل مؤقت بشارة قريباً'
-                                    }
-                                    className={`p-1.5 rounded-lg cursor-pointer ${
-                                      sub.isComingSoon
-                                        ? 'bg-[#FEF2EC] text-[#F07842] hover:bg-[#FDE4D7]'
-                                        : 'text-[#777B73] hover:text-[#F07842] hover:bg-[#FEF2EC]'
-                                    }`}
-                                  >
-                                    <Clock className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionLoading}
-                                    onClick={() =>
-                                      triggerSelectCategoryImage({
-                                        kind: 'sub',
-                                        subCat: sub,
-                                      })
-                                    }
-                                    title="رفع أو تغيير صورة الفئة الفرعية"
-                                    className="p-1.5 text-[#F07842] hover:bg-[#FEF2EC] rounded-lg cursor-pointer"
-                                  >
-                                    <ImageIcon className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionLoading}
-                                    onClick={() =>
-                                      handleMoveSubcategoryOrder(sub, 'up')
-                                    }
-                                    title="تقديم الترتيب"
-                                    className="p-1.5 text-[#777B73] hover:text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
-                                  >
-                                    <ArrowUp className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionLoading}
-                                    onClick={() =>
-                                      handleMoveSubcategoryOrder(sub, 'down')
-                                    }
-                                    title="تأخير الترتيب"
-                                    className="p-1.5 text-[#777B73] hover:text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
-                                  >
-                                    <ArrowDown className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionLoading}
-                                    onClick={() =>
-                                      handleToggleSubcategoryActive(sub)
-                                    }
-                                    title={
-                                      sub.isActive
-                                        ? 'إخفاء الفئة الفرعية'
-                                        : 'إظهار الفئة الفرعية'
-                                    }
-                                    className="p-1.5 text-[#14543D] hover:bg-[#EAF2EE] rounded-lg cursor-pointer"
-                                  >
-                                    {sub.isActive ? (
-                                      <Eye className="w-3.5 h-3.5" />
-                                    ) : (
-                                      <EyeOff className="w-3.5 h-3.5" />
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openEditSubcategoryModal(sub)}
-                                    title="تعديل أو إعادة تسمية أو نقل الفئة"
-                                    className="p-1.5 text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionLoading}
-                                    onClick={() => openDeleteSubcategoryDialog(sub)}
-                                    title="حذف الفئة الفرعية"
-                                    className="p-1.5 text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {groupSubs.map((sub) => (
+                            <SubcategoryAdminRow
+                              key={sub.id}
+                              sub={sub}
+                              qCount={questionCountBySubIdMap.get(sub.id) ?? 0}
+                              actionLoading={actionLoading}
+                              onToggleComingSoon={handleToggleSubcategoryComingSoon}
+                              onSelectImage={triggerSubcategoryImagePicker}
+                              onMoveOrder={handleMoveSubcategoryOrder}
+                              onToggleActive={handleToggleSubcategoryActive}
+                              onEdit={openEditSubcategoryModal}
+                              onDelete={openDeleteSubcategoryDialog}
+                            />
+                          ))}
                         </div>
                       )}
                     </div>
                   </div>
                 );
               })}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3197,7 +3375,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               {sortedMainCategories.map((mainCat) => {
-                const catCount = getQuestionsForMainCategory(mainCat).length;
+                const catCount = questionCountByMainIdMap.get(mainCat.id) ?? 0;
 
                 return (
                   <button

@@ -3050,9 +3050,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     status: created.status,
                     correctCount: created.correctCount,
                     skippedCount: created.skippedCount,
+                    maxSkips: created.maxSkips,
+                    remainingSkips: created.remainingSkips,
+                    pointsPerCorrectWord: created.pointsPerCorrectWord,
                     earnedPoints: created.earnedPoints,
                     totalWords: created.totalWords,
                     timerSeconds: created.timerSeconds,
+                    startedAt: created.startedAt,
+                    expiresAt: created.expiresAt,
+                    endReason: created.endReason,
                   },
                 });
               }}
@@ -3070,9 +3076,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     status: status.status,
                     correctCount: status.correctCount,
                     skippedCount: status.skippedCount,
+                    maxSkips: status.maxSkips,
+                    remainingSkips: status.remainingSkips,
+                    pointsPerCorrectWord: status.pointsPerCorrectWord,
                     earnedPoints: status.earnedPoints,
                     totalWords: status.totalWords,
                     timerSeconds: status.timerSeconds,
+                    startedAt: status.startedAt,
+                    expiresAt: status.expiresAt,
+                    endReason: status.endReason,
                   },
                 });
               }}

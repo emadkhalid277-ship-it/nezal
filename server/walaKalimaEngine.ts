@@ -7,6 +7,7 @@ import {
   WALA_KALIMA_CONTENT_TYPES,
   type WalaKalimaContentTypeId,
   type WalaKalimaCreateSessionResponse,
+  type WalaKalimaEndReason,
   type WalaKalimaPlayerSessionState,
   type WalaKalimaSessionPublicStatus,
   type WalaKalimaSessionStatus,
@@ -65,17 +66,17 @@ const SEED_WORDS_BY_TYPE: Record<WalaKalimaContentTypeId, SeedWordTuple[]> = {
     { word: 'أبو عصام (باب الحارة)', forbiddenWords: ['دمشق', 'حارة الضبع', 'الحكيم', 'مسلسل شامي'], difficulty: 'خبير' },
   ],
   general_info: [
-    { word: 'الجاذبية الأرضية', forbiddenWords: ['نيوتن', 'التفاحة', 'السقوط', 'الفضاء'], difficulty: 'سهل' },
-    { word: 'السنة الكبيسة', forbiddenWords: ['فبراير', '29 يوم', 'أربع سنوات', 'التقويم'], difficulty: 'سهل' },
-    { word: 'البصمة الوراثية', forbiddenWords: ['الأصابع', 'الشرطة', 'الجينات', 'الهوية'], difficulty: 'متوسط' },
-    { word: 'الاحتباس الحراري', forbiddenWords: ['المناخ', 'التلوث', 'الأرض', 'ارتفاع الحرارة'], difficulty: 'متوسط' },
-    { word: 'مثلث برمودا', forbiddenWords: ['المحيط الأطلسي', 'اختفاء', 'سفن', 'طائرات'], difficulty: 'متوسط' },
-    { word: 'الكسوف الكلي', forbiddenWords: ['الشمس', 'القمر', 'الظل', 'النهار'], difficulty: 'صعب' },
-    { word: 'طريق الحرير', forbiddenWords: ['التجارة', 'الصين', 'القوافل', 'تاريخي'], difficulty: 'صعب' },
-    { word: 'جائزة نوبل', forbiddenWords: ['السويد', 'السلام', 'الديناميت', 'العلماء'], difficulty: 'صعب جداً' },
-    { word: 'الذهب الأسود', forbiddenWords: ['النفط', 'البترول', 'الطاقة', 'البرميل'], difficulty: 'سهل' },
-    { word: 'قوس قزح', forbiddenWords: ['الألوان', 'المطر', 'الشمس', 'سبعة'], difficulty: 'سهل' },
-    { word: 'الموجات فوق الصوتية', forbiddenWords: ['الخفاش', 'الطب', 'السونار', 'الصدى'], difficulty: 'خبير' },
+    { word: 'الجاذبية الأرضية', forbiddenWords: [], difficulty: 'سهل' },
+    { word: 'القفز بالمظلة', forbiddenWords: [], difficulty: 'سهل' },
+    { word: 'بصمة الإصبع', forbiddenWords: [], difficulty: 'متوسط' },
+    { word: 'ثوران البركان', forbiddenWords: [], difficulty: 'متوسط' },
+    { word: 'مثلث برمودا', forbiddenWords: [], difficulty: 'متوسط' },
+    { word: 'الكسوف الكلي', forbiddenWords: [], difficulty: 'صعب' },
+    { word: 'البحث عن الكنز', forbiddenWords: [], difficulty: 'صعب' },
+    { word: 'حفل التخرج', forbiddenWords: [], difficulty: 'صعب جداً' },
+    { word: 'التنقيب عن النفط', forbiddenWords: [], difficulty: 'سهل' },
+    { word: 'قوس قزح', forbiddenWords: [], difficulty: 'سهل' },
+    { word: 'السير أثناء النوم', forbiddenWords: [], difficulty: 'خبير' },
   ],
   countries_cities: [
     { word: 'الرياض', forbiddenWords: ['السعودية', 'العاصمة', 'نجد', 'برج المملكة'], difficulty: 'سهل' },
@@ -158,21 +159,22 @@ const SEED_WORDS_BY_TYPE: Record<WalaKalimaContentTypeId, SeedWordTuple[]> = {
     { word: 'سباق التتابع', forbiddenWords: ['الجري', 'العصا', 'أربعة لاعبين', 'المضمار'], difficulty: 'خبير' },
   ],
   inventions_science: [
-    { word: 'المصباح الكهربائي', forbiddenWords: ['أديسون', 'الضوء', 'الظلام', 'السلك'], difficulty: 'سهل' },
-    { word: 'الطائرة', forbiddenWords: ['الأخوان رايت', 'الأجنحة', 'السماء', 'السفر'], difficulty: 'سهل' },
-    { word: 'الإنترنت', forbiddenWords: ['الشبكة', 'المتصفح', 'الواي فاي', 'العالم'], difficulty: 'سهل' },
-    { word: 'البنسلين', forbiddenWords: ['المضاد الحيوي', 'فلمنج', 'البكتيريا', 'الدواء'], difficulty: 'صعب' },
-    { word: 'المطبعة', forbiddenWords: ['غوتنبرغ', 'الكتب', 'الورق', 'النشر'], difficulty: 'متوسط' },
-    { word: 'الأشعة السينية (X-Ray)', forbiddenWords: ['العظام', 'المستشفى', 'الصورة', 'الكسر'], difficulty: 'متوسط' },
-    { word: 'الذكاء الاصطناعي', forbiddenWords: ['الروبوت', 'البرمجة', 'التعلم', 'الحاسوب'], difficulty: 'متوسط' },
-    { word: 'الديناميت', forbiddenWords: ['ألفريد نوبل', 'الانفجار', 'المناجم', 'الصخور'], difficulty: 'صعب' },
-    { word: 'البوصلة المغناطيسية', forbiddenWords: ['المغناطيس', 'الصين', 'البحارة', 'الشمال'], difficulty: 'صعب جداً' },
-    { word: 'محرك الاحتراق الداخلي', forbiddenWords: ['السيارة', 'الوقود', 'البنزين', 'المكابس'], difficulty: 'خبير' },
-    { word: 'التطعيم (اللقاح)', forbiddenWords: ['المناعة', 'المرض', 'الإبرة', 'الوقاية'], difficulty: 'متوسط' },
+    { word: 'المصباح الكهربائي', forbiddenWords: [], difficulty: 'سهل' },
+    { word: 'الطائرة', forbiddenWords: [], difficulty: 'سهل' },
+    { word: 'الإنترنت', forbiddenWords: [], difficulty: 'سهل' },
+    { word: 'الغواصة', forbiddenWords: [], difficulty: 'صعب' },
+    { word: 'المطبعة', forbiddenWords: [], difficulty: 'متوسط' },
+    { word: 'الأشعة السينية (X-Ray)', forbiddenWords: [], difficulty: 'متوسط' },
+    { word: 'الذكاء الاصطناعي', forbiddenWords: [], difficulty: 'متوسط' },
+    { word: 'الديناميت', forbiddenWords: [], difficulty: 'صعب' },
+    { word: 'القطار البخاري', forbiddenWords: [], difficulty: 'صعب جداً' },
+    { word: 'الصاروخ الفضائي', forbiddenWords: [], difficulty: 'خبير' },
+    { word: 'التطعيم (اللقاح)', forbiddenWords: [], difficulty: 'متوسط' },
   ],
 };
 
 interface PersistedDatabase {
+  mechanicsVersion?: string;
   settings: WalaKalimaSettings;
   words: WalaKalimaWordEntry[];
 }
@@ -192,6 +194,7 @@ interface InternalSessionRecord {
   contentTypeLabel: string;
   status: WalaKalimaSessionStatus;
   timerSeconds: number;
+  maxSkips: number;
   pointsPerCorrectWord: number;
   startedAt: number | null;
   expiresAt: number | null;
@@ -200,13 +203,28 @@ interface InternalSessionRecord {
   currentIndex: number;
   correctCount: number;
   skippedCount: number;
-  endReason: 'time_up' | 'completed_all' | 'player_finished' | 'host_ended' | null;
+  endReason: WalaKalimaEndReason;
   timeoutHandle: NodeJS.Timeout | null;
   sseClients: Set<Response>;
 }
 
 const DATA_DIR = path.resolve(process.cwd(), '.data');
 const DB_FILE = path.join(DATA_DIR, 'wala-kalima-db.json');
+const CHARADES_MECHANICS_VERSION = 'charades_v1';
+
+// Seed entries specifically upgraded from abstract trivia into silent-acting Charades concepts
+const CHARADES_SEED_UPGRADES = new Set<string>([
+  'wk-seed-general_info-2',
+  'wk-seed-general_info-3',
+  'wk-seed-general_info-4',
+  'wk-seed-general_info-7',
+  'wk-seed-general_info-8',
+  'wk-seed-general_info-9',
+  'wk-seed-general_info-11',
+  'wk-seed-inventions_science-4',
+  'wk-seed-inventions_science-9',
+  'wk-seed-inventions_science-10',
+]);
 
 function buildInitialWords(): WalaKalimaWordEntry[] {
   const nowIso = new Date().toISOString();
@@ -217,7 +235,7 @@ function buildInitialWords(): WalaKalimaWordEntry[] {
       entries.push({
         id: `wk-seed-${ct.id}-${idx + 1}`,
         word: item.word,
-        forbiddenWords: item.forbiddenWords,
+        forbiddenWords: [],
         contentType: ct.id,
         difficulty: item.difficulty,
         isActive: true,
@@ -243,10 +261,18 @@ function sanitizeSettings(raw: Partial<WalaKalimaSettings> | undefined): WalaKal
     15,
     Math.min(300, Math.round(Number(raw?.timerSeconds) || DEFAULT_WALA_KALIMA_SETTINGS.timerSeconds))
   );
-  const wordsPerRound = Math.max(
-    1,
-    Math.min(20, Math.round(Number(raw?.wordsPerRound) || DEFAULT_WALA_KALIMA_SETTINGS.wordsPerRound))
+  const maxSkips = Math.max(
+    0,
+    Math.min(
+      10,
+      Math.round(
+        raw?.maxSkips !== undefined && raw?.maxSkips !== null
+          ? Number(raw.maxSkips)
+          : DEFAULT_WALA_KALIMA_SETTINGS.maxSkips
+      )
+    )
   );
+  const wordsPerRound = Math.max(1, maxSkips + 1);
   const pointsPerCorrectWord = Math.max(
     10,
     Math.min(1000, Math.round(Number(raw?.pointsPerCorrectWord) || DEFAULT_WALA_KALIMA_SETTINGS.pointsPerCorrectWord))
@@ -255,6 +281,7 @@ function sanitizeSettings(raw: Partial<WalaKalimaSettings> | undefined): WalaKal
   return {
     enabled: raw?.enabled !== undefined ? Boolean(raw.enabled) : true,
     timerSeconds,
+    maxSkips,
     wordsPerRound,
     pointsPerCorrectWord,
     enabledContentTypes:
@@ -270,7 +297,56 @@ function loadDatabase(): PersistedDatabase {
     if (fs.existsSync(DB_FILE)) {
       const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as Partial<PersistedDatabase>;
       if (parsed && Array.isArray(parsed.words) && parsed.words.length > 0) {
+        if (parsed.mechanicsVersion !== CHARADES_MECHANICS_VERSION) {
+          // One-time seamless migration from legacy verbal mode to Charades (45s, actable words, skip cap)
+          const seedMap = new Map<string, WalaKalimaWordEntry>(
+            buildInitialWords().map((w) => [w.id, w])
+          );
+          const upgradedWords: WalaKalimaWordEntry[] = parsed.words.map(
+            (existing): WalaKalimaWordEntry => {
+              if (CHARADES_SEED_UPGRADES.has(existing.id)) {
+                const replacement = seedMap.get(existing.id);
+                if (replacement) {
+                  return {
+                    ...replacement,
+                    isActive: existing.isActive,
+                    updatedAt: new Date().toISOString(),
+                  };
+                }
+              }
+              return {
+                ...existing,
+                forbiddenWords: [],
+              };
+            }
+          );
+          // Ensure any newly introduced seed IDs are present without deleting custom words
+          const existingIds = new Set(upgradedWords.map((w) => w.id));
+          for (const seedWord of seedMap.values()) {
+            if (!existingIds.has(seedWord.id)) {
+              upgradedWords.push(seedWord);
+            }
+          }
+          const prevTimer = parsed.settings?.timerSeconds;
+          const migrated: PersistedDatabase = {
+            mechanicsVersion: CHARADES_MECHANICS_VERSION,
+            settings: sanitizeSettings({
+              ...parsed.settings,
+              timerSeconds: !prevTimer || prevTimer === 60 ? 45 : prevTimer,
+              maxSkips:
+                typeof parsed.settings?.maxSkips === 'number'
+                  ? parsed.settings.maxSkips
+                  : DEFAULT_WALA_KALIMA_SETTINGS.maxSkips,
+              updatedAt: new Date().toISOString(),
+            }),
+            words: upgradedWords,
+          };
+          saveDatabase(migrated);
+          return migrated;
+        }
+
         return {
+          mechanicsVersion: CHARADES_MECHANICS_VERSION,
           settings: sanitizeSettings(parsed.settings),
           words: parsed.words,
         };
@@ -281,6 +357,7 @@ function loadDatabase(): PersistedDatabase {
   }
 
   const initial: PersistedDatabase = {
+    mechanicsVersion: CHARADES_MECHANICS_VERSION,
     settings: { ...DEFAULT_WALA_KALIMA_SETTINGS, updatedAt: new Date().toISOString() },
     words: buildInitialWords(),
   };
@@ -334,8 +411,14 @@ function getRemainingSeconds(session: InternalSessionRecord): number {
   return Math.max(0, Math.ceil((session.expiresAt - Date.now()) / 1000));
 }
 
+function getSessionRemainingSkips(session: InternalSessionRecord): number {
+  const skipsBySetting = Math.max(0, session.maxSkips - session.skippedCount);
+  const skipsByPool = Math.max(0, session.words.length - 1 - session.currentIndex);
+  return Math.max(0, Math.min(skipsBySetting, skipsByPool));
+}
+
 function toPublicStatus(session: InternalSessionRecord): WalaKalimaSessionPublicStatus {
-  // SECURITY INVARIANT: Never expose `words`, `word`, or `forbiddenWords` here.
+  // SECURITY INVARIANT: Never expose `words`, `word`, `activeWord`, or `forbiddenWords` here.
   return {
     sessionId: session.sessionId,
     matchId: session.matchId,
@@ -354,6 +437,8 @@ function toPublicStatus(session: InternalSessionRecord): WalaKalimaSessionPublic
     currentIndex: Math.min(session.currentIndex, session.words.length),
     correctCount: session.correctCount,
     skippedCount: session.skippedCount,
+    maxSkips: session.maxSkips,
+    remainingSkips: getSessionRemainingSkips(session),
     pointsPerCorrectWord: session.pointsPerCorrectWord,
     earnedPoints: session.correctCount * session.pointsPerCorrectWord,
     endReason: session.endReason,
@@ -387,13 +472,14 @@ function toPlayerSessionState(
     currentIndex: Math.min(session.currentIndex, session.words.length),
     correctCount: session.correctCount,
     skippedCount: session.skippedCount,
+    maxSkips: session.maxSkips,
+    remainingSkips: getSessionRemainingSkips(session),
     pointsPerCorrectWord: session.pointsPerCorrectWord,
     earnedPoints: session.correctCount * session.pointsPerCorrectWord,
     endReason: session.endReason,
     activeWord: activeEntry
       ? {
           word: activeEntry.word,
-          forbiddenWords: activeEntry.forbiddenWords,
           contentType: activeEntry.contentType,
           contentTypeLabel: session.contentTypeLabel,
           difficulty: activeEntry.difficulty,
@@ -503,7 +589,7 @@ export function updateAdminWalaKalimaSettings(
 
 export function createAdminWalaKalimaWord(input: {
   word: string;
-  forbiddenWords: string[];
+  forbiddenWords?: string[];
   contentType: WalaKalimaContentTypeId;
   difficulty: DifficultyLevel;
   isActive?: boolean;
@@ -546,7 +632,7 @@ export function updateAdminWalaKalimaWord(
   wordId: string,
   input: Partial<{
     word: string;
-    forbiddenWords: string[];
+    forbiddenWords?: string[];
     contentType: WalaKalimaContentTypeId;
     difficulty: DifficultyLevel;
     isActive: boolean;
@@ -568,7 +654,7 @@ export function updateAdminWalaKalimaWord(
           .map((w) => String(w || '').trim().slice(0, 60))
           .filter(Boolean)
           .slice(0, 8)
-      : existing.forbiddenWords;
+      : existing.forbiddenWords || [];
   const validCt = input.contentType
     ? WALA_KALIMA_CONTENT_TYPES.find((c) => c.id === input.contentType)?.id
     : existing.contentType;
@@ -665,9 +751,10 @@ export function createWalaKalimaSession(params: {
     throw new Error('لا توجد كلمات نشطة متاحة في بنك «ولا كلمة» حالياً.');
   }
 
+  const neededWordsCount = Math.max(1, store.settings.maxSkips + 1);
   const matchHistory = matchUsedWordIds.get(matchId)?.ids || new Set<string>();
   const freshPool = typePool.filter((w) => !matchHistory.has(w.id));
-  const candidatePool = freshPool.length >= store.settings.wordsPerRound ? freshPool : typePool;
+  const candidatePool = freshPool.length >= neededWordsCount ? freshPool : typePool;
 
   // Prioritize preferred difficulty first, then fill with shuffled remaining candidates
   let prioritized: WalaKalimaWordEntry[] = [];
@@ -683,11 +770,13 @@ export function createWalaKalimaSession(params: {
     prioritized = shuffleArray(candidatePool);
   }
 
-  const chosenWords = prioritized.slice(0, store.settings.wordsPerRound);
+  const chosenWords = prioritized.slice(0, neededWordsCount);
 
-  // Record chosen words against matchId to avoid repeating within the same match
+  // Record only the initial drawn word right away; skipped reserve words become used when shown
   const nextSet = new Set(matchHistory);
-  chosenWords.forEach((w) => nextSet.add(w.id));
+  if (chosenWords[0]) {
+    nextSet.add(chosenWords[0].id);
+  }
   matchUsedWordIds.set(matchId, { ids: nextSet, updatedAt: Date.now() });
 
   const sessionId = `wk_${crypto.randomBytes(6).toString('hex')}`;
@@ -709,6 +798,7 @@ export function createWalaKalimaSession(params: {
     contentTypeLabel: ctMeta.label,
     status: 'waiting_scan',
     timerSeconds: store.settings.timerSeconds,
+    maxSkips: Math.min(store.settings.maxSkips, Math.max(0, chosenWords.length - 1)),
     pointsPerCorrectWord: store.settings.pointsPerCorrectWord,
     startedAt: null,
     expiresAt: null,
@@ -779,7 +869,7 @@ export function attachHostStream(
 export function performHostSessionAction(
   sessionId: string,
   hostSecret: string,
-  action: 'finish' | 'cancel'
+  action: 'correct' | 'finish' | 'cancel'
 ): WalaKalimaSessionPublicStatus {
   const session = activeSessions.get(sessionId);
   if (!session) {
@@ -791,6 +881,16 @@ export function performHostSessionAction(
   enforceDeadlineIfExpired(session);
   if (action === 'cancel') {
     finalizeSession(session, 'cancelled', 'host_ended');
+  } else if (action === 'correct') {
+    if (session.status === 'active') {
+      session.correctCount = 1;
+      finalizeSession(session, 'finished', 'correct_guess');
+    } else if (session.status === 'waiting_scan') {
+      throw Object.assign(
+        new Error('لا يمكن اعتماد التخمين قبل مسح رمز QR وبدء الجولة.'),
+        { status: 400 }
+      );
+    }
   } else {
     finalizeSession(session, 'finished', 'host_ended');
   }
@@ -931,26 +1031,39 @@ export function performPlayerSessionAction(params: {
   }
 
   if (params.action === 'correct') {
-    session.correctCount += 1;
-    session.currentIndex += 1;
-  } else if (params.action === 'skip') {
-    session.skippedCount += 1;
-    session.currentIndex += 1;
-  }
-
-  if (session.currentIndex >= session.words.length) {
-    const summary = toPlayerSessionState(session, '');
-    finalizeSession(session, 'finished', 'completed_all');
+    // Charades rule: Correct guess immediately ends the round and awards round points!
+    session.correctCount = 1;
+    const summarySnapshot = toPlayerSessionState(session, '');
+    finalizeSession(session, 'finished', 'correct_guess');
     return {
-      ...summary,
+      ...summarySnapshot,
       status: 'finished',
       remainingSeconds: 0,
-      correctCount: session.correctCount,
+      correctCount: 1,
       skippedCount: session.skippedCount,
-      earnedPoints: session.correctCount * session.pointsPerCorrectWord,
-      endReason: 'completed_all',
+      remainingSkips: getSessionRemainingSkips(session),
+      earnedPoints: session.pointsPerCorrectWord,
+      endReason: 'correct_guess',
       activeWord: null,
     };
+  }
+
+  if (params.action === 'skip') {
+    if (getSessionRemainingSkips(session) <= 0 || session.currentIndex + 1 >= session.words.length) {
+      throw Object.assign(
+        new Error('استُنفدت محاولات التخطي المسموح بها في هذه الجولة.'),
+        { status: 400 }
+      );
+    }
+    session.skippedCount += 1;
+    session.currentIndex += 1;
+    const revealedSkipWord = session.words[session.currentIndex];
+    if (revealedSkipWord) {
+      const prevSet = matchUsedWordIds.get(session.matchId)?.ids || new Set<string>();
+      const nextSet = new Set(prevSet);
+      nextSet.add(revealedSkipWord.id);
+      matchUsedWordIds.set(session.matchId, { ids: nextSet, updatedAt: Date.now() });
+    }
   }
 
   broadcastToHostStreams(session);

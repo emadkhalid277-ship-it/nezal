@@ -72,9 +72,15 @@ export interface ActiveQuestionState {
     status: 'waiting_scan' | 'active' | 'finished' | 'expired' | 'cancelled';
     correctCount: number;
     skippedCount: number;
+    maxSkips?: number;
+    remainingSkips?: number;
+    pointsPerCorrectWord?: number;
     earnedPoints: number;
     totalWords: number;
     timerSeconds: number;
+    startedAt?: number | null;
+    expiresAt?: number | null;
+    endReason?: 'correct_guess' | 'time_up' | 'completed_all' | 'player_finished' | 'host_ended' | null;
   };
 }
 

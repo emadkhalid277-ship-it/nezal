@@ -87,8 +87,18 @@ const SUBCATEGORIES_COLLECTION = 'subcategories';
 const MAIN_CATEGORIES_COLLECTION = 'mainCategories';
 const SETTINGS_COLLECTION = 'settings';
 const CONTACT_DOC_ID = 'contact';
-export const DELETED_BUILTIN_MANIFEST_DOC_ID = '__deleted_builtin_manifest__';
+export const DELETED_BUILTIN_MANIFEST_DOC_ID = 'deleted_builtin_manifest_v1';
 const FIRESTORE_BATCH_LIMIT = 450;
+
+function isDeletedBuiltinManifestDoc(
+  id: string,
+  data?: Record<string, unknown>
+): boolean {
+  return (
+    id === DELETED_BUILTIN_MANIFEST_DOC_ID ||
+    data?.status === 'manifest'
+  );
+}
 
 // Explicitly removed Movies & TV Shows references so they never appear
 export const REMOVED_MAIN_CATEGORY_IDS = new Set(['main-movies-series']);
@@ -376,6 +386,19 @@ const PRIMARY_CATEGORY_ALIASES: [string, string][] = [
   ['كرة السلة', 'الرياضات الأولمبية والعالمية'],
 ];
 
+const NORMALIZED_ALIAS_PARTNERS = new Map<string, string[]>();
+for (const [a, b] of PRIMARY_CATEGORY_ALIASES) {
+  const aNorm = normalizeArabicCategoryName(a);
+  const bNorm = normalizeArabicCategoryName(b);
+  const listA = NORMALIZED_ALIAS_PARTNERS.get(aNorm) || [];
+  listA.push(bNorm);
+  NORMALIZED_ALIAS_PARTNERS.set(aNorm, listA);
+
+  const listB = NORMALIZED_ALIAS_PARTNERS.get(bNorm) || [];
+  listB.push(aNorm);
+  NORMALIZED_ALIAS_PARTNERS.set(bNorm, listB);
+}
+
 export function matchesSubcategoryQuestion(
   questionCategory: string,
   targetSubcategory: string,
@@ -398,18 +421,73 @@ export function matchesSubcategoryQuestion(
   const tNorm = normalizeArabicCategoryName(tRaw);
   if (qNorm === tNorm) return true;
 
-  for (const [a, b] of PRIMARY_CATEGORY_ALIASES) {
-    const aNorm = normalizeArabicCategoryName(a);
-    const bNorm = normalizeArabicCategoryName(b);
-    if (
-      (qNorm === aNorm && tNorm === bNorm) ||
-      (qNorm === bNorm && tNorm === aNorm)
-    ) {
-      return true;
-    }
+  const partners = NORMALIZED_ALIAS_PARTNERS.get(qNorm);
+  if (partners && partners.includes(tNorm)) {
+    return true;
   }
 
   return false;
+}
+
+export function computeQuestionCountsBySubcategory(
+  questions: TriviaQuestion[],
+  subcategories: SubcategoryItem[]
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (subcategories.length === 0) return counts;
+
+  const bySubId = new Map<string, string>();
+  const byNormName = new Map<string, string[]>();
+
+  for (const sub of subcategories) {
+    counts.set(sub.id, 0);
+    bySubId.set(sub.id, sub.id);
+
+    const tRaw = (sub.name || '').trim();
+    if (tRaw) {
+      const tNorm = normalizeArabicCategoryName(tRaw);
+      const list = byNormName.get(tNorm) || [];
+      list.push(sub.id);
+      byNormName.set(tNorm, list);
+    }
+  }
+
+  for (const q of questions) {
+    const matchedSubIds = new Set<string>();
+
+    if (q.subcategoryId && bySubId.has(q.subcategoryId)) {
+      matchedSubIds.add(q.subcategoryId);
+    }
+
+    const qRaw = (q.category || '').trim();
+    if (qRaw) {
+      const qNorm = normalizeArabicCategoryName(qRaw);
+      const directMatches = byNormName.get(qNorm);
+      if (directMatches) {
+        for (const subId of directMatches) {
+          matchedSubIds.add(subId);
+        }
+      }
+
+      const aliasPartners = NORMALIZED_ALIAS_PARTNERS.get(qNorm);
+      if (aliasPartners) {
+        for (const partnerNorm of aliasPartners) {
+          const aliasMatches = byNormName.get(partnerNorm);
+          if (aliasMatches) {
+            for (const subId of aliasMatches) {
+              matchedSubIds.add(subId);
+            }
+          }
+        }
+      }
+    }
+
+    for (const subId of matchedSubIds) {
+      counts.set(subId, (counts.get(subId) ?? 0) + 1);
+    }
+  }
+
+  return counts;
 }
 
 // Merge Firestore subcategories with DEFAULT_SUBCATEGORIES while respecting deleted & removed items
@@ -1413,10 +1491,11 @@ export async function fetchApprovedQuestions(
     );
     const snap = await getDocs(q);
     const result = snap.docs
+      .filter((d) => !isDeletedBuiltinManifestDoc(d.id, d.data()))
       .map((d) => mapDocToQuestion(d.id, d.data()))
       .filter(
         (item) =>
-          item.id !== DELETED_BUILTIN_MANIFEST_DOC_ID &&
+          !isDeletedBuiltinManifestDoc(item.id) &&
           item.status !== 'rejected' &&
           !REMOVED_SUBCATEGORY_NAMES.has(item.category)
       );
@@ -1440,7 +1519,7 @@ export async function fetchAllQuestionsForAdmin(
   try {
     const snap = await getDocs(collection(db, QUESTIONS_COLLECTION));
     const result = snap.docs
-      .filter((d) => d.id !== DELETED_BUILTIN_MANIFEST_DOC_ID)
+      .filter((d) => !isDeletedBuiltinManifestDoc(d.id, d.data()))
       .map((d) => mapDocToQuestion(d.id, d.data()))
       .filter((item) => !REMOVED_SUBCATEGORY_NAMES.has(item.category));
     serviceCache.set('admin_questions', result);
@@ -1587,6 +1666,7 @@ export async function fetchQuestionsForSubcategories(
       );
       const snap = await getDocs(q);
       snap.docs.forEach((d) => {
+        if (isDeletedBuiltinManifestDoc(d.id, d.data())) return;
         const item = mapDocToQuestion(d.id, d.data());
         if (item.status !== 'rejected') {
           results.push(item);
@@ -2154,16 +2234,27 @@ export async function deleteQuestionFromFirestore(
     await deleteDoc(doc(db, QUESTIONS_COLLECTION, cleanId));
     const builtinIds = await getAllBuiltinQuestionIdsSet();
     if (builtinIds.has(cleanId)) {
-      await setDoc(
-        doc(db, QUESTIONS_COLLECTION, DELETED_BUILTIN_MANIFEST_DOC_ID),
-        {
+      const manifestRef = doc(
+        db,
+        QUESTIONS_COLLECTION,
+        DELETED_BUILTIN_MANIFEST_DOC_ID
+      );
+      const manifestSnap = await getDoc(manifestRef);
+      if (manifestSnap.exists()) {
+        await updateDoc(manifestRef, {
           id: DELETED_BUILTIN_MANIFEST_DOC_ID,
           status: 'manifest',
           deletedIds: arrayUnion(cleanId),
           updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+        });
+      } else {
+        await setDoc(manifestRef, {
+          id: DELETED_BUILTIN_MANIFEST_DOC_ID,
+          status: 'manifest',
+          deletedIds: [cleanId],
+          updatedAt: serverTimestamp(),
+        });
+      }
     }
     serviceCache.invalidate('approved_questions');
     serviceCache.invalidate('admin_questions');
@@ -2248,12 +2339,21 @@ export async function bulkDeleteFromFirestore(
       const mergedDeletedIds = Array.from(
         new Set([...existingDeleted, ...builtinToSuppress])
       );
-      await setDoc(manifestRef, {
-        id: DELETED_BUILTIN_MANIFEST_DOC_ID,
-        status: 'manifest',
-        deletedIds: mergedDeletedIds,
-        updatedAt: serverTimestamp(),
-      });
+      if (manifestSnap.exists()) {
+        await updateDoc(manifestRef, {
+          id: DELETED_BUILTIN_MANIFEST_DOC_ID,
+          status: 'manifest',
+          deletedIds: mergedDeletedIds,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(manifestRef, {
+          id: DELETED_BUILTIN_MANIFEST_DOC_ID,
+          status: 'manifest',
+          deletedIds: mergedDeletedIds,
+          updatedAt: serverTimestamp(),
+        });
+      }
     }
 
     serviceCache.invalidate('approved_questions');
@@ -2444,6 +2544,7 @@ export async function convertExistingQuestionsToDirectInFirestore(): Promise<{
 
     snap.docs.forEach((qDoc) => {
       const data = qDoc.data();
+      if (isDeletedBuiltinManifestDoc(qDoc.id, data)) return;
       const qText = String(data.questionText || '').trim();
       const cAns = String(data.correctAnswer || '').trim();
       const currentType = String(data.questionType || '');

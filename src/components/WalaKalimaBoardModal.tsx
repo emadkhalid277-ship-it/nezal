@@ -3,7 +3,9 @@ import QRCode from 'qrcode';
 import {
   CheckCircle2,
   Clock,
+  Hand,
   Lock,
+  MicOff,
   QrCode,
   ShieldCheck,
   SkipForward,
@@ -16,6 +18,7 @@ import {
 import { DifficultyLevel } from '../types/game';
 import {
   WalaKalimaCreateSessionResponse,
+  WalaKalimaEndReason,
   WalaKalimaSessionPublicStatus,
   WalaKalimaSettings,
   resolveWalaKalimaContentType,
@@ -27,6 +30,7 @@ import {
   subscribeWalaKalimaHostStream,
 } from '../services/walaKalimaService';
 import { soundFX } from '../services/soundEffects';
+import { CircularCountdownTimer } from './CircularCountdownTimer';
 
 interface WalaKalimaBoardModalProps {
   matchId: string;
@@ -42,7 +46,7 @@ interface WalaKalimaBoardModalProps {
   };
   canControl: boolean;
   settings: WalaKalimaSettings;
-  /** Optional shared session state when opened by non-host players in Online Mode */
+  /** Optional shared public session state when opened by non-host players in Online Mode (never contains words) */
   sharedOnlineSession?: {
     sessionId: string;
     qrPath?: string;
@@ -52,9 +56,14 @@ interface WalaKalimaBoardModalProps {
     status: WalaKalimaSessionPublicStatus['status'];
     correctCount: number;
     skippedCount: number;
+    maxSkips?: number;
+    pointsPerCorrectWord?: number;
     earnedPoints: number;
     totalWords: number;
     timerSeconds: number;
+    startedAt?: number | null;
+    expiresAt?: number | null;
+    endReason?: WalaKalimaEndReason;
   } | null;
   onOnlineSessionCreated?: (session: WalaKalimaCreateSessionResponse) => Promise<void> | void;
   onOnlineSessionStatusSync?: (status: WalaKalimaSessionPublicStatus) => Promise<void> | void;
@@ -100,6 +109,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
     rosterPlayers[0] ? '' : `لاعب ${activeTeam.name}`
   );
   const [creating, setCreating] = useState(false);
+  const [hostBusy, setHostBusy] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -159,13 +169,13 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
         if (nextStatus.status === 'active') {
           soundFX.playTileOpen();
         } else if (nextStatus.status === 'finished') {
-          if (nextStatus.correctCount > 0) soundFX.playCorrect();
+          if (nextStatus.earnedPoints > 0) soundFX.playCorrect();
           else soundFX.playTimeUp();
         }
         lastSoundStatusRef.current = nextStatus.status;
       }
 
-      const syncSig = `${nextStatus.status}_${nextStatus.correctCount}_${nextStatus.skippedCount}`;
+      const syncSig = `${nextStatus.status}_${nextStatus.correctCount}_${nextStatus.skippedCount}_${nextStatus.endReason || ''}`;
       if (onOnlineSessionStatusSync && lastSyncedPhaseRef.current !== syncSig) {
         lastSyncedPhaseRef.current = syncSig;
         void onOnlineSessionStatusSync(nextStatus);
@@ -184,7 +194,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
         .catch(() => {
           // ignore transient poll failures
         });
-    }, 2500);
+    }, 1500);
 
     return () => {
       unsubscribeStream();
@@ -192,26 +202,27 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
     };
   }, [hostSession?.sessionId, hostSession?.hostSecret, onOnlineSessionStatusSync]);
 
+  const syncedExpiresAt = effectiveStatus?.expiresAt ?? sharedOnlineSession?.expiresAt ?? null;
+  const activeStatusValue = effectiveStatus?.status || sharedOnlineSession?.status || null;
+
   // Smooth local countdown synced to server expiresAt while round is active
   useEffect(() => {
-    if (!effectiveStatus || effectiveStatus.status !== 'active' || !effectiveStatus.expiresAt) {
+    if (activeStatusValue !== 'active' || !syncedExpiresAt) {
       return;
     }
     const updateClock = () => {
-      const remaining = Math.max(
-        0,
-        Math.ceil(((effectiveStatus.expiresAt || 0) - Date.now()) / 1000)
-      );
+      const remaining = Math.max(0, Math.ceil((syncedExpiresAt - Date.now()) / 1000));
       setDisplaySecondsLeft(remaining);
     };
     updateClock();
-    const timer = window.setInterval(updateClock, 400);
+    const timer = window.setInterval(updateClock, 300);
     return () => window.clearInterval(timer);
-  }, [effectiveStatus?.status, effectiveStatus?.expiresAt]);
+  }, [activeStatusValue, syncedExpiresAt]);
 
   const handleStartRoundAndGenerateQr = async () => {
     if (!canControl || creating) return;
-    const chosenName = (selectedPlayerName || customPlayerName || '').trim() || `لاعب ${activeTeam.name}`;
+    const chosenName =
+      (selectedPlayerName || customPlayerName || '').trim() || `لاعب ${activeTeam.name}`;
     setCreating(true);
     setErrorMsg(null);
     try {
@@ -238,20 +249,26 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
     }
   };
 
-  const handleForceFinish = async () => {
-    if (!hostSession || !canControl) return;
+  const handleHostAction = async (action: 'correct' | 'finish') => {
+    if (!hostSession || !canControl || hostBusy) return;
+    setHostBusy(true);
+    setErrorMsg(null);
     try {
       const updated = await hostActionWalaKalimaRound(
         hostSession.sessionId,
         hostSession.hostSecret,
-        'finish'
+        action
       );
+      if (updated.earnedPoints > 0) soundFX.playCorrect();
+      else soundFX.playTimeUp();
       setLiveStatus(updated);
       if (onOnlineSessionStatusSync) {
         await onOnlineSessionStatusSync(updated);
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'تعذّر إنهاء الجولة.');
+      setErrorMsg(err instanceof Error ? err.message : 'تعذّر تحديث حالة الجولة.');
+    } finally {
+      setHostBusy(false);
     }
   };
 
@@ -288,15 +305,23 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
     }
   };
 
-  const activeStatusValue = effectiveStatus?.status || sharedOnlineSession?.status || null;
   const activeCorrectCount =
     effectiveStatus?.correctCount ?? sharedOnlineSession?.correctCount ?? 0;
   const activeSkippedCount =
     effectiveStatus?.skippedCount ?? sharedOnlineSession?.skippedCount ?? 0;
+  const activeMaxSkips =
+    effectiveStatus?.maxSkips ?? sharedOnlineSession?.maxSkips ?? settings.maxSkips ?? 3;
+  const activePointsPerWord =
+    effectiveStatus?.pointsPerCorrectWord ??
+    sharedOnlineSession?.pointsPerCorrectWord ??
+    settings.pointsPerCorrectWord;
   const activeEarnedPoints =
     effectiveStatus?.earnedPoints ?? sharedOnlineSession?.earnedPoints ?? 0;
-  const activeTotalWords =
-    effectiveStatus?.totalWords ?? sharedOnlineSession?.totalWords ?? settings.wordsPerRound;
+  const activeTimerSeconds =
+    effectiveStatus?.timerSeconds ?? sharedOnlineSession?.timerSeconds ?? settings.timerSeconds;
+  const activeEndReason = effectiveStatus?.endReason ?? sharedOnlineSession?.endReason ?? null;
+  const activePlayerName =
+    effectiveStatus?.playerName || sharedOnlineSession?.playerName || `لاعب ${activeTeam.name}`;
 
   return (
     <div
@@ -307,17 +332,15 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
         {/* Top Modal Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[#E5E8DD] pb-4">
           <div className="space-y-1.5 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
               <span
-                className="text-xs font-bold px-3 py-1 rounded-lg text-white inline-flex items-center gap-1.5"
+                className="px-3 py-1 rounded-lg text-white inline-flex items-center gap-1.5"
                 style={{ backgroundColor: activeTeam.color || '#14543D' }}
               >
                 <Users className="w-3.5 h-3.5" />
                 <span>{activeTeam.name}</span>
               </span>
-              <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-[#FEF2EC] text-[#D9602B] border border-[#F07842]/30">
-                ولا كلمة · QR
-              </span>
+              <span className="text-[#D9602B]">ولا كلمة · تمثيل صامت (QR)</span>
             </div>
             <h3 className="font-display text-lg sm:text-xl font-bold text-[#252824]">
               {contentMeta.label}
@@ -342,16 +365,16 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
           </div>
         )}
 
-        {/* PHASE 1: PLAYER SELECTION BEFORE GENERATING QR */}
+        {/* PHASE 1: ACTOR SELECTION BEFORE GENERATING QR */}
         {!activeStatusValue && canControl && (
           <div className="space-y-5">
             <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-bold text-[#14543D]">
                 <UserCheck className="w-4 h-4 text-[#F07842]" />
-                <span>اختاروا اللاعب اللي بيشرح لفريق {activeTeam.name}</span>
+                <span>اختاروا الممثل لفريق {activeTeam.name}</span>
               </div>
-              <p className="text-xs text-[#777B73] leading-relaxed">
-                بيظهر رمز QR على الشاشة، يمسحه اللاعب بجواله لتظهر له الكلمة السرية والكلمات الممنوعة وحده فقط.
+              <p className="text-xs text-[#52574E] leading-relaxed">
+                يمسح الممثل رمز QR بهاتفه لتظهر له الكلمة السرية وحده فقط، ثم يمثلها بالحركات والإشارات وتعبيرات الوجه دون كلام خلال {settings.timerSeconds} ثانية.
               </p>
 
               {rosterPlayers.length > 0 && (
@@ -383,7 +406,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                 <label className="block text-xs font-bold text-[#52574E]">
                   {rosterPlayers.length > 0
                     ? 'أو اكتب اسم لاعب آخر من الفريق:'
-                    : 'اسم اللاعب المشارك:'}
+                    : 'اسم اللاعب الممثل:'}
                 </label>
                 <input
                   type="text"
@@ -398,22 +421,22 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
               </div>
             </div>
 
-            {/* Round Parameters Summary (No pills, clean grid) */}
+            {/* Round Parameters Summary */}
             <div className="grid grid-cols-3 gap-2.5 text-center">
               <div className="rounded-2xl bg-[#EAF2EE] border border-[#14543D]/15 p-3">
-                <div className="text-[11px] font-bold text-[#777B73]">مدة الجولة</div>
+                <div className="text-[11px] font-bold text-[#777B73]">مدة التمثيل</div>
                 <div className="font-mono text-lg font-bold text-[#14543D] tabular-nums mt-0.5">
                   {settings.timerSeconds} ث
                 </div>
               </div>
               <div className="rounded-2xl bg-[#FEF2EC] border border-[#F07842]/25 p-3">
-                <div className="text-[11px] font-bold text-[#777B73]">عدد الكلمات</div>
+                <div className="text-[11px] font-bold text-[#777B73]">التخطي المتاح</div>
                 <div className="font-mono text-lg font-bold text-[#D9602B] tabular-nums mt-0.5">
-                  {settings.wordsPerRound}
+                  {settings.maxSkips ?? 3}
                 </div>
               </div>
               <div className="rounded-2xl bg-[#F3F5E9] border border-[#E5E8DD] p-3">
-                <div className="text-[11px] font-bold text-[#777B73]">نقاط الكلمة</div>
+                <div className="text-[11px] font-bold text-[#777B73]">نقاط الفوز</div>
                 <div className="font-mono text-lg font-bold text-[#14543D] tabular-nums mt-0.5">
                   +{settings.pointsPerCorrectWord}
                 </div>
@@ -428,7 +451,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                 className="flex-1 min-h-[48px] px-5 py-3 rounded-2xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all disabled:opacity-60"
               >
                 <QrCode className="w-5 h-5" />
-                <span>{creating ? 'جاري تجهيز الرمز...' : 'إظهار رمز QR للاعب'}</span>
+                <span>{creating ? 'جاري تجهيز الرمز...' : 'إظهار رمز QR للممثل'}</span>
               </button>
               <button
                 type="button"
@@ -444,9 +467,9 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
         {/* NON-HOST INITIAL WAITING SCREEN IN ONLINE MODE */}
         {!activeStatusValue && !canControl && (
           <div className="py-10 text-center space-y-3">
-            <QrCode className="w-10 h-10 text-[#F07842] mx-auto animate-pulse" />
+            <QrCode className="w-10 h-10 text-[#F07842] mx-auto" />
             <p className="text-sm font-bold text-[#252824]">
-              يقوم المضيف باختيار اللاعب وتجهيز رمز QR لجولة «ولا كلمة»...
+              يقوم المضيف باختيار الممثل وتجهيز رمز QR لجولة «ولا كلمة»...
             </p>
           </div>
         )}
@@ -457,13 +480,11 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
             <div className="bg-[#F3F5E9] border-2 border-dashed border-[#14543D]/35 rounded-3xl p-5 flex flex-col items-center gap-4">
               <div className="space-y-1">
                 <div className="text-xs font-bold text-[#14543D]">
-                  الدور للاعب:{' '}
-                  <span className="text-[#D9602B]">
-                    {effectiveStatus?.playerName || sharedOnlineSession?.playerName}
-                  </span>
+                  الدور للممثل:{' '}
+                  <span className="text-[#D9602B]">{activePlayerName}</span>
                 </div>
                 <p className="text-xs sm:text-sm font-bold text-[#252824]">
-                  امسح رمز QR بكاميرا جوالك لبدء الشرح فوراً
+                  امسح رمز QR بكاميرا جوالك لتظهر الكلمة السرية ويبدأ مؤقت الـ {activeTimerSeconds} ثانية
                 </p>
               </div>
 
@@ -483,7 +504,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
 
               <div className="flex items-center justify-center gap-2 text-xs font-bold text-[#14543D] bg-[#EAF2EE] px-4 py-2 rounded-xl border border-[#14543D]/15">
                 <ShieldCheck className="w-4 h-4 shrink-0" />
-                <span>الرمز مخصص لجوال واحد فقط ومرتبط بهذه الجولة، ولا تظهر الكلمة هنا</span>
+                <span>الرمز مخصص لجوال الممثل فقط — الكلمة السرية لا تظهر هنا إطلاقاً</span>
               </div>
             </div>
 
@@ -499,68 +520,91 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
           </div>
         )}
 
-        {/* PHASE 2B: ACTIVE EXPLAINING ROUND (SECRET WORD SHOWN ONLY ON PLAYER PHONE) */}
+        {/* PHASE 2B: ACTIVE CHARADES ROUND (SECRET WORD NEVER EXPOSED HERE) */}
         {activeStatusValue === 'active' && (
           <div className="space-y-5">
-            <div className="rounded-3xl bg-gradient-to-br from-[#14543D] to-[#0E3D2C] text-white p-5 sm:p-6 space-y-4 shadow-md">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#EAF2EE]">
-                  <Lock className="w-4 h-4 text-[#F07842]" />
-                  <span>الكلمة السرية ظاهرة على جوال {effectiveStatus?.playerName} فقط</span>
+            <div className="rounded-3xl bg-gradient-to-br from-[#14543D] to-[#0E3D2C] text-white p-5 sm:p-6 space-y-5 shadow-md">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-[#EAF2EE]">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-[#F07842] shrink-0" />
+                  <span>الكلمة السرية على جوال {activePlayerName} فقط</span>
                 </div>
-
-                <div
-                  className={`px-3 py-1.5 rounded-xl font-mono text-lg sm:text-xl font-bold tabular-nums flex items-center gap-1.5 ${
-                    displaySecondsLeft <= 10
-                      ? 'bg-[#F07842] text-white animate-pulse'
-                      : 'bg-white/15 text-white'
-                  }`}
-                >
-                  <Clock className="w-4 h-4" />
-                  <span>{displaySecondsLeft} ث</span>
-                </div>
+                <span className="text-[#86EFAC]">التمثيل الصامت جارٍ</span>
               </div>
 
-              <div className="text-center py-2 space-y-1.5">
-                <div className="text-xs font-semibold text-[#EAF2EE]/80">
-                  حاولوا تخمين الإجابة من شرح اللاعب بدون الكلمات الممنوعة!
-                </div>
-                <div className="font-display text-xl sm:text-2xl font-bold text-white">
-                  التحدي جارٍ الآن...
+              {/* Animated Circular Countdown Timer Centerpiece */}
+              <div className="flex flex-col items-center justify-center gap-3 py-1">
+                <CircularCountdownTimer
+                  totalSeconds={activeTimerSeconds}
+                  remainingSeconds={displaySecondsLeft}
+                  expiresAt={syncedExpiresAt}
+                  isActive={true}
+                  size={140}
+                  strokeWidth={11}
+                  variant="dark"
+                />
+
+                <div className="text-center space-y-1">
+                  <div className="font-display text-lg sm:text-xl font-bold text-white">
+                    خمّن الكلمة من حركات {activePlayerName}!
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-semibold text-[#EAF2EE]/85">
+                    <span className="inline-flex items-center gap-1">
+                      <Hand className="w-3.5 h-3.5 text-[#86EFAC]" />
+                      <span>إشارات وحركات فقط</span>
+                    </span>
+                    <span>·</span>
+                    <span className="inline-flex items-center gap-1">
+                      <MicOff className="w-3.5 h-3.5 text-[#FDBA74]" />
+                      <span>دون كلام أو أصوات نهائياً</span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2.5 text-center pt-1">
                 <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
-                  <div className="text-[11px] text-[#EAF2EE]/80 font-semibold">إجابات صحيحة</div>
-                  <div className="font-mono text-2xl font-bold text-[#86EFAC] tabular-nums mt-0.5">
-                    {activeCorrectCount}
+                  <div className="text-[11px] text-[#EAF2EE]/80 font-semibold">حالة الجولة</div>
+                  <div className="font-sans text-sm sm:text-base font-bold text-[#86EFAC] mt-1">
+                    جارية الآن
                   </div>
                 </div>
                 <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
                   <div className="text-[11px] text-[#EAF2EE]/80 font-semibold">تخطي</div>
-                  <div className="font-mono text-2xl font-bold text-[#FDE68A] tabular-nums mt-0.5">
-                    {activeSkippedCount}
+                  <div className="font-mono text-xl font-bold text-[#FDE68A] tabular-nums mt-0.5">
+                    {activeSkippedCount} / {activeMaxSkips}
                   </div>
                 </div>
                 <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
-                  <div className="text-[11px] text-[#EAF2EE]/80 font-semibold">التقدم</div>
-                  <div className="font-mono text-2xl font-bold text-white tabular-nums mt-0.5">
-                    {Math.min((effectiveStatus?.currentIndex ?? 0) + 1, activeTotalWords)} /{' '}
-                    {activeTotalWords}
+                  <div className="text-[11px] text-[#EAF2EE]/80 font-semibold">جائزة الجولة</div>
+                  <div className="font-mono text-xl font-bold text-white tabular-nums mt-0.5">
+                    +{activePointsPerWord}
                   </div>
                 </div>
               </div>
             </div>
 
             {canControl && (
-              <button
-                type="button"
-                onClick={handleForceFinish}
-                className="w-full min-h-[48px] py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-sm cursor-pointer transition-colors"
-              >
-                إنهاء الجولة واحتساب النقاط الحالية
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  disabled={hostBusy}
+                  onClick={() => void handleHostAction('correct')}
+                  className="min-h-[48px] px-4 py-3 rounded-2xl bg-[#14543D] hover:bg-[#0E3D2C] text-white font-bold text-sm flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors disabled:opacity-60"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-[#86EFAC] shrink-0" />
+                  <span>تم التخمين الصحيح (+{activePointsPerWord})</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={hostBusy}
+                  onClick={() => void handleHostAction('finish')}
+                  className="min-h-[48px] px-4 py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-sm cursor-pointer transition-colors disabled:opacity-60"
+                >
+                  إنهاء الجولة (0 نقطة)
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -572,6 +616,8 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
               <div className="w-14 h-14 rounded-2xl bg-[#14543D] text-white flex items-center justify-center mx-auto shadow-sm">
                 {activeEarnedPoints > 0 ? (
                   <Trophy className="w-7 h-7 text-[#FDE68A]" />
+                ) : activeEndReason === 'time_up' ? (
+                  <Clock className="w-7 h-7 text-[#F07842]" />
                 ) : (
                   <Sparkles className="w-7 h-7 text-[#F07842]" />
                 )}
@@ -579,15 +625,14 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
 
               <div className="space-y-1">
                 <h4 className="font-display text-xl sm:text-2xl font-bold text-[#252824]">
-                  {effectiveStatus?.endReason === 'completed_all'
-                    ? 'انتهت كلمات الجولة!'
-                    : effectiveStatus?.endReason === 'time_up'
-                    ? 'انتهى الوقت!'
-                    : 'انتهت جولة ولا كلمة'}
+                  {activeEarnedPoints > 0
+                    ? 'إجابة صحيحة! انتهت الجولة بنجاح'
+                    : activeEndReason === 'time_up'
+                    ? 'انتهى الوقت! (0 نقطة)'
+                    : 'انتهت الجولة بدون نقاط'}
                 </h4>
                 <p className="text-xs sm:text-sm font-semibold text-[#52574E]">
-                  فريق {activeTeam.name} · اللاعب{' '}
-                  {effectiveStatus?.playerName || sharedOnlineSession?.playerName}
+                  فريق {activeTeam.name} · الممثل {activePlayerName}
                 </p>
               </div>
 
@@ -595,10 +640,10 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                 <div className="bg-white rounded-2xl border border-[#E5E8DD] p-3">
                   <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-[#14543D]">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>صحيحة</span>
+                    <span>النتيجة</span>
                   </div>
-                  <div className="font-mono text-2xl font-bold text-[#14543D] tabular-nums mt-1">
-                    {activeCorrectCount}
+                  <div className="font-sans text-sm sm:text-base font-bold text-[#14543D] mt-1.5">
+                    {activeCorrectCount > 0 ? 'تخمين صحيح' : 'لم يُخمن'}
                   </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-[#E5E8DD] p-3">
@@ -613,7 +658,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                 <div className="bg-[#EAF2EE] rounded-2xl border border-[#14543D]/30 p-3">
                   <div className="text-[11px] font-bold text-[#14543D]">النقاط</div>
                   <div className="font-mono text-2xl font-bold text-[#F07842] tabular-nums mt-1">
-                    +{activeEarnedPoints}
+                    {activeEarnedPoints > 0 ? `+${activeEarnedPoints}` : '0'}
                   </div>
                 </div>
               </div>
@@ -632,7 +677,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                     ? 'جاري تسجيل النقاط...'
                     : activeEarnedPoints > 0
                     ? `اعتماد +${activeEarnedPoints} نقطة لفريق ${activeTeam.name}`
-                    : 'إنهاء الدور بدون نقاط والانتقال للفريق التالي'}
+                    : 'تسجيل 0 نقطة والانتقال للفريق التالي'}
                 </span>
               </button>
             ) : (

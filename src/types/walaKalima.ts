@@ -31,83 +31,84 @@ export const WALA_KALIMA_CONTENT_TYPES: WalaKalimaContentTypeMeta[] = [
     label: 'لاعبو كرة القدم',
     subcategoryId: 'sub-wk-football-players',
     subcategoryName: 'لاعبو كرة القدم',
-    description: 'نجوم الملاعب العالمية والعربية والسعودية بدون ذكر أسمائهم أو أنديتهم الممنوعة.',
+    description: 'نجوم الملاعب العالمية والعربية والسعودية بالتمثيل الصامت والحركات الشهيرة بدون كلام.',
   },
   {
     id: 'anime_characters',
     label: 'شخصيات الأنمي',
     subcategoryId: 'sub-wk-anime-characters',
     subcategoryName: 'شخصيات الأنمي',
-    description: 'أشهر أبطال وخصوم عالم الأنمي عبر الإيماء والشرح الذكي دون الكلمات المحظورة.',
+    description: 'أشهر أبطال وخصوم عالم الأنمي عبر الحركات والإشارات والوضعيات الشهيرة دون كلام.',
   },
   {
     id: 'movies_series_characters',
     label: 'شخصيات الأفلام والمسلسلات',
     subcategoryId: 'sub-wk-movies-series-characters',
     subcategoryName: 'شخصيات الأفلام والمسلسلات',
-    description: 'شخصيات سينمائية وتلفزيونية أيقونية من الأعمال العربية والعالمية.',
+    description: 'شخصيات سينمائية وتلفزيونية أيقونية من الأعمال العربية والعالمية بالتمثيل الصامت.',
   },
   {
     id: 'general_info',
     label: 'معلومات عامة',
     subcategoryId: 'sub-wk-general-info',
     subcategoryName: 'معلومات عامة (ولا كلمة)',
-    description: 'مفاهيم ومعلومات ثقافية وحياتية متنوعة للتحدي السريع.',
+    description: 'مفاهيم ومواقف وظواهر متنوعة تُؤدى بالتمثيل الصامت خلال 45 ثانية.',
   },
   {
     id: 'countries_cities',
     label: 'دول ومدن',
     subcategoryId: 'sub-wk-countries-cities',
     subcategoryName: 'دول ومدن',
-    description: 'عواصم ودول ومعالم جغرافية مشهورة حول العالم.',
+    description: 'عواصم ودول ومعالم جغرافية مشهورة حول العالم عبر الإشارات والحركات فقط.',
   },
   {
     id: 'animals',
     label: 'حيوانات',
     subcategoryId: 'sub-wk-animals',
     subcategoryName: 'حيوانات',
-    description: 'كائنات برية وبحرية وطيور بطرق وصف وتمثيل مبتكرة.',
+    description: 'كائنات برية وبحرية وطيور بأسلوب التمثيل الصامت وتعبيرات الجسد.',
   },
   {
     id: 'islamic_figures',
     label: 'شخصيات إسلامية',
     subcategoryId: 'sub-wk-islamic-figures',
     subcategoryName: 'شخصيات إسلامية',
-    description: 'صحابة وعلماء وقادة بارزون في التاريخ الإسلامي بأسلوب هادف وممتع.',
+    description: 'صحابة وعلماء وقادة بارزون في التاريخ الإسلامي بأسلوب هادف وممتع دون كلام.',
   },
   {
     id: 'brands_companies',
     label: 'شركات وعلامات تجارية',
     subcategoryId: 'sub-wk-brands-companies',
     subcategoryName: 'شركات وعلامات تجارية',
-    description: 'علامات تجارية وشركات تقنية وعالمية ومحلية شهيرة.',
+    description: 'علامات تجارية وشركات تقنية وعالمية ومحلية شهيرة بالتمثيل الإيمائي.',
   },
   {
     id: 'objects_tools',
     label: 'أشياء وأدوات',
     subcategoryId: 'sub-wk-objects-tools',
     subcategoryName: 'أشياء وأدوات',
-    description: 'أغراض يومية وأدوات منزلية وتقنية في تحدي الوصف الدقيق.',
+    description: 'أغراض يومية وأدوات منزلية وتقنية في تحدي التمثيل الصامت الدقيق.',
   },
   {
     id: 'sports_games',
     label: 'رياضات وألعاب',
     subcategoryId: 'sub-wk-sports-games',
     subcategoryName: 'رياضات وألعاب',
-    description: 'رياضات أولمبية وشعبية وألعاب إلكترونية وجماعية معروفة.',
+    description: 'رياضات أولمبية وشعبية وألعاب معروفة عبر الحركات الرياضية الصامتة.',
   },
   {
     id: 'inventions_science',
     label: 'اختراعات وعلوم',
     subcategoryId: 'sub-wk-inventions-science',
     subcategoryName: 'اختراعات وعلوم',
-    description: 'ابتكارات غيرت التاريخ ومفاهيم وظواهر علمية مشهورة.',
+    description: 'ابتكارات غيرت التاريخ وظواهر علمية مشهورة بالتمثيل الصامت.',
   },
 ];
 
 export interface WalaKalimaSettings {
   enabled: boolean;
   timerSeconds: number;
+  maxSkips: number;
   wordsPerRound: number;
   pointsPerCorrectWord: number;
   enabledContentTypes: WalaKalimaContentTypeId[];
@@ -116,8 +117,9 @@ export interface WalaKalimaSettings {
 
 export const DEFAULT_WALA_KALIMA_SETTINGS: WalaKalimaSettings = {
   enabled: true,
-  timerSeconds: 60,
-  wordsPerRound: 5,
+  timerSeconds: 45,
+  maxSkips: 3,
+  wordsPerRound: 4,
   pointsPerCorrectWord: 100,
   enabledContentTypes: WALA_KALIMA_CONTENT_TYPES.map((ct) => ct.id),
 };
@@ -125,7 +127,7 @@ export const DEFAULT_WALA_KALIMA_SETTINGS: WalaKalimaSettings = {
 export interface WalaKalimaWordEntry {
   id: string;
   word: string;
-  forbiddenWords: string[];
+  forbiddenWords?: string[];
   contentType: WalaKalimaContentTypeId;
   difficulty: DifficultyLevel;
   isActive: boolean;
@@ -140,8 +142,16 @@ export type WalaKalimaSessionStatus =
   | 'expired'
   | 'cancelled';
 
+export type WalaKalimaEndReason =
+  | 'correct_guess'
+  | 'time_up'
+  | 'completed_all'
+  | 'player_finished'
+  | 'host_ended'
+  | null;
+
 /**
- * Safe public status returned to the Match Screen (NEVER contains secret words or forbidden words).
+ * Safe public status returned to the Match Screen (NEVER contains secret words).
  */
 export interface WalaKalimaSessionPublicStatus {
   sessionId: string;
@@ -161,9 +171,11 @@ export interface WalaKalimaSessionPublicStatus {
   currentIndex: number;
   correctCount: number;
   skippedCount: number;
+  maxSkips: number;
+  remainingSkips: number;
   pointsPerCorrectWord: number;
   earnedPoints: number;
-  endReason?: 'time_up' | 'completed_all' | 'player_finished' | 'host_ended' | null;
+  endReason?: WalaKalimaEndReason;
 }
 
 export interface WalaKalimaCreateSessionResponse extends WalaKalimaSessionPublicStatus {
@@ -176,7 +188,6 @@ export interface WalaKalimaCreateSessionResponse extends WalaKalimaSessionPublic
  */
 export interface WalaKalimaPlayerActiveWord {
   word: string;
-  forbiddenWords: string[];
   contentType: WalaKalimaContentTypeId;
   contentTypeLabel: string;
   difficulty: DifficultyLevel;
@@ -200,9 +211,11 @@ export interface WalaKalimaPlayerSessionState {
   currentIndex: number;
   correctCount: number;
   skippedCount: number;
+  maxSkips: number;
+  remainingSkips: number;
   pointsPerCorrectWord: number;
   earnedPoints: number;
-  endReason?: 'time_up' | 'completed_all' | 'player_finished' | 'host_ended' | null;
+  endReason?: WalaKalimaEndReason;
   activeWord: WalaKalimaPlayerActiveWord | null;
 }
 

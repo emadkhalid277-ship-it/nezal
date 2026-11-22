@@ -105,7 +105,7 @@ export function subscribeWalaKalimaHostStream(
 export async function hostActionWalaKalimaRound(
   sessionId: string,
   hostSecret: string,
-  action: 'finish' | 'cancel'
+  action: 'correct' | 'finish' | 'cancel'
 ): Promise<WalaKalimaSessionPublicStatus> {
   const res = await fetch(
     `/api/wala-kalima/sessions/${encodeURIComponent(sessionId)}/host-action`,
@@ -178,7 +178,7 @@ export async function fetchAdminWalaKalimaData(): Promise<{
 
 export async function createAdminWalaKalimaWordApi(payload: {
   word: string;
-  forbiddenWords: string[];
+  forbiddenWords?: string[];
   contentType: WalaKalimaContentTypeId;
   difficulty: DifficultyLevel;
   isActive: boolean;
@@ -199,7 +199,7 @@ export async function updateAdminWalaKalimaWordApi(
   wordId: string,
   payload: Partial<{
     word: string;
-    forbiddenWords: string[];
+    forbiddenWords?: string[];
     contentType: WalaKalimaContentTypeId;
     difficulty: DifficultyLevel;
     isActive: boolean;

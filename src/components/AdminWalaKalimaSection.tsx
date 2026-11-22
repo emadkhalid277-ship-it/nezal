@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Ban,
   Check,
   Clock,
   Edit3,
@@ -55,7 +54,6 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
   const [wordModalOpen, setWordModalOpen] = useState(false);
   const [editingWord, setEditingWord] = useState<WalaKalimaWordEntry | null>(null);
   const [formWord, setFormWord] = useState('');
-  const [formForbiddenRaw, setFormForbiddenRaw] = useState('');
   const [formContentType, setFormContentType] =
     useState<WalaKalimaContentTypeId>('football_players');
   const [formDifficulty, setFormDifficulty] = useState<DifficultyLevel>('متوسط');
@@ -102,11 +100,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
     return words.filter((w) => {
       if (filterType !== 'all' && w.contentType !== filterType) return false;
       if (filterDifficulty !== 'all' && w.difficulty !== filterDifficulty) return false;
-      if (q) {
-        const matchWord = w.word.toLowerCase().includes(q);
-        const matchForbidden = w.forbiddenWords.some((fw) => fw.toLowerCase().includes(q));
-        if (!matchWord && !matchForbidden) return false;
-      }
+      if (q && !w.word.toLowerCase().includes(q)) return false;
       return true;
     });
   }, [words, filterType, filterDifficulty, searchQuery]);
@@ -149,7 +143,6 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
   const openAddWordModal = () => {
     setEditingWord(null);
     setFormWord('');
-    setFormForbiddenRaw('');
     setFormContentType(filterType !== 'all' ? filterType : 'football_players');
     setFormDifficulty('متوسط');
     setFormIsActive(true);
@@ -159,7 +152,6 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
   const openEditWordModal = (item: WalaKalimaWordEntry) => {
     setEditingWord(item);
     setFormWord(item.word);
-    setFormForbiddenRaw(item.forbiddenWords.join('، '));
     setFormContentType(item.contentType);
     setFormDifficulty(item.difficulty);
     setFormIsActive(item.isActive);
@@ -170,14 +162,9 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
     e.preventDefault();
     const cleanWord = formWord.trim();
     if (!cleanWord) {
-      setBanner({ type: 'error', text: 'يرجى إدخال الكلمة أو الشخصية.' });
+      setBanner({ type: 'error', text: 'يرجى إدخال الكلمة أو الشخصية المطلوبة للتمثيل الصامت.' });
       return;
     }
-
-    const parsedForbidden = formForbiddenRaw
-      .split(/[,،\n]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
 
     setSavingWord(true);
     setBanner(null);
@@ -185,7 +172,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
       if (editingWord) {
         const updated = await updateAdminWalaKalimaWordApi(editingWord.id, {
           word: cleanWord,
-          forbiddenWords: parsedForbidden,
+          forbiddenWords: [],
           contentType: formContentType,
           difficulty: formDifficulty,
           isActive: formIsActive,
@@ -195,7 +182,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
       } else {
         const created = await createAdminWalaKalimaWordApi({
           word: cleanWord,
-          forbiddenWords: parsedForbidden,
+          forbiddenWords: [],
           contentType: formContentType,
           difficulty: formDifficulty,
           isActive: formIsActive,
@@ -249,17 +236,17 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-xs font-bold text-[#F07842]">
             <QrCode className="w-4 h-4" />
-            <span>نظام ولا كلمة التفاعلي عبر QR</span>
+            <span>ولا كلمة · تمثيل صامت عبر QR</span>
           </div>
           <h2 className="font-display text-xl sm:text-2xl font-bold text-[#252824]">
-            إدارة كلمات وإعدادات «ولا كلمة»
+            إدارة كلمات وإعدادات «ولا كلمة» (تمثيل صامت)
           </h2>
           <p className="text-xs sm:text-sm text-[#777B73]">
-            إجمالي البطاقات المحفوظة على الخادم:{' '}
+            إجمالي الكلمات المحفوظة على الخادم:{' '}
             <span className="font-mono font-bold text-[#14543D] tabular-nums">
               {words.length}
             </span>{' '}
-            بطاقة (محمية بالكامل ولا تصل لشاشة المباراة)
+            بطاقة (تظهر على جوال الممثل فقط ولا تصل لشاشة المباراة)
           </p>
         </div>
 
@@ -334,7 +321,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
           <div className="space-y-1.5">
             <label className="flex items-center gap-1.5 text-xs font-bold text-[#52574E]">
               <Clock className="w-3.5 h-3.5 text-[#F07842]" />
-              <span>مدة التحدي (بالثواني)</span>
+              <span>مدة التمثيل الصامت (بالثواني)</span>
             </label>
             <input
               type="number"
@@ -342,7 +329,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
               max={300}
               value={settings.timerSeconds}
               onChange={(e) =>
-                setSettings((prev) => ({ ...prev, timerSeconds: Number(e.target.value) || 60 }))
+                setSettings((prev) => ({ ...prev, timerSeconds: Number(e.target.value) || 45 }))
               }
               className="w-full min-h-[42px] px-3.5 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] font-mono text-sm font-bold text-[#252824]"
             />
@@ -350,23 +337,28 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-[#52574E] block">
-              عدد الكلمات في كل جولة
+              محاولات التخطي المسموحة في الجولة
             </label>
             <input
               type="number"
-              min={1}
-              max={20}
-              value={settings.wordsPerRound}
-              onChange={(e) =>
-                setSettings((prev) => ({ ...prev, wordsPerRound: Number(e.target.value) || 5 }))
-              }
+              min={0}
+              max={10}
+              value={settings.maxSkips ?? 3}
+              onChange={(e) => {
+                const nextMaxSkips = Math.max(0, Math.min(10, Number(e.target.value) || 0));
+                setSettings((prev) => ({
+                  ...prev,
+                  maxSkips: nextMaxSkips,
+                  wordsPerRound: nextMaxSkips + 1,
+                }));
+              }}
               className="w-full min-h-[42px] px-3.5 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] font-mono text-sm font-bold text-[#252824]"
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-[#52574E] block">
-              النقاط لكل إجابة صحيحة
+              النقاط عند التخمين الصحيح
             </label>
             <input
               type="number"
@@ -446,7 +438,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث عن كلمة أو كلمة ممنوعة..."
+              placeholder="ابحث عن كلمة أو شخصية..."
               className="w-full min-h-[42px] pr-10 pl-3.5 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] text-xs sm:text-sm"
             />
           </div>
@@ -555,25 +547,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* Forbidden Words */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700">
-                      <Ban className="w-3 h-3" />
-                      <span>الممنوعات:</span>
-                    </span>
-                    {item.forbiddenWords.length > 0 ? (
-                      item.forbiddenWords.map((fw, idx) => (
-                        <span
-                          key={`${fw}_${idx}`}
-                          className="px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-[11px] font-semibold text-rose-800"
-                        >
-                          {fw}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-[11px] text-[#777B73]">بدون كلمات ممنوعة إضافية</span>
-                    )}
-                  </div>
+                  {/* End Word Card Header */}
                 </div>
 
                 {confirmDeleteId === item.id && (
@@ -672,17 +646,8 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-[#52574E] block">
-                  الكلمات الممنوعة (افصل بينها بفاصلة «،» أو سطر جديد)
-                </label>
-                <textarea
-                  rows={3}
-                  value={formForbiddenRaw}
-                  onChange={(e) => setFormForbiddenRaw(e.target.value)}
-                  placeholder="مثال: الهلال، التورنيدو، المنتخب السعودي، الأرجنتين"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] text-sm text-[#252824]"
-                />
+              <div className="text-xs text-[#52574E] bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3">
+                يُفضّل اختيار كلمات أو شخصيات أو أفعال يمكن تمثيلها بالحركات وتعبيرات الوجه دون كلام.
               </div>
 
               <label className="inline-flex items-center gap-2 cursor-pointer">
