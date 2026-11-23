@@ -12,10 +12,11 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { DifficultyLevel } from '../types/game';
+import { DIFFICULTY_TO_POINTS, DifficultyLevel } from '../types/game';
 import {
   DEFAULT_WALA_KALIMA_SETTINGS,
   WALA_KALIMA_CONTENT_TYPES,
+  WALA_KALIMA_POINT_LEVELS,
   WalaKalimaContentTypeId,
   WalaKalimaSettings,
   WalaKalimaWordEntry,
@@ -358,22 +359,19 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-[#52574E] block">
-              النقاط عند التخمين الصحيح
+              مستويات النقاط المعتمدة (5 مستويات)
             </label>
-            <input
-              type="number"
-              min={10}
-              max={1000}
-              step={10}
-              value={settings.pointsPerCorrectWord}
-              onChange={(e) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  pointsPerCorrectWord: Number(e.target.value) || 100,
-                }))
-              }
-              className="w-full min-h-[42px] px-3.5 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] font-mono text-sm font-bold text-[#252824]"
-            />
+            <div className="min-h-[42px] px-3 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] flex flex-wrap items-center gap-1.5">
+              {WALA_KALIMA_POINT_LEVELS.map((tier) => (
+                <span
+                  key={tier.points}
+                  className="px-2 py-0.5 rounded-lg bg-white border border-[#14543D]/20 font-mono text-xs font-bold text-[#14543D] tabular-nums"
+                  title={`${tier.levelLabel}: ${tier.points} نقطة (${tier.difficulty})`}
+                >
+                  {tier.points}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -506,7 +504,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                           {contentTypeLabelMap.get(item.contentType) || item.contentType}
                         </span>
                         <span className="px-2 py-0.5 rounded-md bg-[#FEF2EC] text-[#D9602B]">
-                          {item.difficulty}
+                          {item.difficulty} · {DIFFICULTY_TO_POINTS[item.difficulty]} نقطة
                         </span>
                         {!item.isActive && (
                           <span className="px-2 py-0.5 rounded-md bg-slate-200 text-slate-700">
@@ -631,7 +629,9 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#52574E] block">مستوى الصعوبة</label>
+                  <label className="text-xs font-bold text-[#52574E] block">
+                    مستوى الصعوبة والنقاط
+                  </label>
                   <select
                     value={formDifficulty}
                     onChange={(e) => setFormDifficulty(e.target.value as DifficultyLevel)}
@@ -639,7 +639,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                   >
                     {DIFFICULTIES.map((diff) => (
                       <option key={diff} value={diff}>
-                        {diff}
+                        {diff} ({DIFFICULTY_TO_POINTS[diff]} نقطة)
                       </option>
                     ))}
                   </select>

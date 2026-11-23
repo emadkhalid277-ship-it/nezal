@@ -784,14 +784,20 @@ export async function hostAwardPoints(params: {
       ? room.roundUsedQuestionIds
       : [...(room.roundUsedQuestionIds || []), params.questionId];
 
-    const safeTeamIndex =
-      params.awardedTeamIndex >= 0 && params.awardedTeamIndex < room.teams.length
-        ? params.awardedTeamIndex
-        : 0;
+    if (
+      !Number.isInteger(params.awardedTeamIndex) ||
+      params.awardedTeamIndex < 0 ||
+      params.awardedTeamIndex >= room.teams.length
+    ) {
+      throw new Error('الفريق المحدد غير صالح');
+    }
+    if (!Number.isFinite(params.points) || params.points <= 0) {
+      throw new Error('قيمة النقاط غير صالحة');
+    }
 
-    const awardedTeam = room.teams[safeTeamIndex];
+    const awardedTeam = room.teams[params.awardedTeamIndex];
     const nextTeams = room.teams.map((t, idx) =>
-      idx === safeTeamIndex ? { ...t, score: t.score + params.points } : t
+      idx === params.awardedTeamIndex ? { ...t, score: t.score + params.points } : t
     );
 
     const nextActiveTeamIndex = (room.activeTeamIndex + 1) % room.teams.length;

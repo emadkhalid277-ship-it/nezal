@@ -12,10 +12,15 @@ import {
   Sparkles,
   Trophy,
 } from 'lucide-react';
-import { WalaKalimaPlayerSessionState } from '../types/walaKalima';
+import {
+  WalaKalimaPlayerSessionState,
+  getWalaKalimaPointLevelMeta,
+} from '../types/walaKalima';
 import {
   claimWalaKalimaQrRound,
+  computeClockOffsetMs,
   playerActionWalaKalimaRound,
+  subscribeWalaKalimaPlayerStream,
 } from '../services/walaKalimaService';
 import { soundFX } from '../services/soundEffects';
 import { CircularCountdownTimer } from '../components/CircularCountdownTimer';
@@ -35,10 +40,13 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
   const [busyAction, setBusyAction] = useState<'correct' | 'skip' | 'finish' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionHint, setActionHint] = useState<string | null>(null);
+  const [connectionWarning, setConnectionWarning] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<WalaKalimaPlayerSessionState | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState<number>(0);
+  const [clockOffsetMs, setClockOffsetMs] = useState<number>(0);
 
   const claimAttemptedRef = useRef(false);
+  const hasMeasuredRttOffsetRef = useRef(false);
+  const terminalSoundPlayedRef = useRef(false);
   const storageKey = `nizal_wk_player_${sessionId}`;
 
   const persistPlayerToken = useCallback(
@@ -69,6 +77,65 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
     }
   }, [storageKey]);
 
+  const applyServerState = useCallback(
+    (
+      nextState: WalaKalimaPlayerSessionState,
+      rttRange?: { t0: number; t1: number }
+    ) => {
+      if (rttRange) {
+        const measured = computeClockOffsetMs(nextState.serverNow, rttRange.t0, rttRange.t1);
+        if (measured !== null) {
+          hasMeasuredRttOffsetRef.current = true;
+          setClockOffsetMs(measured);
+        }
+      } else if (!hasMeasuredRttOffsetRef.current) {
+        const approx = computeClockOffsetMs(nextState.serverNow);
+        if (approx !== null) {
+          setClockOffsetMs(approx);
+        }
+      }
+
+      setSessionState((prev) =>
+        nextState.playerToken
+          ? nextState
+          : { ...nextState, playerToken: prev?.playerToken || '' }
+      );
+
+      if (nextState.status === 'finished' || nextState.status === 'expired' || nextState.status === 'cancelled') {
+        clearSavedPlayerToken();
+        if (!terminalSoundPlayedRef.current) {
+          terminalSoundPlayedRef.current = true;
+          if (nextState.earnedPoints > 0) {
+            soundFX.playCorrect();
+          } else {
+            soundFX.playTimeUp();
+          }
+        }
+      }
+    },
+    [clearSavedPlayerToken]
+  );
+
+  const syncWithServer = useCallback(async () => {
+    const activeToken = sessionState?.playerToken || readSavedPlayerToken();
+    const activeSid = sessionState?.sessionId || sessionId;
+    if (!activeToken || !activeSid) return;
+
+    try {
+      const t0 = Date.now();
+      const nextState = await playerActionWalaKalimaRound({
+        sessionId: activeSid,
+        playerToken: activeToken,
+        action: 'sync',
+      });
+      const t1 = Date.now();
+      setConnectionWarning(null);
+      applyServerState(nextState, { t0, t1 });
+    } catch {
+      // keep showing timer based on authoritative expiresAt until connection recovers
+    }
+  }, [sessionState?.playerToken, sessionState?.sessionId, sessionId, readSavedPlayerToken, applyServerState]);
+
   // Claim QR session strictly once on mount
   useEffect(() => {
     if (claimAttemptedRef.current) return;
@@ -78,6 +145,7 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
     const savedToken = readSavedPlayerToken();
 
     setLoading(true);
+    const t0 = Date.now();
     claimWalaKalimaQrRound({
       sessionId,
       qrToken,
@@ -85,9 +153,9 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
     })
       .then((res) => {
         if (cancelled) return;
+        const t1 = Date.now();
         persistPlayerToken(res.playerToken);
-        setSessionState(res);
-        setSecondsLeft(res.remainingSeconds);
+        applyServerState(res, { t0, t1 });
         setErrorMsg(null);
         // Strip sensitive wkToken from address bar once claimed
         try {
@@ -115,58 +183,60 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, qrToken, persistPlayerToken, readSavedPlayerToken]);
+  }, [sessionId, qrToken, persistPlayerToken, readSavedPlayerToken, applyServerState]);
 
-  // Smooth countdown timer + server deadline sync while active
+  // Real-time SSE stream + reconnect/visibility recovery while round is active
   useEffect(() => {
-    if (!sessionState || sessionState.status !== 'active' || !sessionState.expiresAt) {
+    if (!sessionState || sessionState.status !== 'active' || !sessionState.playerToken) {
       return;
     }
 
-    const updateTimer = () => {
-      const rem = Math.max(0, Math.ceil(((sessionState.expiresAt || 0) - Date.now()) / 1000));
-      setSecondsLeft(rem);
-    };
-    updateTimer();
+    const unsubscribeStream = subscribeWalaKalimaPlayerStream(
+      sessionState.sessionId,
+      sessionState.playerToken,
+      (nextState) => {
+        setConnectionWarning(null);
+        applyServerState(nextState);
+      },
+      () => {
+        setConnectionWarning('جاري إعادة المزامنة مع الخادم — المؤقت مستمر...');
+      },
+      () => {
+        setConnectionWarning(null);
+        void syncWithServer();
+      }
+    );
 
-    const clockInterval = window.setInterval(updateTimer, 300);
-    const syncInterval = window.setInterval(() => {
-      if (!sessionState.playerToken) return;
-      void playerActionWalaKalimaRound({
-        sessionId: sessionState.sessionId,
-        playerToken: sessionState.playerToken,
-        action: 'sync',
-      })
-        .then((nextState) => {
-          setSessionState((prev) =>
-            nextState.playerToken
-              ? nextState
-              : { ...nextState, playerToken: prev?.playerToken || '' }
-          );
-          if (nextState.status === 'finished' || nextState.status === 'expired') {
-            clearSavedPlayerToken();
-            if (nextState.earnedPoints > 0) {
-              soundFX.playCorrect();
-            } else {
-              soundFX.playTimeUp();
-            }
-          }
-        })
-        .catch(() => {
-          // ignore transient sync issues
-        });
-    }, 1200);
+    const handleResumeOrOnline = () => {
+      if (!document.hidden) {
+        void syncWithServer();
+      }
+    };
+
+    window.addEventListener('online', handleResumeOrOnline);
+    document.addEventListener('visibilitychange', handleResumeOrOnline);
+
+    // Lightweight safety reconcile + faster recovery if SSE temporarily drops
+    const safetyInterval = window.setInterval(
+      () => {
+        void syncWithServer();
+      },
+      connectionWarning ? 1500 : 4500
+    );
 
     return () => {
-      window.clearInterval(clockInterval);
-      window.clearInterval(syncInterval);
+      unsubscribeStream();
+      window.removeEventListener('online', handleResumeOrOnline);
+      document.removeEventListener('visibilitychange', handleResumeOrOnline);
+      window.clearInterval(safetyInterval);
     };
   }, [
     sessionState?.status,
-    sessionState?.expiresAt,
     sessionState?.sessionId,
     sessionState?.playerToken,
-    clearSavedPlayerToken,
+    connectionWarning,
+    applyServerState,
+    syncWithServer,
   ]);
 
   const handleAction = async (action: 'correct' | 'skip' | 'finish') => {
@@ -176,27 +246,29 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
     setBusyAction(action);
     setActionHint(null);
     try {
+      const t0 = Date.now();
       const nextState = await playerActionWalaKalimaRound({
         sessionId: sessionState.sessionId,
         playerToken: sessionState.playerToken,
         action,
       });
+      const t1 = Date.now();
+
+      if (action === 'correct' || action === 'finish') {
+        terminalSoundPlayedRef.current = true;
+      }
 
       if (action === 'correct') soundFX.playCorrect();
       else if (action === 'skip') soundFX.playTileOpen();
       else soundFX.playTimeUp();
 
-      setSessionState(nextState);
-      setSecondsLeft(nextState.remainingSeconds);
-
-      if (nextState.status !== 'active') {
-        clearSavedPlayerToken();
-      }
+      applyServerState(nextState, { t0, t1 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'انتهى الوقت أو تم إغلاق الجولة.';
       if (action === 'skip' && msg.includes('التخطي')) {
         setActionHint(msg);
       } else {
+        void syncWithServer();
         setErrorMsg(msg);
       }
     } finally {
@@ -258,6 +330,7 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
   // FINISHED / EXPIRED ROUND VIEW ON PHONE
   if (sessionState.status !== 'active') {
     const wonRound = sessionState.earnedPoints > 0;
+    const isTimeUp = !wonRound && sessionState.endReason === 'time_up';
     return (
       <div
         dir="rtl"
@@ -267,7 +340,7 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
           <div className="w-14 h-14 rounded-2xl bg-[#14543D] text-white flex items-center justify-center mx-auto">
             {wonRound ? (
               <Trophy className="w-7 h-7 text-[#FDE68A]" />
-            ) : sessionState.endReason === 'time_up' ? (
+            ) : isTimeUp ? (
               <Clock className="w-7 h-7 text-[#F07842]" />
             ) : (
               <Sparkles className="w-7 h-7 text-[#F07842]" />
@@ -281,8 +354,8 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
             <h1 className="font-display text-2xl font-bold text-[#252824]">
               {wonRound
                 ? 'كفو! خمن فريقك الكلمة بنجاح'
-                : sessionState.endReason === 'time_up'
-                ? 'انتهى وقت التمثيل الصامت!'
+                : isTimeUp
+                ? 'انتهى الوقت!'
                 : 'تم إنهاء الجولة'}
             </h1>
             <p className="text-xs text-[#777B73] leading-relaxed">
@@ -320,6 +393,9 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
   const activeWord = sessionState.activeWord;
   const remainingSkips = sessionState.remainingSkips ?? 0;
   const canSkip = remainingSkips > 0;
+  const levelMeta = getWalaKalimaPointLevelMeta(
+    activeWord?.points ?? sessionState.pointsPerCorrectWord
+  );
 
   return (
     <div
@@ -353,12 +429,17 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
         <div className="bg-white border border-[#E5E8DD] rounded-3xl p-4 flex items-center justify-between gap-4 shadow-xs">
           <CircularCountdownTimer
             totalSeconds={sessionState.timerSeconds}
-            remainingSeconds={secondsLeft}
+            remainingSeconds={sessionState.remainingSeconds}
             expiresAt={sessionState.expiresAt}
+            clockOffsetMs={clockOffsetMs}
             isActive={sessionState.status === 'active'}
-            size={96}
+            onReachZero={() => {
+              void syncWithServer();
+            }}
+            size={104}
             strokeWidth={8}
             variant="light"
+            connectionWarning={connectionWarning}
           />
 
           <div className="flex-1 space-y-2 text-right">
@@ -366,7 +447,9 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
               التمثيل الصامت جارٍ الآن
             </div>
             <div className="flex items-center justify-between text-xs border-b border-[#F3F5E9] pb-1.5">
-              <span className="text-[#777B73] font-semibold">جائزة التخمين</span>
+              <span className="text-[#777B73] font-semibold">
+                {levelMeta.levelLabel} ({levelMeta.difficulty})
+              </span>
               <span className="font-mono font-bold text-[#F07842] tabular-nums">
                 +{sessionState.pointsPerCorrectWord} نقطة
               </span>
@@ -385,7 +468,9 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
           <div className="bg-gradient-to-br from-[#14543D] to-[#0E3D2C] border-2 border-[#14543D] rounded-3xl p-5 sm:p-7 text-center text-white shadow-lg space-y-3">
             <div className="flex items-center justify-between text-xs font-bold text-[#EAF2EE]/85">
               <span>الكلمة السرية على جوالك فقط</span>
-              <span className="font-sans text-[#FDBA74]">{activeWord.difficulty}</span>
+              <span className="font-sans text-[#FDBA74]">
+                {levelMeta.levelLabel} · {activeWord.points ?? sessionState.pointsPerCorrectWord} نقطة
+              </span>
             </div>
 
             <div className="py-4 sm:py-6">

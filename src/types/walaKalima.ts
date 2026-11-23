@@ -1,8 +1,35 @@
-import type { DifficultyLevel } from './game.ts';
+import type { DifficultyLevel, PointValue } from './game.ts';
 
 export const WALA_KALIMA_MAIN_CATEGORY_ID = 'main-wala-kalima';
 export const WALA_KALIMA_MAIN_CATEGORY_NAME = 'ولا كلمة';
 export const WALA_KALIMA_LEGACY_MAIN_ID = 'main-1793867682734-xevr';
+
+export interface WalaKalimaPointLevelMeta {
+  level: 1 | 2 | 3 | 4 | 5;
+  levelLabel: string;
+  points: PointValue;
+  difficulty: DifficultyLevel;
+}
+
+export const WALA_KALIMA_POINT_LEVELS: ReadonlyArray<WalaKalimaPointLevelMeta> = [
+  { level: 1, levelLabel: 'المستوى الأول', points: 100, difficulty: 'سهل' },
+  { level: 2, levelLabel: 'المستوى الثاني', points: 200, difficulty: 'متوسط' },
+  { level: 3, levelLabel: 'المستوى الثالث', points: 300, difficulty: 'صعب' },
+  { level: 4, levelLabel: 'المستوى الرابع', points: 400, difficulty: 'صعب جداً' },
+  { level: 5, levelLabel: 'المستوى الخامس', points: 500, difficulty: 'خبير' },
+];
+
+export function isValidWalaKalimaPointLevel(value: unknown): value is PointValue {
+  const num = Number(value);
+  return num === 100 || num === 200 || num === 300 || num === 400 || num === 500;
+}
+
+export function getWalaKalimaPointLevelMeta(points?: number | null): WalaKalimaPointLevelMeta {
+  return (
+    WALA_KALIMA_POINT_LEVELS.find((item) => item.points === Number(points)) ||
+    WALA_KALIMA_POINT_LEVELS[0]
+  );
+}
 
 export type WalaKalimaContentTypeId =
   | 'football_players'
@@ -165,6 +192,7 @@ export interface WalaKalimaSessionPublicStatus {
   status: WalaKalimaSessionStatus;
   timerSeconds: number;
   remainingSeconds: number;
+  serverNow: number;
   startedAt: number | null;
   expiresAt: number | null;
   totalWords: number;
@@ -191,6 +219,7 @@ export interface WalaKalimaPlayerActiveWord {
   contentType: WalaKalimaContentTypeId;
   contentTypeLabel: string;
   difficulty: DifficultyLevel;
+  points?: PointValue;
 }
 
 export interface WalaKalimaPlayerSessionState {
@@ -205,6 +234,7 @@ export interface WalaKalimaPlayerSessionState {
   status: WalaKalimaSessionStatus;
   timerSeconds: number;
   remainingSeconds: number;
+  serverNow: number;
   startedAt: number | null;
   expiresAt: number | null;
   totalWords: number;

@@ -825,9 +825,9 @@ export default function App() {
   }, []);
 
   // Load main categories (including custom Firebase images, descriptions, order, visibility) from Firestore
-  const loadMainCategories = useCallback(async () => {
+  const loadMainCategories = useCallback(async (forceRefresh = false) => {
     try {
-      const mains = await fetchMainCategoriesFromFirestore();
+      const mains = await fetchMainCategoriesFromFirestore(forceRefresh);
       setMainCategories(mains);
       return mains;
     } catch (err) {
@@ -838,12 +838,16 @@ export default function App() {
 
   // Load subcategories from Firestore
   const loadSubcategories = useCallback(
-    async (adminAccess: boolean, mainsOverride?: MainCategoryMeta[]) => {
+    async (
+      adminAccess: boolean,
+      mainsOverride?: MainCategoryMeta[],
+      forceRefresh = false
+    ) => {
       try {
         const currentMains = mainsOverride ?? mainCategoriesRef.current;
         const subs = adminAccess
-          ? await fetchAllSubcategoriesForAdmin(currentMains)
-          : await fetchActiveSubcategories(currentMains);
+          ? await fetchAllSubcategoriesForAdmin(currentMains, forceRefresh)
+          : await fetchActiveSubcategories(currentMains, forceRefresh);
         setSubcategories(subs);
         return subs;
       } catch (err) {
@@ -956,9 +960,9 @@ export default function App() {
       // Start question bank loading in parallel without blocking categories/home display
       const questionsPromise = loadQuestions(adminStatus);
 
-      const loadedMains = await loadMainCategories();
+      const loadedMains = await loadMainCategories(true);
       const [loadedSubs] = await Promise.all([
-        loadSubcategories(adminStatus, loadedMains),
+        loadSubcategories(adminStatus, loadedMains, true),
         loadContactSettings(),
         loadQuestionDedupSettings(),
         loadVisualEffectsSettings(),
@@ -1762,12 +1766,16 @@ export default function App() {
     if (resolvedTileKeysRef.current.has(tileKey) || usedTileKeys.includes(tileKey)) {
       return;
     }
+    if (!Number.isInteger(teamIndex) || teamIndex < 0 || teamIndex >= teams.length) {
+      return;
+    }
+    if (!Number.isFinite(points) || points <= 0) {
+      return;
+    }
     resolvedTileKeysRef.current.add(tileKey);
 
-    const safeIndex =
-      teamIndex >= 0 && teamIndex < teams.length ? teamIndex : 0;
     const nextTeams = teams.map((t, idx) =>
-      idx === safeIndex ? { ...t, score: t.score + points } : t
+      idx === teamIndex ? { ...t, score: t.score + points } : t
     );
     setTeams(nextTeams);
 
@@ -2175,11 +2183,11 @@ export default function App() {
                     await loadQuestions(isAdmin, true);
                   }}
                   onRefreshMainCategories={async () => {
-                    const mains = await loadMainCategories();
-                    await loadSubcategories(isAdmin, mains);
+                    const mains = await loadMainCategories(true);
+                    await loadSubcategories(isAdmin, mains, true);
                   }}
                   onRefreshSubcategories={async () => {
-                    await loadSubcategories(isAdmin);
+                    await loadSubcategories(isAdmin, undefined, true);
                   }}
                   onRefreshContactSettings={async () => {
                     await loadContactSettings();

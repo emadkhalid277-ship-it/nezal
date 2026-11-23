@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   ArrowRight,
+  ArrowLeft,
   Check,
   X,
   Users,
@@ -17,7 +18,14 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  LayoutGrid,
 } from 'lucide-react';
+import {
+  AnimatePresence,
+  motion,
+  MotionConfig,
+  useReducedMotion,
+} from 'motion/react';
 import {
   MainCategoryMeta,
   SUBCATEGORIES_PER_TEAM,
@@ -55,6 +63,8 @@ interface CategorySelectionPageProps {
   onStartGameDirectly: () => void;
   onGoToBoard?: () => void;
 }
+
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 function playSelectionFeedbackSound(type: 'select' | 'deselect') {
   try {
@@ -116,6 +126,8 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   onStartGameDirectly,
   onGoToBoard,
 }) => {
+  const shouldReduceMotion = useReducedMotion();
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMainFilter, setSelectedMainFilter] = useState<string>(
@@ -125,6 +137,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   useEffect(() => {
     setSelectedMainFilter(initialMainCategoryId || 'all');
   }, [initialMainCategoryId]);
+
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [autoAdvanceBanner, setAutoAdvanceBanner] = useState<string | null>(null);
   const [navError, setNavError] = useState<string | null>(null);
@@ -167,7 +180,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
       } else {
         throw new Error('دالة العودة للوحة اللعب غير متاحة');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error navigating to board:', err);
       setNavError('حدث خطأ أثناء العودة للوحة اللعب. يرجى إعادة المحاولة.');
       setIsNavigating(false);
@@ -199,11 +212,17 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   );
 
   const comingSoonMainIds = useMemo(
-    () => new Set(visibleMainCategories.filter((m) => m.isComingSoon).map((m) => m.id)),
+    () =>
+      new Set(
+        visibleMainCategories.filter((m) => m.isComingSoon).map((m) => m.id)
+      ),
     [visibleMainCategories]
   );
   const comingSoonMainNames = useMemo(
-    () => new Set(visibleMainCategories.filter((m) => m.isComingSoon).map((m) => m.name)),
+    () =>
+      new Set(
+        visibleMainCategories.filter((m) => m.isComingSoon).map((m) => m.name)
+      ),
     [visibleMainCategories]
   );
 
@@ -234,6 +253,16 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     });
     return map;
   }, [activeSubcategories, subcategories]);
+
+  const activeMainCategoryObj = useMemo(
+    () =>
+      selectedMainFilter === 'all'
+        ? null
+        : visibleMainCategories.find(
+            (m) => m.id === selectedMainFilter || m.name === selectedMainFilter
+          ) || null,
+    [selectedMainFilter, visibleMainCategories]
+  );
 
   // Map every selected subcategory ID -> the team that owns it
   const subcategoryOwnerMap = useMemo(() => {
@@ -290,7 +319,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     [teams, teamSubcategoryIds, subByIdMap]
   );
 
-  // Filtered subcategories based on the chosen pill and search input
+  // Filtered subcategories based on the chosen main category & search input
   const filteredSubcategories = useMemo(() => {
     let list = activeSubcategories;
     if (selectedMainFilter !== 'all') {
@@ -312,7 +341,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     return list;
   }, [activeSubcategories, selectedMainFilter, searchQuery]);
 
-  // Coming Soon Main Categories that currently have 0 subcategories (e.g. ولا كلمة) still appear as a styled Coming Soon card
+  // Coming Soon Main Categories that currently have 0 subcategories still appear as styled Coming Soon card
   const filteredComingSoonMainCards = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return visibleMainCategories.filter((mc) => {
@@ -330,12 +359,19 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
       }
       if (q) {
         const matchesName = mc.name.toLowerCase().includes(q);
-        const matchesDesc = (mc.description || mc.tagline || '').toLowerCase().includes(q);
+        const matchesDesc = (mc.description || mc.tagline || '')
+          .toLowerCase()
+          .includes(q);
         if (!matchesName && !matchesDesc) return false;
       }
       return true;
     });
-  }, [visibleMainCategories, activeSubcategories, selectedMainFilter, searchQuery]);
+  }, [
+    visibleMainCategories,
+    activeSubcategories,
+    selectedMainFilter,
+    searchQuery,
+  ]);
 
   const questionCountBySubMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -466,7 +502,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     );
   };
 
-  // Toggle subcategory card selection
+  // Toggle subcategory card selection (preserves exact 3/team rule & auto-advance)
   const handleToggleSubcategory = (sub: SubcategoryItem) => {
     if (isSubComingSoon(sub)) {
       triggerComingSoonMessage();
@@ -483,7 +519,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
 
     const ownerInfo = subcategoryOwnerMap.get(sub.id);
 
-    // 1. If already selected by ANOTHER team -> block selection
+    // 1. Already selected by ANOTHER team -> block selection
     if (ownerInfo && ownerInfo.team.id !== currentTeam.id) {
       setValidationMessage(
         `الفئة الفرعية «${sub.name}» اختارها مسبقاً «${
@@ -493,7 +529,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
       return;
     }
 
-    // 2. If already selected by the CURRENT team -> deselect it
+    // 2. Already selected by CURRENT team -> deselect
     if (ownerInfo && ownerInfo.team.id === currentTeam.id) {
       playSelectionFeedbackSound('deselect');
       const updatedForTeam = currentTeamPicks.filter((id) => id !== sub.id);
@@ -505,9 +541,8 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
       return;
     }
 
-    // 3. If the current team already has 3/3 subcategories -> prevent 4th
+    // 3. Current team already reached 3/3 -> prevent 4th
     if (currentTeamPicks.length >= SUBCATEGORIES_PER_TEAM) {
-      // Find another team that still needs picks
       const nextIncompleteIndex = teams.findIndex(
         (t, idx) =>
           idx !== safeSelectingTeamIndex &&
@@ -526,7 +561,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
       return;
     }
 
-    // 4. Add the subcategory to the current team
+    // 4. Add subcategory to current team
     playSelectionFeedbackSound('select');
     const nextForCurrent = [...currentTeamPicks, sub.id];
     const nextMap: Record<string, string[]> = {
@@ -535,7 +570,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     };
     onUpdateTeamSubcategoryIds(nextMap);
 
-    // 5. Auto-advance to next team if current reaches 3/3!
+    // 5. Auto-advance when current team reaches 3/3
     if (nextForCurrent.length === SUBCATEGORIES_PER_TEAM) {
       let nextTeamIdx = -1;
       for (let offset = 1; offset < teams.length; offset++) {
@@ -560,7 +595,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
         );
       } else {
         setAutoAdvanceBanner(
-          `اكتملت اختيارات جميع الفرق (${totalRequiredCount}/${totalRequiredCount} فئة)! جهّز الفرق بالأسفل واضغط «يلا نبدأ التحدي».`
+          `اكتملت اختيارات جميع الفرق (${totalRequiredCount}/${totalRequiredCount} فئة)! راجع إعدادات الفرق بالأسفل واضغط «يلا نبدأ! افتح لوحة التحدي».`
         );
       }
     } else {
@@ -590,8 +625,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
 
   // Clear selections for active team
   const handleClearCurrentTeamPicks = () => {
-    if (isGameLocked) return;
-    if (!currentTeam) return;
+    if (isGameLocked || !currentTeam) return;
     setValidationMessage(null);
     setAutoAdvanceBanner(null);
     playSelectionFeedbackSound('deselect');
@@ -624,7 +658,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             incTeam.name || `الفريق ${incompleteIdx + 1}`
           }» اختار (${incCount}/3) فقط.`
         );
-        scrollToSection('step-categories');
+        scrollToSection('step-subcategories');
       }
       return;
     }
@@ -632,16 +666,25 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
     onStartGameDirectly();
   };
 
-  // Focus a specific team for category picking & scroll to categories section
+  // Focus a specific team for category picking & scroll to subcategories section
   const handleFocusTeamCategories = (teamIndex: number) => {
     if (!isGameLocked) {
       onChangeSelectingTeamIndex(teamIndex);
       setValidationMessage(null);
     }
-    scrollToSection('step-categories');
+    scrollToSection('step-subcategories');
   };
 
-  // Render a team's interactive slot strip inside Step 1
+  const handleSelectMainCategoryCard = (mainCat: MainCategoryMeta) => {
+    setSelectedMainFilter(mainCat.id);
+    if (mainCat.isComingSoon) {
+      triggerComingSoonMessage();
+    } else {
+      setValidationMessage(null);
+    }
+  };
+
+  // Render a team's interactive slot strip
   const renderTeamSlotBlock = (team: TeamConfig, tIdx: number) => {
     const picks = (teamSubcategoryIds[team.id] || []).slice(
       0,
@@ -669,33 +712,35 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             setValidationMessage(null);
           }
         }}
-        className={`flex flex-col gap-2 p-3 rounded-2xl transition-all select-none cursor-pointer ${
+        className={`flex flex-col gap-3 p-3.5 sm:p-4 rounded-2xl transition-all select-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
           isCurrent
-            ? 'bg-[#EAF2EE] border-2 border-[#14543D] ring-2 ring-[#14543D]/20 shadow-xs'
-            : 'bg-[#F3F5E9]/85 border border-[#E5E8DD] hover:border-[#14543D]/40'
+            ? 'bg-[#FFFFFF] border-2 border-[#F07842] shadow-sm'
+            : 'bg-[#F7F8F1] border border-[#E5E8DD] hover:border-[#F07842]/50'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <span
-              className="w-3 h-3 rounded-full shrink-0"
+              className="w-3 h-3 rounded-xs shrink-0"
               style={{ backgroundColor: team.color }}
             />
-            <span className="font-display text-xs sm:text-sm font-bold text-[#252824] truncate">
+            <span className="font-display text-sm font-bold text-[#1B1F1C] truncate">
               {teamDisplayName}
             </span>
             {isCurrent && !isGameLocked && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#F07842] text-white shrink-0">
-                يختار الآن
+              <span className="text-[11px] font-bold text-[#F07842] shrink-0">
+                · يختار الآن
               </span>
             )}
           </div>
 
           <span
-            className={`font-mono tabular-nums text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${
+            className={`font-mono tabular-nums text-xs font-bold px-2.5 py-1 rounded-lg shrink-0 ${
               isComplete
                 ? 'bg-[#14543D] text-white'
-                : 'text-[#F07842] bg-[#FFFFFF] border border-[#E5E8DD]'
+                : isCurrent
+                ? 'bg-[#FEF2EC] text-[#F07842] border border-[#F07842]/35'
+                : 'bg-[#FFFFFF] text-[#52574E] border border-[#E5E8DD]'
             }`}
           >
             {picks.length}/{SUBCATEGORIES_PER_TEAM}
@@ -712,10 +757,10 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               return (
                 <div
                   key={subObj.id}
-                  className="group relative min-h-[76px] sm:min-h-[82px] rounded-xl overflow-hidden border-2 border-[#14543D] bg-[#FFFFFF] flex flex-col shadow-xs transition-transform duration-200 hover:scale-[1.03]"
+                  className="group relative min-h-[78px] sm:min-h-[84px] rounded-xl overflow-hidden border border-[#F07842]/60 bg-[#FFFFFF] flex flex-col shadow-xs"
                   title={`${subObj.name} (${teamDisplayName})`}
                 >
-                  <div className="relative h-6 sm:h-7 w-full overflow-hidden shrink-0">
+                  <div className="relative h-7 w-full overflow-hidden shrink-0 bg-[#14543D]">
                     <CategoryCardArtwork
                       name={subObj.name}
                       mainCategory={subObj.mainCategory}
@@ -723,8 +768,8 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <div className="flex-1 bg-[#14543D] px-1.5 py-1.5 flex items-center justify-center text-center">
-                    <span className="font-display text-[11px] sm:text-xs font-bold text-white line-clamp-2 leading-tight w-full">
+                  <div className="flex-1 bg-[#1B1F1C] px-1.5 py-1.5 flex items-center justify-center text-center">
+                    <span className="font-display text-[11px] font-bold text-white line-clamp-2 leading-tight w-full">
                       {subObj.name}
                     </span>
                   </div>
@@ -737,9 +782,9 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                       }}
                       title={`إزالة ${subObj.name}`}
                       aria-label={`إزالة ${subObj.name}`}
-                      className="absolute top-1 left-1 w-6 h-6 sm:w-5 sm:h-5 rounded-full bg-rose-600 text-white flex items-center justify-center opacity-95 hover:opacity-100 shadow-sm cursor-pointer md:hover:scale-110 transition-transform z-10"
+                      className="absolute top-1 left-1 w-6 h-6 rounded-lg bg-[#1B1F1C]/85 hover:bg-rose-600 text-white flex items-center justify-center shadow-xs cursor-pointer transition-colors z-10"
                     >
-                      <X className="w-3 h-3 stroke-[3]" />
+                      <X className="w-3.5 h-3.5 stroke-[2.5]" />
                     </button>
                   )}
                 </div>
@@ -749,15 +794,15 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
             return (
               <div
                 key={`empty-${slotIdx}`}
-                className={`min-h-[76px] sm:min-h-[82px] rounded-xl border-2 border-dashed flex items-center justify-center gap-1 transition-all duration-200 ${
+                className={`min-h-[78px] sm:min-h-[84px] rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 transition-colors ${
                   isCurrent
-                    ? 'border-[#F07842] bg-[#F07842]/10 text-[#F07842]'
-                    : 'border-[#D2D6C6] bg-[#FFFFFF]/70 text-[#777B73]'
+                    ? 'border-[#F07842]/60 bg-[#FEF2EC]/60 text-[#F07842]'
+                    : 'border-[#D4D9CC] bg-[#FFFFFF]/70 text-[#777B73]'
                 }`}
                 title={`الخانة ${slotIdx + 1} لـ ${teamDisplayName}`}
               >
-                <Plus className="w-3.5 h-3.5 opacity-75" />
-                <span className="text-xs font-mono font-bold">
+                <Plus className="w-3.5 h-3.5 opacity-80" />
+                <span className="text-[11px] font-mono tabular-nums font-bold">
                   {slotIdx + 1}
                 </span>
               </div>
@@ -769,35 +814,35 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
   };
 
   return (
-    <div className="max-w-[1360px] mx-auto px-3 sm:px-6 py-4 md:py-10">
-      {/* Floating Toast for Coming Soon Clicks */}
-      {comingSoonToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md bg-[#252824] text-[#FFFFFF] px-4 py-3 rounded-2xl shadow-xl border-2 border-[#F07842] text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 text-center animate-in fade-in"
-        >
-          <Clock className="w-4 h-4 text-[#F07842] shrink-0" />
-          <span>{comingSoonToast}</span>
-        </div>
-      )}
+    <MotionConfig reducedMotion="user">
+      <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-5 md:py-10 space-y-6 md:space-y-8">
+        {/* Floating Toast for Coming Soon Clicks */}
+        {comingSoonToast && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md bg-[#1B1F1C] text-[#FFFFFF] px-4 py-3 rounded-2xl shadow-xl border border-[#F07842] text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 text-center"
+          >
+            <Clock className="w-4 h-4 text-[#F07842] shrink-0" />
+            <span>{comingSoonToast}</span>
+          </div>
+        )}
 
-      {/* UNIFIED GAME SETUP CARD */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 shadow-xs space-y-6 md:space-y-8">
         {/* Lock Banner if Game is Active */}
         {isGameLocked && (
-          <div className="p-4 rounded-xl bg-[#14543D] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-            <div className="flex items-center gap-2.5">
-              <Lock className="w-5 h-5 text-[#F07842] shrink-0" />
-              <div>
-                <div className="font-bold text-sm">
-                  الجولة قيد التشغيل (إعدادات الفرق والفئات مقفلة للقراءة فقط)
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#1B1F1C] text-white border border-[#F07842]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <Lock className="w-5 h-5 text-[#F07842] shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-display font-bold text-sm sm:text-base">
+                  الجولة قيد التشغيل — اختيارات الفرق والفئات مقفلة
                 </div>
-                <div className="text-xs text-white/80">
-                  تم قفل الفرق والفئات المختارة نهائياً لحماية نزاهة المنافسة حتى انتهاء التحدي وبدء لعبة جديدة.
-                </div>
+                <p className="text-xs text-[#D5D9CE] leading-relaxed">
+                  تم تثبيت الفرق والفئات المختارة طوال مدة التحدي لحماية نزاهة
+                  المنافسة حتى إعلان النتيجة.
+                </p>
                 {navError && (
-                  <div className="text-xs text-rose-300 font-bold mt-1 bg-rose-950/50 px-2.5 py-1 rounded-lg">
+                  <div className="text-xs text-rose-300 font-bold mt-1 bg-rose-950/60 px-2.5 py-1 rounded-lg">
                     {navError}
                   </div>
                 )}
@@ -811,1004 +856,1301 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 e.stopPropagation();
                 handleReturnToBoard();
               }}
-              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] active:scale-95 text-white text-xs sm:text-sm font-bold whitespace-nowrap self-stretch sm:self-center cursor-pointer shadow-sm transition-all flex items-center justify-center gap-2 touch-manipulation select-none disabled:opacity-60"
+              className="min-h-[46px] px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold whitespace-nowrap cursor-pointer transition-colors flex items-center justify-center gap-2 shrink-0 disabled:opacity-60"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>{isNavigating ? 'جاري الانتقال...' : 'العودة إلى لوحة اللعب'}</span>
+              <Play className="w-4 h-4 fill-current shrink-0" />
+              <span>
+                {isNavigating ? 'جاري الانتقال...' : 'العودة إلى لوحة اللعب'}
+              </span>
             </button>
           </div>
         )}
 
-        {/* Unified Card Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-4 sm:pb-5">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#F07842]">
-              <Layers className="w-4 h-4" />
-              <span>
-                إعداد اللعبة · اختيار الفئات وتجهيز الفرق ({totalSelectedCount}/{totalRequiredCount})
-              </span>
+        {/* MAIN ARENA SETUP CONTAINER */}
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 lg:p-10 space-y-8">
+          {/* Header & Step Progress */}
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-[#E5E8DD] pb-5">
+            <div className="space-y-2 text-right">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#F07842]">
+                <span>إعداد تحدي نِزال</span>
+                <span aria-hidden="true">·</span>
+                <span className="font-mono tabular-nums text-[#52574E]">
+                  {totalSelectedCount} / {totalRequiredCount} فئات مختارة
+                </span>
+              </div>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#1B1F1C]">
+                اختيار فئات التحدي وتجهيز الفرق
+              </h1>
+              <p className="text-xs sm:text-sm text-[#52574E] max-w-[60ch] leading-relaxed">
+                يختار كل فريق {SUBCATEGORIES_PER_TEAM} فئات فرعية كحد أقصى دون
+                تكرار، ثم تُثبّت الاختيارات عند بدء المباراة مباشرة.
+              </p>
             </div>
-            <h1 className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-[#252824]">
-              إعداد اللعبة
-            </h1>
-            <p className="text-xs sm:text-sm text-[#777B73]">
-              اختر {SUBCATEGORIES_PER_TEAM} فئات فرعية مستقلة لكل فريق أولاً، ثم سمّ الفرق وأضف اللاعبين وابدأ التحدي مباشرة.
-            </p>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={onBackToHome}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#252824] flex items-center gap-1.5 cursor-pointer"
-            >
-              <ArrowRight className="w-3.5 h-3.5 text-[#14543D]" />
-              <span>الرئيسية</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => scrollToSection('step-team-setup')}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#EAF2EE] hover:bg-[#DCEAE3] border border-[#14543D]/20 text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer"
-            >
-              <Users className="w-3.5 h-3.5 text-[#F07842]" />
-              <span>الانتقال إلى سوّ فريقك</span>
-              <ArrowDown className="w-3.5 h-3.5" />
-            </button>
-
-            {!isGameLocked && currentTeamPicks.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={handleClearCurrentTeamPicks}
-                className="min-h-[40px] px-3 py-2 rounded-xl text-xs font-bold text-[#777B73] hover:text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
-                title="مسح اختيارات الفريق الحالي"
+                onClick={onBackToHome}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>مسح ({currentTeam?.name})</span>
+                <ArrowRight className="w-4 h-4 text-[#14543D] shrink-0" />
+                <span>الرئيسية</span>
               </button>
-            )}
-          </div>
-        </div>
 
-        {/* =================================================================== */}
-        {/* STEP 1 SUBSECTION: اختر الفئات                                      */}
-        {/* =================================================================== */}
-        <section
-          id="step-categories"
-          aria-labelledby="step-categories-heading"
-          className="space-y-5 scroll-mt-24"
-        >
-          {/* Step 1 Subheading & Turn Switcher */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-xl bg-[#14543D] text-white font-mono text-sm font-bold flex items-center justify-center shrink-0">
-                1
-              </span>
-              <div>
-                <h2
-                  id="step-categories-heading"
-                  className="font-display text-lg sm:text-xl font-bold text-[#252824]"
+              <button
+                type="button"
+                onClick={() => scrollToSection('step-team-setup')}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[#EAF2EE] hover:bg-[#DCEAE3] border border-[#14543D]/20 text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Users className="w-4 h-4 text-[#F07842] shrink-0" />
+                <span>تجهيز الفرق</span>
+                <ArrowDown className="w-3.5 h-3.5 shrink-0" />
+              </button>
+
+              {!isGameLocked && currentTeamPicks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearCurrentTeamPicks}
+                  className="min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold text-[#52574E] hover:text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer transition-colors"
+                  title="مسح اختيارات الفريق الحالي"
                 >
-                  اختر الفئات
-                </h2>
-                <p className="text-xs text-[#777B73]">
-                  لكل فريق {SUBCATEGORIES_PER_TEAM} فئات مستقلة بدون تكرار · المختار الآن:{' '}
-                  <strong className="font-mono tabular-nums text-[#14543D]">
-                    {totalSelectedCount}/{totalRequiredCount}
-                  </strong>
+                  <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                  <span>مسح ({currentTeam?.name})</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ================================================================= */}
+          {/* SECTION 1: TEAM SLOTS & SELECTION SUMMARY                         */}
+          {/* ================================================================= */}
+          <section
+            aria-label="حالة اختيار الفرق"
+            className="bg-[#F3F5E9]/85 border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-display text-base sm:text-lg font-bold text-[#1B1F1C]">
+                    ملخص اختيارات الفرق
+                  </h2>
+                  <span className="text-xs font-semibold text-[#52574E] tabular-nums">
+                    ({SUBCATEGORIES_PER_TEAM} فئات كحد أقصى لكل فريق)
+                  </span>
+                </div>
+                <p className="text-xs text-[#52574E] flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
+                  <span>
+                    تُثبّت جميع اختيارات الفرق والفئات تلقائياً بمجرد بدء
+                    المباراة ولا يمكن تعديلها أثناء الجولة.
+                  </span>
                 </p>
               </div>
+
+              {!isGameLocked && teams.length >= 2 && (
+                <button
+                  type="button"
+                  onClick={handleToggleBetweenTeams}
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-[#1B1F1C] hover:bg-[#2C312D] text-white text-xs font-bold flex items-center justify-center gap-2 self-start md:self-center cursor-pointer transition-colors shrink-0"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
+                  <span>
+                    تبديل الدور إلى:{' '}
+                    {teams[(safeSelectingTeamIndex + 1) % teams.length]?.name ||
+                      `الفريق ${((safeSelectingTeamIndex + 1) % teams.length) + 1}`}
+                  </span>
+                </button>
+              )}
             </div>
 
-            {!isGameLocked && teams.length >= 2 && (
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 ${
+                teams.length === 3
+                  ? 'lg:grid-cols-3'
+                  : teams.length >= 4
+                  ? 'lg:grid-cols-4'
+                  : ''
+              } gap-3`}
+            >
+              {teams.map((t, idx) => renderTeamSlotBlock(t, idx))}
+            </div>
+          </section>
+
+          {/* ================================================================= */}
+          {/* SECTION 2: MAIN CATEGORIES GRID (REAL DATABASE IMAGES & ORDER)    */}
+          {/* ================================================================= */}
+          <section
+            id="step-categories"
+            aria-labelledby="main-categories-heading"
+            className="space-y-4 scroll-mt-24"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="w-8 h-8 rounded-xl bg-[#F07842] text-white font-mono tabular-nums text-sm font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  1
+                </span>
+                <div className="space-y-0.5">
+                  <h2
+                    id="main-categories-heading"
+                    className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]"
+                  >
+                    اختر الفئة الرئيسية
+                  </h2>
+                  <p className="text-xs text-[#52574E]">
+                    اضغط على أي قسم لاستعراض فئاته الفرعية والاختيار منها، أو
+                    استعرض جميع الفئات معاً.
+                  </p>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={handleToggleBetweenTeams}
-                className="px-4 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center gap-2 self-start sm:self-center cursor-pointer transition-colors"
+                onClick={() => setSelectedMainFilter('all')}
+                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-colors flex items-center justify-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
+                  selectedMainFilter === 'all'
+                    ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
+                    : 'bg-[#F3F5E9] hover:bg-[#E7EAD8] text-[#1B1F1C] border-[#E5E8DD]'
+                }`}
               >
-                <ArrowLeftRight className="w-3.5 h-3.5 text-[#F07842]" />
-                <span>
-                  تبديل الدور إلى:{' '}
-                  {teams[(safeSelectingTeamIndex + 1) % teams.length]?.name ||
-                    `الفريق ${((safeSelectingTeamIndex + 1) % teams.length) + 1}`}
+                <LayoutGrid className="w-4 h-4 text-[#F07842] shrink-0" />
+                <span>كل الفئات</span>
+                <span className="font-mono tabular-nums text-xs opacity-80">
+                  ({activeSubcategories.length})
                 </span>
               </button>
+            </div>
+
+            {visibleMainCategories.length === 0 ? (
+              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl py-10 px-4 text-center space-y-2">
+                <p className="font-display text-sm font-bold text-[#1B1F1C]">
+                  جاري تحميل الفئات الرئيسية أو لا توجد فئات مفعّلة حالياً.
+                </p>
+                <p className="text-xs text-[#52574E]">
+                  تأكد من اتصال البيانات أو أعد المحاولة بعد لحظات.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {visibleMainCategories.map((mainCat) => {
+                  const isSelected =
+                    selectedMainFilter === mainCat.id ||
+                    selectedMainFilter === mainCat.name;
+                  const isComingSoon = Boolean(mainCat.isComingSoon);
+                  const subsCount =
+                    mainCategoryCounts.totalMap.get(mainCat.id) ??
+                    mainCategoryCounts.totalMap.get(mainCat.name) ??
+                    0;
+                  const selectedInMain =
+                    mainCategoryCounts.selectedMap.get(mainCat.id) ??
+                    mainCategoryCounts.selectedMap.get(mainCat.name) ??
+                    0;
+
+                  return (
+                    <motion.button
+                      key={mainCat.id}
+                      type="button"
+                      onClick={() => handleSelectMainCategoryCard(mainCat)}
+                      whileHover={shouldReduceMotion ? undefined : { y: -3 }}
+                      whileTap={
+                        shouldReduceMotion ? undefined : { scale: 0.985 }
+                      }
+                      transition={{ duration: 0.16, ease: EASE_OUT }}
+                      aria-pressed={isSelected}
+                      aria-label={
+                        isComingSoon
+                          ? `${mainCat.name} - قريباً`
+                          : `تصفية الفئات الفرعية حسب ${mainCat.name}`
+                      }
+                      className={`group relative w-full min-w-0 rounded-2xl overflow-hidden flex flex-col text-right transition-[border-color,box-shadow,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
+                        isComingSoon
+                          ? isSelected
+                            ? 'bg-[#FEF2EC] border-2 border-dashed border-[#F07842] cursor-pointer'
+                            : 'bg-[#F7F8F1] border border-dashed border-[#D4D9CC] hover:border-[#F07842]/70 cursor-pointer'
+                          : isSelected
+                          ? 'bg-[#FFFFFF] border-2 border-[#F07842] shadow-md cursor-pointer'
+                          : 'bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842]/70 shadow-xs hover:shadow-sm cursor-pointer'
+                      }`}
+                    >
+                      {/* Top Highlight Bar when selected */}
+                      {isSelected && (
+                        <div className="absolute top-0 inset-x-0 h-1 bg-[#F07842] z-20" />
+                      )}
+
+                      {/* Uniform Image Zone */}
+                      <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0 bg-[#14543D]">
+                        <CategoryCardArtwork
+                          name={mainCat.name}
+                          mainCategory={mainCat.name}
+                          imageUrl={mainCat.imageUrl}
+                          isMainCategory
+                          className={
+                            isComingSoon ? 'grayscale-[45%] brightness-80' : ''
+                          }
+                        />
+
+                        {isComingSoon ? (
+                          <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
+                            <span className="px-2 py-0.5 rounded-md bg-[#F07842] text-white text-[10px] font-bold inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span>قريباً</span>
+                            </span>
+                            <span className="w-6 h-6 rounded-md bg-[#1B1F1C]/80 text-white flex items-center justify-center">
+                              <Lock className="w-3 h-3" />
+                            </span>
+                          </div>
+                        ) : (
+                          selectedInMain > 0 && (
+                            <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-[#F07842] text-white font-mono tabular-nums text-[10px] font-bold">
+                              {selectedInMain} مختارة
+                            </div>
+                          )
+                        )}
+                      </div>
+
+                      {/* Uniform Content Zone */}
+                      <div
+                        className={`flex-1 w-full p-3 sm:p-4 flex flex-col justify-between gap-2 ${
+                          isSelected && !isComingSoon
+                            ? 'bg-[#FEF2EC]/55'
+                            : isComingSoon
+                            ? 'bg-[#F7F8F1]'
+                            : 'bg-[#FFFFFF]'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <h3
+                              className={`font-display text-sm sm:text-base font-bold leading-snug line-clamp-1 ${
+                                isSelected
+                                  ? 'text-[#F07842]'
+                                  : 'text-[#1B1F1C] group-hover:text-[#F07842] transition-colors'
+                              }`}
+                            >
+                              {mainCat.name}
+                            </h3>
+                            {isSelected && !isComingSoon && (
+                              <span className="w-5 h-5 rounded-md bg-[#F07842] text-white flex items-center justify-center shrink-0">
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                              </span>
+                            )}
+                          </div>
+                          {mainCat.tagline && (
+                            <p className="text-[11px] sm:text-xs text-[#52574E] line-clamp-1">
+                              {mainCat.tagline}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-[#E5E8DD] flex items-center justify-between text-[11px] font-bold">
+                          <span className="tabular-nums text-[#666B62]">
+                            {isComingSoon
+                              ? 'تفتح قريباً'
+                              : `${subsCount} فئات فرعية`}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 ${
+                              isSelected ? 'text-[#F07842]' : 'text-[#14543D]'
+                            }`}
+                          >
+                            <span>{isSelected ? 'محددة' : 'تصفح'}</span>
+                            <ArrowLeft className="w-3 h-3 shrink-0" />
+                          </span>
+                        </div>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
             )}
-          </div>
+          </section>
 
-          {/* Interactive Team Category Slots Strip */}
-          <div
-            className={`grid grid-cols-1 sm:grid-cols-2 ${
-              teams.length === 3
-                ? 'lg:grid-cols-3'
-                : teams.length >= 4
-                ? 'lg:grid-cols-4'
-                : ''
-            } gap-3`}
+          {/* ================================================================= */}
+          {/* SECTION 3: SUBCATEGORIES GRID WITH SMOOTH FILTER TRANSITIONS      */}
+          {/* ================================================================= */}
+          <section
+            id="step-subcategories"
+            aria-labelledby="subcategories-heading"
+            className="border-t border-[#E5E8DD] pt-7 space-y-4 scroll-mt-24"
           >
-            {teams.map((t, idx) => renderTeamSlotBlock(t, idx))}
-          </div>
+            {/* Subcategories Heading, Active Turn Indicator & Search */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+              <div className="space-y-1 text-right">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2
+                    id="subcategories-heading"
+                    className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]"
+                  >
+                    {activeMainCategoryObj
+                      ? `الفئات الفرعية · ${activeMainCategoryObj.name}`
+                      : 'جميع الفئات الفرعية المتاحة'}
+                  </h2>
+                  {activeMainCategoryObj && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMainFilter('all')}
+                      className="text-xs font-bold text-[#F07842] hover:underline cursor-pointer"
+                    >
+                      (عرض الكل)
+                    </button>
+                  )}
+                </div>
 
-          {/* Search Bar + Main Category Filter Pills */}
-          <div className="space-y-3 pt-1">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="relative flex-1 max-w-md">
+                <p className="text-xs text-[#52574E]">
+                  الدور الحالي للاختيار:{' '}
+                  <strong className="text-[#1B1F1C]">
+                    {currentTeam?.name || `الفريق ${safeSelectingTeamIndex + 1}`}
+                  </strong>{' '}
+                  <span className="font-mono tabular-nums font-bold text-[#F07842]">
+                    ({currentTeamPicks.length}/{SUBCATEGORIES_PER_TEAM})
+                  </span>
+                  <span aria-hidden="true" className="mx-1.5">
+                    ·
+                  </span>
+                  <span className="tabular-nums">
+                    المعروض: {filteredSubcategories.length}
+                  </span>
+                </p>
+              </div>
+
+              <div className="relative w-full lg:w-80">
                 <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ابحث بالاسم عن أي فئة فرعية..."
-                  className="w-full pr-10 pl-8 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs sm:text-sm font-semibold text-[#252824] placeholder:text-[#777B73] focus:outline-none focus:border-[#14543D] transition-colors"
+                  placeholder="ابحث بالاسم أو الوصف..."
+                  aria-label="ابحث عن فئة فرعية"
+                  className="w-full min-h-[44px] pr-10 pl-9 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs sm:text-sm font-medium text-[#1B1F1C] placeholder:text-[#777B73] focus:outline-none focus:border-[#F07842] transition-colors"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#777B73] hover:text-[#252824] cursor-pointer"
+                    aria-label="مسح البحث"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 min-w-[32px] min-h-[32px] flex items-center justify-center text-[#777B73] hover:text-[#1B1F1C] cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
-
-              <div className="text-xs font-semibold text-[#777B73]">
-                الدور الحالي للاختيار:{' '}
-                <strong className="text-[#14543D]">
-                  {currentTeam?.name || `الفريق ${safeSelectingTeamIndex + 1}`}
-                </strong>{' '}
-                <span className="font-mono tabular-nums">
-                  ({currentTeamPicks.length}/{SUBCATEGORIES_PER_TEAM})
-                </span>
-              </div>
             </div>
 
-            {/* Horizontal Category Filter Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-none">
-              <button
-                type="button"
-                onClick={() => setSelectedMainFilter('all')}
-                className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap border transition-all cursor-pointer ${
-                  selectedMainFilter === 'all'
-                    ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
-                    : 'bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] border-[#E5E8DD]'
-                }`}
+            {/* Auto-Advance Notification Banner */}
+            {autoAdvanceBanner && (
+              <div
+                role="status"
+                className="p-3.5 rounded-xl bg-[#EAF2EE] border border-[#14543D]/30 text-xs font-bold text-[#14543D] flex flex-wrap items-center justify-between gap-3"
               >
-                <span>الكل</span>
-                <span className="font-mono text-[11px] mr-1.5 opacity-80">
-                  ({activeSubcategories.length})
-                </span>
-              </button>
-
-              {visibleMainCategories.map((mainCat) => {
-                const isSelected =
-                  selectedMainFilter === mainCat.id ||
-                  selectedMainFilter === mainCat.name;
-                const isComingSoon = Boolean(mainCat.isComingSoon);
-                const subsCount =
-                  mainCategoryCounts.totalMap.get(mainCat.id) ??
-                  mainCategoryCounts.totalMap.get(mainCat.name) ??
-                  0;
-                const selectedInMain =
-                  mainCategoryCounts.selectedMap.get(mainCat.id) ??
-                  mainCategoryCounts.selectedMap.get(mainCat.name) ??
-                  0;
-
-                return (
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#F07842] shrink-0" />
+                  <span>{autoAdvanceBanner}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isAllTeamsComplete && (
+                    <button
+                      type="button"
+                      onClick={() => scrollToSection('step-team-setup')}
+                      className="min-h-[36px] px-3 py-1 rounded-lg bg-[#14543D] text-white text-xs font-bold cursor-pointer hover:bg-[#0E3F2D]"
+                    >
+                      الانتقال لإعداد الفرق ↓
+                    </button>
+                  )}
                   <button
-                    key={mainCat.id}
                     type="button"
-                    onClick={() => {
-                      setSelectedMainFilter(mainCat.id);
-                      if (isComingSoon) {
-                        triggerComingSoonMessage();
-                      }
-                    }}
-                    className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap border transition-all flex items-center gap-1.5 cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
-                        : isComingSoon
-                        ? 'bg-[#FEF2EC]/70 hover:bg-[#FEF2EC] text-[#252824] border-[#F07842]/35'
-                        : 'bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] border-[#E5E8DD]'
-                    }`}
+                    onClick={() => setAutoAdvanceBanner(null)}
+                    className="text-[#52574E] hover:text-[#1B1F1C] text-xs cursor-pointer px-2 py-1"
                   >
-                    <span>{mainCat.name}</span>
-                    {isComingSoon ? (
-                      <span
-                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
-                          isSelected
-                            ? 'bg-[#F07842] text-white'
-                            : 'bg-[#F07842]/15 text-[#D9602B] border border-[#F07842]/30'
-                        }`}
-                      >
-                        قريباً
-                      </span>
-                    ) : selectedInMain > 0 ? (
-                      <span className="px-1.5 py-0.2 rounded font-mono text-[10px] font-bold bg-[#F07842] text-white">
-                        {selectedInMain}
-                      </span>
-                    ) : (
-                      <span className="font-mono text-[11px] opacity-75">
-                        ({subsCount})
-                      </span>
-                    )}
+                    إخفاء
                   </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Auto-Advance Notification Banner */}
-          {autoAdvanceBanner && (
-            <div className="p-3.5 rounded-xl bg-[#EAF2EE] border border-[#14543D]/30 text-xs font-bold text-[#14543D] flex flex-wrap items-center justify-between gap-3 shadow-xs">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#F07842] shrink-0" />
-                <span>{autoAdvanceBanner}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {isAllTeamsComplete && (
+            )}
+
+            {/* Validation / Coming Soon Warning Banner */}
+            {validationMessage && (
+              <div
+                role="alert"
+                className="p-3.5 rounded-xl bg-[#FEF2EC] border border-[#F07842] text-xs font-bold text-[#C74E1C] flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#F07842] shrink-0" />
+                  <span>{validationMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setValidationMessage(null)}
+                  aria-label="إغلاق التنبيه"
+                  className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#C74E1C] hover:bg-[#F07842]/10 cursor-pointer shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Animated Subcategory Cards Grid */}
+            <div aria-label="بطاقات الفئات الفرعية">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={`${selectedMainFilter}-${searchQuery.trim() ? 'search' : 'browse'}`}
+                  initial={
+                    shouldReduceMotion ? false : { opacity: 0, y: 8 }
+                  }
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={
+                    shouldReduceMotion ? undefined : { opacity: 0, y: -4 }
+                  }
+                  transition={{ duration: 0.16, ease: EASE_OUT }}
+                >
+                  {filteredSubcategories.length === 0 &&
+                  filteredComingSoonMainCards.length === 0 ? (
+                    <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl py-12 px-4 text-center space-y-3">
+                      <p className="font-display text-sm sm:text-base font-bold text-[#1B1F1C]">
+                        لا توجد فئات فرعية مطابقة للبحث أو التصنيف المحدد.
+                      </p>
+                      <p className="text-xs text-[#52574E]">
+                        جرّب مسح كلمة البحث أو عرض جميع الفئات الفرعية المتاحة.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setSelectedMainFilter('all');
+                        }}
+                        className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold cursor-pointer transition-colors"
+                      >
+                        إظهار جميع الفئات
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4">
+                      {filteredSubcategories.map((sub) => {
+                        const ownerInfo = subcategoryOwnerMap.get(sub.id);
+                        const isSelectedByCurrentTeam =
+                          Boolean(ownerInfo) &&
+                          ownerInfo?.team.id === currentTeam?.id;
+                        const isLockedByOtherTeam =
+                          Boolean(ownerInfo) &&
+                          ownerInfo?.team.id !== currentTeam?.id;
+                        const comingSoon = isSubComingSoon(sub);
+                        const qCount = getQuestionCountForSub(sub);
+                        const ownerTeamName = ownerInfo
+                          ? ownerInfo.team.name?.trim() ||
+                            `الفريق ${ownerInfo.teamIndex + 1}`
+                          : '';
+
+                        if (comingSoon) {
+                          return (
+                            <button
+                              key={sub.id}
+                              type="button"
+                              aria-disabled="true"
+                              onClick={() => triggerComingSoonMessage()}
+                              aria-label={`${sub.name} - قريباً، هذه الفئة غير متاحة حالياً`}
+                              className="group relative min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden bg-[#F7F8F1] border border-dashed border-[#D4D9CC] flex flex-col select-none hover:border-[#F07842]/70 transition-colors cursor-not-allowed text-right"
+                            >
+                              <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
+                                <CategoryCardArtwork
+                                  name={sub.name}
+                                  mainCategory={sub.mainCategory}
+                                  imageUrl={sub.imageUrl}
+                                  className="w-full h-full object-cover grayscale-[45%] brightness-80"
+                                />
+                                <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
+                                  <span className="px-2 py-0.5 rounded-md bg-[#F07842] text-white text-[10px] font-bold inline-flex items-center gap-1">
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    <span>قريباً</span>
+                                  </span>
+                                  <span className="w-6 h-6 rounded-md bg-[#1B1F1C]/80 text-white flex items-center justify-center">
+                                    <Lock className="w-3 h-3" />
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col justify-between gap-2 bg-[#F7F8F1]">
+                                <div className="space-y-1">
+                                  <h3 className="font-display text-sm sm:text-[15px] font-bold text-[#252824] leading-snug line-clamp-2">
+                                    {sub.name}
+                                  </h3>
+                                  {sub.description && (
+                                    <p className="text-[11px] text-[#666B62] line-clamp-2 leading-relaxed">
+                                      {sub.description}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="pt-2 border-t border-[#E5E8DD] text-[11px] font-bold text-[#D9602B]">
+                                  قادمة قريباً
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <motion.button
+                            key={sub.id}
+                            type="button"
+                            disabled={isLockedByOtherTeam}
+                            onClick={() => handleToggleSubcategory(sub)}
+                            whileHover={
+                              shouldReduceMotion || isLockedByOtherTeam
+                                ? undefined
+                                : { y: -3 }
+                            }
+                            whileTap={
+                              shouldReduceMotion || isLockedByOtherTeam
+                                ? undefined
+                                : { scale: 0.98 }
+                            }
+                            transition={{ duration: 0.15, ease: EASE_OUT }}
+                            aria-pressed={isSelectedByCurrentTeam}
+                            aria-label={
+                              isLockedByOtherTeam
+                                ? `${sub.name} - غير متاحة، اختارها ${ownerTeamName}`
+                                : isSelectedByCurrentTeam
+                                ? `${sub.name} - مختارة لفريقك ${currentTeam?.name}، اضغط لإلغاء الاختيار`
+                                : `${sub.name} - اضغط لاختيارها لفريق ${currentTeam?.name}`
+                            }
+                            className={`group relative min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden flex flex-col select-none text-right transition-[border-color,box-shadow,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
+                              isSelectedByCurrentTeam
+                                ? 'bg-[#FEF2EC] border-2 border-[#F07842] shadow-md cursor-pointer z-10'
+                                : isLockedByOtherTeam
+                                ? 'bg-[#F7F8F1] border border-[#E5E8DD] opacity-70 saturate-50 cursor-not-allowed'
+                                : 'bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842]/80 shadow-xs hover:shadow-md cursor-pointer'
+                            }`}
+                          >
+                            {isSelectedByCurrentTeam && (
+                              <div className="absolute top-0 inset-x-0 h-1 bg-[#F07842] z-20" />
+                            )}
+
+                            {/* Subcategory Artwork Zone */}
+                            <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0 bg-[#14543D]">
+                              <CategoryCardArtwork
+                                name={sub.name}
+                                mainCategory={sub.mainCategory}
+                                imageUrl={sub.imageUrl}
+                                className={`w-full h-full object-cover transition-transform duration-300 ease-out ${
+                                  isSelectedByCurrentTeam
+                                    ? 'scale-105'
+                                    : 'group-hover:scale-105'
+                                }`}
+                              />
+
+                              <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
+                                {isLockedByOtherTeam ? (
+                                  <div
+                                    className="px-2 py-0.5 rounded-md flex items-center gap-1 text-white text-[10px] font-bold truncate max-w-[120px]"
+                                    style={{
+                                      backgroundColor:
+                                        ownerInfo?.team.color || '#1B1F1C',
+                                    }}
+                                  >
+                                    <Lock className="w-3 h-3 shrink-0" />
+                                    <span className="truncate">
+                                      {ownerTeamName}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className={`w-7 h-7 rounded-lg flex items-center justify-center border-2 transition-colors ${
+                                      isSelectedByCurrentTeam
+                                        ? 'bg-[#F07842] border-white text-white shadow-xs'
+                                        : 'bg-[#1B1F1C]/65 border-white/75 text-transparent group-hover:border-white group-hover:bg-[#1B1F1C]/85'
+                                    }`}
+                                  >
+                                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                  </div>
+                                )}
+
+                                {isWalaKalimaCategory({
+                                  subcategoryId: sub.id,
+                                  subcategoryName: sub.name,
+                                  mainCategoryId: sub.mainCategoryId,
+                                  mainCategoryName: sub.mainCategory,
+                                }) ? (
+                                  <span className="px-2 py-0.5 rounded-md font-sans text-[10px] font-bold bg-[#F07842] text-white">
+                                    QR تفاعلي
+                                  </span>
+                                ) : qCount > 0 ? (
+                                  <span className="px-2 py-0.5 rounded-md font-mono tabular-nums text-[10px] font-bold bg-[#1B1F1C]/80 text-white">
+                                    {qCount} س
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            {/* Subcategory Details & Selection State */}
+                            <div
+                              className={`flex-1 w-full p-3 sm:p-3.5 flex flex-col justify-between gap-2 transition-colors ${
+                                isSelectedByCurrentTeam
+                                  ? 'bg-[#FEF2EC]'
+                                  : isLockedByOtherTeam
+                                  ? 'bg-[#F7F8F1]'
+                                  : 'bg-[#FFFFFF]'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <h3
+                                  className={`font-display text-sm sm:text-[15px] font-bold leading-snug line-clamp-2 ${
+                                    isSelectedByCurrentTeam
+                                      ? 'text-[#1B1F1C]'
+                                      : isLockedByOtherTeam
+                                      ? 'text-[#52574E]'
+                                      : 'text-[#1B1F1C] group-hover:text-[#F07842] transition-colors'
+                                  }`}
+                                >
+                                  {sub.name}
+                                </h3>
+                                {sub.description && (
+                                  <p className="text-[11px] text-[#52574E] line-clamp-2 leading-relaxed">
+                                    {sub.description}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div
+                                className={`pt-2 border-t flex items-center justify-between text-[11px] font-bold ${
+                                  isSelectedByCurrentTeam
+                                    ? 'border-[#F07842]/30 text-[#D9602B]'
+                                    : 'border-[#E5E8DD]'
+                                }`}
+                              >
+                                {isSelectedByCurrentTeam ? (
+                                  <>
+                                    <span>مختارة للفريق</span>
+                                    <span className="text-[#1B1F1C] opacity-75">
+                                      إلغاء ×
+                                    </span>
+                                  </>
+                                ) : isLockedByOtherTeam ? (
+                                  <span className="text-[#666B62] truncate max-w-full">
+                                    محجوزة لـ {ownerTeamName}
+                                  </span>
+                                ) : (
+                                  <>
+                                    <span className="text-[#14543D] group-hover:text-[#F07842] transition-colors">
+                                      اختيار الفئة
+                                    </span>
+                                    <Plus className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+
+                      {/* Coming Soon Main Categories without active subcategories */}
+                      {filteredComingSoonMainCards.map((mainCat) => (
+                        <button
+                          key={mainCat.id}
+                          type="button"
+                          aria-disabled="true"
+                          onClick={() => triggerComingSoonMessage()}
+                          aria-label={`${mainCat.name} - قريباً، هذه الفئة غير متاحة حالياً`}
+                          className="group relative min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden bg-[#F7F8F1] border border-dashed border-[#D4D9CC] flex flex-col select-none hover:border-[#F07842]/75 transition-colors cursor-not-allowed text-right"
+                        >
+                          <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
+                            <CategoryCardArtwork
+                              name={mainCat.name}
+                              mainCategory={mainCat.name}
+                              imageUrl={mainCat.imageUrl}
+                              isMainCategory
+                              className="w-full h-full object-cover grayscale-[45%] brightness-80"
+                            />
+                            <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
+                              <span className="px-2 py-0.5 rounded-md bg-[#F07842] text-white text-[10px] font-bold inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3 shrink-0" />
+                                <span>قريباً</span>
+                              </span>
+                              <span className="w-6 h-6 rounded-md bg-[#1B1F1C]/80 text-white flex items-center justify-center">
+                                <Lock className="w-3 h-3" />
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col justify-between gap-2 bg-[#F7F8F1]">
+                            <div className="space-y-1">
+                              <h3 className="font-display text-sm sm:text-[15px] font-bold text-[#252824] leading-snug line-clamp-2">
+                                {mainCat.name}
+                              </h3>
+                              {(mainCat.description || mainCat.tagline) && (
+                                <p className="text-[11px] text-[#666B62] line-clamp-2 leading-relaxed">
+                                  {mainCat.description || mainCat.tagline}
+                                </p>
+                              )}
+                            </div>
+                            <div className="pt-2 border-t border-[#E5E8DD] text-[11px] font-bold text-[#D9602B]">
+                              غير متاحة حالياً · قريباً
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Quick Next-Step Nudge when all teams have 3/3 */}
+            {!isGameLocked && isAllTeamsComplete && (
+              <div className="p-4 rounded-2xl bg-[#1B1F1C] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="font-display text-sm sm:text-base font-bold text-white">
+                    اكتمل اختيار جميع الفئات ({totalSelectedCount}/
+                    {totalRequiredCount})
+                  </div>
+                  <p className="text-xs text-[#D5D9CE]">
+                    يمكنك مراجعة أسماء الفرق واللاعبين بالأسفل أو بدء التحدي
+                    مباشرة.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => scrollToSection('step-team-setup')}
-                    className="px-3 py-1 rounded-lg bg-[#14543D] text-white text-[11px] font-bold cursor-pointer hover:bg-[#0E3F2D]"
+                    className="min-h-[44px] px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-white cursor-pointer transition-colors"
                   >
-                    الانتقال لإعداد الفرق ↓
+                    مراجعة الفرق ↓
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setAutoAdvanceBanner(null)}
-                  className="text-[#777B73] hover:text-[#252824] text-[11px] cursor-pointer"
-                >
-                  إخفاء
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Validation / Coming Soon Warning Banner */}
-          {validationMessage && (
-            <div className="p-3.5 rounded-xl bg-[#FEF2EC] border-2 border-[#F07842] text-xs font-bold text-[#D9602B] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#F07842] shrink-0" />
-                <span>{validationMessage}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setValidationMessage(null)}
-                className="text-[#D9602B] hover:text-[#252824] cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Subcategory Cards Grid */}
-          <div aria-label="بطاقات الفئات الفرعية">
-            {filteredSubcategories.length === 0 &&
-            filteredComingSoonMainCards.length === 0 ? (
-              <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl py-14 text-center text-sm text-[#777B73] space-y-2">
-                <p>لا توجد فئات مطابقة للبحث أو التصنيف المحدد.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSelectedMainFilter('all');
-                  }}
-                  className="px-4 py-2 rounded-xl bg-[#F07842] text-white text-xs font-bold cursor-pointer"
-                >
-                  إظهار جميع الفئات
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4">
-                {filteredSubcategories.map((sub) => {
-                  const ownerInfo = subcategoryOwnerMap.get(sub.id);
-                  const isSelectedByCurrentTeam =
-                    Boolean(ownerInfo) && ownerInfo?.team.id === currentTeam?.id;
-                  const isLockedByOtherTeam =
-                    Boolean(ownerInfo) && ownerInfo?.team.id !== currentTeam?.id;
-                  const comingSoon = isSubComingSoon(sub);
-                  const qCount = getQuestionCountForSub(sub);
-                  const ownerTeamName = ownerInfo
-                    ? ownerInfo.team.name?.trim() ||
-                      `الفريق ${ownerInfo.teamIndex + 1}`
-                    : '';
-
-                  if (comingSoon) {
-                    return (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        aria-disabled="true"
-                        onClick={() => triggerComingSoonMessage()}
-                        aria-label={`${sub.name} - قريباً، هذه الفئة غير متاحة حالياً`}
-                        className="group relative min-h-[208px] sm:min-h-[228px] w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] flex flex-col select-none opacity-95 hover:border-[#F07842]/70 transition-all duration-200 cursor-not-allowed shadow-xs"
-                      >
-                        <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
-                          <CategoryCardArtwork
-                            name={sub.name}
-                            mainCategory={sub.mainCategory}
-                            imageUrl={sub.imageUrl}
-                            className="w-full h-full object-cover grayscale-[45%] brightness-80"
-                          />
-                          <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
-                            <span className="px-2 py-0.5 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-sm">
-                              <Clock className="w-3 h-3 shrink-0" />
-                              <span>قريباً</span>
-                            </span>
-                            <span className="w-6 h-6 rounded-lg bg-[#252824]/80 border border-white/20 text-[#F3F5E9] flex items-center justify-center">
-                              <Lock className="w-3 h-3" />
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col items-center justify-between text-center gap-1.5 bg-[#F3F5E9]">
-                          <h3 className="font-display text-sm sm:text-[15px] md:text-base font-bold text-[#252824] leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center">
-                            {sub.name}
-                          </h3>
-                          <div className="text-[11px] font-bold text-[#D9602B]">
-                            قادمة قريباً
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  }
-
-                  return (
-                    <button
-                      key={sub.id}
-                      type="button"
-                      disabled={isLockedByOtherTeam}
-                      onClick={() => handleToggleSubcategory(sub)}
-                      aria-label={
-                        isLockedByOtherTeam
-                          ? `${sub.name} - غير متاحة، اختارها ${ownerTeamName}`
-                          : isSelectedByCurrentTeam
-                          ? `${sub.name} - مختارة لفريقك ${currentTeam?.name}، اضغط لإلغاء الاختيار`
-                          : `${sub.name} - اضغط لاختيارها لفريق ${currentTeam?.name}`
-                      }
-                      className={`group relative min-h-[208px] sm:min-h-[228px] w-full rounded-2xl overflow-hidden border-2 flex flex-col select-none transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
-                        isSelectedByCurrentTeam
-                          ? 'bg-[#14543D] border-[#F07842] ring-2 md:ring-4 ring-[#F07842]/35 ring-offset-1 md:ring-offset-2 ring-offset-[#FFFFFF] md:-translate-y-1 shadow-[0_10px_22px_-6px_rgba(240,120,66,0.36),0_4px_12px_rgba(20,84,61,0.18)] cursor-pointer z-10'
-                          : isLockedByOtherTeam
-                          ? 'bg-[#F3F5E9] border-[#E5E8DD] opacity-65 saturate-50 cursor-not-allowed'
-                          : 'bg-[#FFFFFF] border-[#E5E8DD] hover:border-[#F07842]/80 md:hover:-translate-y-1 hover:shadow-lg active:scale-[0.98] shadow-xs cursor-pointer'
-                      }`}
-                    >
-                      {isSelectedByCurrentTeam && (
-                        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-[#F07842] via-[#FFB088] to-[#F07842] z-20" />
-                      )}
-
-                      {/* Top Artwork Zone (Image never overlaps or obscures subcategory name) */}
-                      <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0 bg-[#14543D]">
-                        <CategoryCardArtwork
-                          name={sub.name}
-                          mainCategory={sub.mainCategory}
-                          imageUrl={sub.imageUrl}
-                          className={`w-full h-full object-cover transition-transform duration-300 ease-out ${
-                            isSelectedByCurrentTeam
-                              ? 'scale-105'
-                              : 'group-hover:scale-105'
-                          }`}
-                        />
-
-                        <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
-                          {isLockedByOtherTeam ? (
-                            <div
-                              className="px-2 py-0.5 rounded-lg flex items-center gap-1 text-white text-[10px] font-bold shadow-xs truncate max-w-[120px]"
-                              style={{
-                                backgroundColor: ownerInfo?.team.color || '#252824',
-                              }}
-                            >
-                              <Lock className="w-3 h-3 shrink-0" />
-                              <span className="truncate">{ownerTeamName}</span>
-                            </div>
-                          ) : (
-                            <div
-                              className={`w-7 h-7 rounded-lg flex items-center justify-center border-2 transition-all duration-200 ${
-                                isSelectedByCurrentTeam
-                                  ? 'bg-gradient-to-br from-[#F07842] to-[#D9602B] border-white text-white scale-105 shadow-md'
-                                  : 'bg-[#252824]/60 border-white/75 text-transparent group-hover:border-white group-hover:bg-[#252824]/85'
-                              }`}
-                            >
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            </div>
-                          )}
-
-                          {isWalaKalimaCategory({
-                            subcategoryId: sub.id,
-                            subcategoryName: sub.name,
-                            mainCategoryId: sub.mainCategoryId,
-                            mainCategoryName: sub.mainCategory,
-                          }) ? (
-                            <span className="px-2 py-0.5 rounded-md font-sans text-[10px] sm:text-[11px] font-bold shadow-xs bg-[#F07842] text-white">
-                              QR تفاعلي
-                            </span>
-                          ) : qCount > 0 ? (
-                            <span
-                              className={`px-2 py-0.5 rounded-md font-mono text-[10px] sm:text-[11px] font-bold shadow-xs ${
-                                isSelectedByCurrentTeam
-                                  ? 'bg-[#14543D] text-[#F3F5E9] border border-[#F07842]/50'
-                                  : 'bg-[#252824]/80 text-[#F3F5E9]'
-                              }`}
-                            >
-                              {qCount} س
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {/* Dedicated Center-Aligned High-Contrast Subcategory Title Zone */}
-                      <div
-                        className={`flex-1 w-full p-3 sm:p-3.5 flex flex-col items-center justify-between text-center gap-1.5 transition-colors ${
-                          isSelectedByCurrentTeam
-                            ? 'bg-[#14543D] text-[#FFFFFF]'
-                            : isLockedByOtherTeam
-                            ? 'bg-[#F3F5E9] text-[#52574E]'
-                            : 'bg-[#FFFFFF] text-[#252824]'
-                        }`}
-                      >
-                        <h3 className="font-display text-sm sm:text-[15px] md:text-base font-bold leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center w-full">
-                          {sub.name}
-                        </h3>
-
-                        <div className="text-[11px] font-bold w-full flex items-center justify-center">
-                          {isSelectedByCurrentTeam ? (
-                            <span className="inline-flex items-center gap-1 text-[#FFB088]">
-                              <Sparkles className="w-3 h-3 text-[#F07842] shrink-0" />
-                              <span>مختارة لفريقك</span>
-                            </span>
-                          ) : isLockedByOtherTeam ? (
-                            <span className="text-[#777B73] truncate max-w-full">
-                              محجوزة لـ {ownerTeamName}
-                            </span>
-                          ) : (
-                            <span className="text-[#14543D] group-hover:text-[#F07842] transition-colors">
-                              اضغط للاختيار
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-
-                {/* Coming Soon Main Categories (e.g. ولا كلمة) */}
-                {filteredComingSoonMainCards.map((mainCat) => (
                   <button
-                    key={mainCat.id}
                     type="button"
-                    aria-disabled="true"
-                    onClick={() => triggerComingSoonMessage()}
-                    aria-label={`${mainCat.name} - قريباً، هذه الفئة غير متاحة حالياً`}
-                    className="group relative min-h-[208px] sm:min-h-[228px] w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] flex flex-col select-none opacity-95 hover:border-[#F07842]/75 transition-all duration-200 cursor-not-allowed shadow-xs"
+                    onClick={handleStartChallenge}
+                    className="min-h-[44px] px-5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
-                    <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
-                      <CategoryCardArtwork
-                        name={mainCat.name}
-                        mainCategory={mainCat.name}
-                        imageUrl={mainCat.imageUrl}
-                        isMainCategory
-                        className="w-full h-full object-cover grayscale-[45%] brightness-80"
-                      />
-                      <div className="absolute top-2 inset-x-2 flex items-center justify-between z-10">
-                        <span className="px-2 py-0.5 rounded-lg bg-[#F07842] text-white text-[10px] sm:text-[11px] font-bold flex items-center gap-1 shadow-sm">
-                          <Clock className="w-3 h-3 shrink-0" />
-                          <span>قريباً</span>
-                        </span>
-                        <span className="w-6 h-6 rounded-lg bg-[#252824]/80 border border-white/20 text-[#F3F5E9] flex items-center justify-center">
-                          <Lock className="w-3 h-3" />
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col items-center justify-between text-center gap-1.5 bg-[#F3F5E9]">
-                      <h3 className="font-display text-sm sm:text-[15px] md:text-base font-bold text-[#252824] leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center w-full">
-                        {mainCat.name}
-                      </h3>
-                      <div className="text-[11px] font-bold text-[#D9602B]">
-                        غير متاحة حالياً · قادمة قريباً
-                      </div>
-                    </div>
+                    <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+                    <span>بدء التحدي الآن</span>
                   </button>
-                ))}
+                </div>
               </div>
             )}
-          </div>
-        </section>
+          </section>
 
-        {/* =================================================================== */}
-        {/* STEP 2 SUBSECTION: سوّ فريقك (Same Unified Card, Subheading Divider) */}
-        {/* =================================================================== */}
-        <section
-          id="step-team-setup"
-          aria-labelledby="step-team-setup-heading"
-          className="border-t-2 border-[#E5E8DD] pt-8 space-y-6 scroll-mt-24"
-        >
-          {/* Step 2 Subheading + Team Count & Timer Controls */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <span className="w-8 h-8 rounded-xl bg-[#F07842] text-white font-mono text-sm font-bold flex items-center justify-center shrink-0 mt-0.5">
-                2
-              </span>
-              <div className="space-y-1">
-                <h2
-                  id="step-team-setup-heading"
-                  className="font-display text-lg sm:text-xl font-bold text-[#252824]"
-                >
-                  {isGameLocked ? 'بيانات الفرق المشاركة في الجولة' : 'سوّ فريقك'}
-                </h2>
-                <p className="text-xs text-[#777B73]">
-                  {isGameLocked
-                    ? 'الجولة نشطة حالياً. جميع الفرق والفئات مقفلة لمنع التغيير أثناء اللعب.'
-                    : 'حدد عدد الفرق، سمّ كل فريق، اختر لونه وأضف أسماء اللاعبين ومدة الإجابة.'}
-                </p>
-              </div>
-            </div>
-
-            {/* Team Count & Timer Controls */}
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1 w-full sm:w-auto">
-                <span className="text-xs font-semibold text-[#777B73] px-2 flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5 text-[#14543D]" />
-                  <span>عدد الفرق:</span>
+          {/* ================================================================= */}
+          {/* SECTION 4: STEP 2 — TEAM SETUP & FINAL START ACTION               */}
+          {/* ================================================================= */}
+          <section
+            id="step-team-setup"
+            aria-labelledby="step-team-setup-heading"
+            className="border-t border-[#E5E8DD] pt-8 space-y-6 scroll-mt-24"
+          >
+            {/* Step 2 Subheading + Team Count & Timer Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <span className="w-8 h-8 rounded-xl bg-[#1B1F1C] text-white font-mono tabular-nums text-sm font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  2
                 </span>
-                {[2, 3, 4].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    disabled={isGameLocked}
-                    onClick={() => handleTeamCountChange(num)}
-                    title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                    className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
-                      isGameLocked
-                        ? 'cursor-not-allowed opacity-80'
-                        : 'cursor-pointer'
-                    } ${
-                      teams.length === num
-                        ? 'bg-[#14543D] text-white'
-                        : 'text-[#252824] hover:bg-white'
-                    }`}
+                <div className="space-y-1">
+                  <h2
+                    id="step-team-setup-heading"
+                    className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]"
                   >
-                    {num} فرق ({num * SUBCATEGORIES_PER_TEAM})
-                  </button>
-                ))}
+                    {isGameLocked
+                      ? 'بيانات الفرق المشاركة في الجولة'
+                      : 'تجهيز الفرق وإعدادات الجولة'}
+                  </h2>
+                  <p className="text-xs text-[#52574E]">
+                    {isGameLocked
+                      ? 'الجولة نشطة حالياً. جميع الفرق والفئات مقفلة لمنع التغيير أثناء اللعب.'
+                      : 'حدد عدد الفرق، سمّ كل فريق، اختر لونه وأضف أسماء اللاعبين ومدة الإجابة.'}
+                  </p>
+                </div>
               </div>
 
-              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1 w-full sm:w-auto">
-                <span className="text-xs font-semibold text-[#777B73] px-2 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-[#F07842]" />
-                  <span>وقت السؤال:</span>
-                </span>
-                {[30, 45, 60, 90].map((sec) => (
-                  <button
-                    key={sec}
-                    type="button"
-                    disabled={isGameLocked}
-                    onClick={() => onUpdateTimer(sec)}
-                    title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                    className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
-                      isGameLocked
-                        ? 'cursor-not-allowed opacity-80'
-                        : 'cursor-pointer'
-                    } ${
-                      timerDuration === sec
-                        ? 'bg-[#F07842] text-white'
-                        : 'text-[#252824] hover:bg-white'
-                    }`}
-                  >
-                    {sec} ث
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Warning if database has 0 approved questions */}
-          {approvedQuestionsCount === 0 && (
-            <div className="bg-[#FEF2EC] border-2 border-[#F07842] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <h3 className="font-display text-sm sm:text-base font-bold text-[#252824]">
-                  تنبيه: قاعدة بيانات Firestore لا تحتوي على أسئلة معتمدة بعد
-                </h3>
-                <p className="text-xs text-[#777B73]">
-                  لتشغيل اللوحة بأسئلة حقيقية، يمكنك تعبئة الحزمة التأسيسية المعتمدة في Firestore بضغطة زر.
-                </p>
-              </div>
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={onSeedQuestions}
-                  disabled={seeding}
-                  className="px-5 py-2.5 text-xs font-bold text-white bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl whitespace-nowrap shrink-0 flex items-center gap-2 cursor-pointer"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>
-                    {seeding
-                      ? 'جاري الحفظ في Firestore...'
-                      : 'تعبئة الحزمة التأسيسية الآن'}
+              {/* Team Count & Timer Controls */}
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1 w-full sm:w-auto">
+                  <span className="text-xs font-semibold text-[#52574E] px-2 flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5 text-[#14543D]" />
+                    <span>عدد الفرق:</span>
                   </span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Incomplete Selection Warning */}
-          {!isAllTeamsComplete && (
-            <div className="p-4 rounded-xl bg-[#FEF2EC] border border-[#F07842] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-2.5 text-xs font-bold text-[#D9602B]">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>
-                  عدد الفرق الحالي ({teams.length} فرق) يتطلب اختيار{' '}
-                  {totalRequiredCount} فئات فرعية (3 فئات لكل فريق). يرجى إكمال اختيار الفئات المتبقية قبل بدء الجولة.
-                </span>
-              </div>
-              <button
-                type="button"
-                disabled={isGameLocked}
-                onClick={() =>
-                  handleFocusTeamCategories(
-                    firstIncompleteTeamIndex >= 0 ? firstIncompleteTeamIndex : 0
-                  )
-                }
-                className={`px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold whitespace-nowrap ${
-                  isGameLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-                }`}
-              >
-                إكمال اختيار فئات الفرق ({totalSelectedCount}/{totalRequiredCount}) ↑
-              </button>
-            </div>
-          )}
-
-          {/* Teams Configuration Inner Panels (No separate outer cards) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-            {teams.map((team, index) => {
-              const teamPicks = (teamSubcategoryIds[team.id] || [])
-                .slice(0, SUBCATEGORIES_PER_TEAM)
-                .map((id) => subByIdMap.get(id))
-                .filter((s): s is SubcategoryItem => Boolean(s));
-              const isTeamComplete = teamPicks.length === SUBCATEGORIES_PER_TEAM;
-
-              return (
-                <div
-                  key={team.id}
-                  className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 sm:space-y-5"
-                >
-                  <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className="w-3.5 h-3.5 rounded-full shrink-0"
-                        style={{ backgroundColor: team.color }}
-                      />
-                      <span className="font-display text-base font-bold text-[#252824]">
-                        الفريق رقم {index + 1}
-                      </span>
-                    </div>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-lg font-mono tabular-nums text-xs font-bold ${
-                        isTeamComplete
-                          ? 'bg-[#EAF2EE] text-[#14543D]'
-                          : 'bg-[#FEF2EC] text-[#F07842]'
+                  {[2, 3, 4].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      disabled={isGameLocked}
+                      onClick={() => handleTeamCountChange(num)}
+                      title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
+                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                        isGameLocked
+                          ? 'cursor-not-allowed opacity-80'
+                          : 'cursor-pointer'
+                      } ${
+                        teams.length === num
+                          ? 'bg-[#1B1F1C] text-white'
+                          : 'text-[#1B1F1C] hover:bg-white'
                       }`}
                     >
-                      الفئات المختارة: {teamPicks.length}/{SUBCATEGORIES_PER_TEAM}
-                    </span>
-                  </div>
+                      {num} فرق ({num * SUBCATEGORIES_PER_TEAM})
+                    </button>
+                  ))}
+                </div>
 
-                  {/* Team's 3 Selected Subcategories Preview */}
-                  <div className="p-3.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-[#252824]">
-                        فئات هذا الفريق (3 فئات):
-                      </span>
-                      {isGameLocked ? (
-                        <span className="text-xs font-bold text-[#777B73] flex items-center gap-1">
-                          <Lock className="w-3.5 h-3.5 text-[#F07842]" />
-                          <span>مقفلة طوال الجولة</span>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleFocusTeamCategories(index)}
-                          className="text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>
-                            {isTeamComplete ? 'تعديل الفئات ↑' : 'اختيار الفئات ↑'}
-                          </span>
-                        </button>
-                      )}
-                    </div>
-
-                    {teamPicks.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {teamPicks.map((sub) => (
-                          <span
-                            key={sub.id}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EAF2EE] border border-[#C5DDD1] text-xs font-bold text-[#14543D]"
-                          >
-                            <span>{sub.name}</span>
-                            {!isGameLocked && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleRemoveSubcategoryFromTeam(team.id, sub.id)
-                                }
-                                aria-label={`إزالة ${sub.name}`}
-                                className="text-[#14543D]/70 hover:text-rose-600 cursor-pointer"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-[#D9602B] font-semibold">
-                        لم يختر هذا الفريق فئاته الثلاث بعد (0/3).
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Team Name & Color Picker Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor={`name-${team.id}`}
-                        className="block text-xs font-semibold text-[#252824]"
-                      >
-                        اسم الفريق
-                      </label>
-                      <input
-                        id={`name-${team.id}`}
-                        type="text"
-                        disabled={isGameLocked}
-                        readOnly={isGameLocked}
-                        value={team.name}
-                        onChange={(e) =>
-                          handleUpdateTeamName(team.id, e.target.value)
-                        }
-                        placeholder="مثال: فريق طويق"
-                        maxLength={35}
-                        className={`w-full px-3.5 py-2.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-sm font-semibold text-[#252824] focus:outline-none focus:border-[#14543D] ${
-                          isGameLocked ? 'cursor-not-allowed opacity-80' : ''
-                        }`}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="block text-xs font-semibold text-[#252824]">
-                        لون الفريق
-                      </span>
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {TEAM_COLOR_OPTIONS.map((c) => {
-                          const selected = team.color === c.hex;
-                          return (
-                            <button
-                              key={c.hex}
-                              type="button"
-                              disabled={isGameLocked}
-                              onClick={() => handleUpdateTeamColor(team.id, c.hex)}
-                              title={isGameLocked ? `${c.name} (مقفل)` : c.name}
-                              className={`w-9 h-9 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center transition-transform ${
-                                isGameLocked
-                                  ? 'cursor-not-allowed'
-                                  : 'cursor-pointer'
-                              } ${
-                                selected
-                                  ? 'scale-110 ring-2 ring-offset-2 ring-[#252824]'
-                                  : isGameLocked
-                                  ? 'opacity-40'
-                                  : 'opacity-80 hover:opacity-100'
-                              }`}
-                              style={{ backgroundColor: c.hex }}
-                            >
-                              {selected && <Check className="w-3.5 h-3.5 text-white" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Players List & Add Input */}
-                  <div className="space-y-2.5">
-                    <label
-                      htmlFor={`player-input-${team.id}`}
-                      className="block text-xs font-semibold text-[#252824]"
+                <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 flex flex-wrap items-center gap-1 w-full sm:w-auto">
+                  <span className="text-xs font-semibold text-[#52574E] px-2 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-[#F07842]" />
+                    <span>وقت السؤال:</span>
+                  </span>
+                  {[30, 45, 60, 90].map((sec) => (
+                    <button
+                      key={sec}
+                      type="button"
+                      disabled={isGameLocked}
+                      onClick={() => onUpdateTimer(sec)}
+                      title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
+                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                        isGameLocked
+                          ? 'cursor-not-allowed opacity-80'
+                          : 'cursor-pointer'
+                      } ${
+                        timerDuration === sec
+                          ? 'bg-[#F07842] text-white'
+                          : 'text-[#1B1F1C] hover:bg-white'
+                      }`}
                     >
-                      أعضاء الفريق
-                    </label>
-                    {!isGameLocked && (
-                      <div className="flex items-center gap-2">
-                        <input
-                          id={`player-input-${team.id}`}
-                          type="text"
-                          value={playerInputs[team.id] || ''}
-                          onChange={(e) =>
-                            setPlayerInputs((prev) => ({
-                              ...prev,
-                              [team.id]: e.target.value,
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddPlayer(team.id);
-                            }
-                          }}
-                          placeholder="اكتب اسم اللاعب واضغط إضافة..."
-                          className="flex-1 px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none focus:border-[#14543D]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleAddPlayer(team.id)}
-                          className="min-h-[42px] px-4 py-2 bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>إضافة</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {team.players.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                        {team.players.map((player, pIdx) => (
-                          <span
-                            key={`${player}-${pIdx}`}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-medium text-[#252824]"
-                          >
-                            <span>{player}</span>
-                            {!isGameLocked && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePlayer(team.id, pIdx)}
-                                aria-label={`حذف ${player}`}
-                                className="text-[#777B73] hover:text-rose-600 cursor-pointer"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-[#777B73]">
-                        ما أضفتوا أسماء لاعبين بعد (اختياري).
-                      </p>
-                    )}
-                  </div>
+                      {sec} ث
+                    </button>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Matchup Preview & Start Game Footer inside the Unified Card */}
-          <div className="border-t border-[#E5E8DD] pt-6 space-y-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold text-[#14543D]">
-                  معاينة المواجهة والملخص النهائي
-                </div>
-                <h3 className="font-display text-lg font-bold text-[#252824]">
-                  مين يتحدى مين؟
-                </h3>
-              </div>
-
-              <div className="text-xs text-[#777B73] flex flex-wrap items-center gap-2">
-                <span>
-                  عدد الفرق:{' '}
-                  <strong className="font-mono tabular-nums text-[#252824]">
-                    {teams.length}
-                  </strong>
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  الأعمدة المختارة:{' '}
-                  <strong className="font-mono tabular-nums text-[#14543D]">
-                    {totalSelectedCount} / {totalRequiredCount}
-                  </strong>
-                </span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  مدة الإجابة:{' '}
-                  <strong className="font-mono tabular-nums text-[#252824]">
-                    {timerDuration} ثانية
-                  </strong>
-                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {teams.map((t, tIdx) => {
-                const teamPicks = (teamSubcategoryIds[t.id] || [])
+            {/* Warning if database has 0 approved questions */}
+            {approvedQuestionsCount === 0 && (
+              <div className="bg-[#FEF2EC] border border-[#F07842] rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="font-display text-sm sm:text-base font-bold text-[#1B1F1C]">
+                    تنبيه: قاعدة بيانات Firestore لا تحتوي على أسئلة معتمدة بعد
+                  </h3>
+                  <p className="text-xs text-[#52574E]">
+                    لتشغيل اللوحة بأسئلة حقيقية، يمكنك تعبئة الحزمة التأسيسية
+                    المعتمدة في Firestore بضغطة زر.
+                  </p>
+                </div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={onSeedQuestions}
+                    disabled={seeding}
+                    className="min-h-[44px] px-5 py-2.5 text-xs font-bold text-white bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl whitespace-nowrap shrink-0 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>
+                      {seeding
+                        ? 'جاري الحفظ في Firestore...'
+                        : 'تعبئة الحزمة التأسيسية الآن'}
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Incomplete Selection Warning */}
+            {!isAllTeamsComplete && (
+              <div className="p-4 rounded-xl bg-[#FEF2EC] border border-[#F07842] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5 text-xs font-bold text-[#C74E1C]">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    عدد الفرق الحالي ({teams.length} فرق) يتطلب اختيار{' '}
+                    {totalRequiredCount} فئات فرعية (3 فئات لكل فريق). يرجى
+                    إكمال اختيار الفئات المتبقية قبل بدء الجولة.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isGameLocked}
+                  onClick={() =>
+                    handleFocusTeamCategories(
+                      firstIncompleteTeamIndex >= 0
+                        ? firstIncompleteTeamIndex
+                        : 0
+                    )
+                  }
+                  className={`min-h-[40px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold whitespace-nowrap ${
+                    isGameLocked
+                      ? 'cursor-not-allowed opacity-60'
+                      : 'cursor-pointer'
+                  }`}
+                >
+                  إكمال اختيار فئات الفرق ({totalSelectedCount}/
+                  {totalRequiredCount}) ↑
+                </button>
+              </div>
+            )}
+
+            {/* Teams Configuration Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+              {teams.map((team, index) => {
+                const teamPicks = (teamSubcategoryIds[team.id] || [])
                   .slice(0, SUBCATEGORIES_PER_TEAM)
-                  .map((id) => subByIdMap.get(id)?.name)
-                  .filter(Boolean);
+                  .map((id) => subByIdMap.get(id))
+                  .filter((s): s is SubcategoryItem => Boolean(s));
+                const isTeamComplete =
+                  teamPicks.length === SUBCATEGORIES_PER_TEAM;
 
                 return (
                   <div
-                    key={t.id}
-                    className="p-3.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] space-y-1.5"
+                    key={team.id}
+                    className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 sm:space-y-5"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3.5">
+                      <div className="flex items-center gap-2.5">
                         <span
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: t.color }}
+                          className="w-3.5 h-3.5 rounded-xs shrink-0"
+                          style={{ backgroundColor: team.color }}
                         />
-                        <span className="font-display text-xs sm:text-sm font-bold text-[#252824] truncate">
-                          {t.name || `الفريق ${tIdx + 1}`}
+                        <span className="font-display text-base font-bold text-[#1B1F1C]">
+                          الفريق رقم {index + 1}
                         </span>
                       </div>
-                      <span className="font-mono text-[11px] font-bold text-[#14543D]">
-                        {teamPicks.length}/{SUBCATEGORIES_PER_TEAM}
+                      <span
+                        className={`px-2.5 py-0.5 rounded-lg font-mono tabular-nums text-xs font-bold ${
+                          isTeamComplete
+                            ? 'bg-[#EAF2EE] text-[#14543D]'
+                            : 'bg-[#FEF2EC] text-[#F07842]'
+                        }`}
+                      >
+                        {teamPicks.length}/{SUBCATEGORIES_PER_TEAM} فئات
                       </span>
                     </div>
-                    <div className="text-xs text-[#252824] font-semibold line-clamp-1">
-                      {teamPicks.length > 0
-                        ? teamPicks.join(' · ')
-                        : 'لم يتم اختيار الفئات بعد'}
+
+                    {/* Team's Selected Subcategories Preview */}
+                    <div className="p-3.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#1B1F1C]">
+                          فئات هذا الفريق (3 فئات):
+                        </span>
+                        {isGameLocked ? (
+                          <span className="text-xs font-bold text-[#666B62] flex items-center gap-1">
+                            <Lock className="w-3.5 h-3.5 text-[#F07842]" />
+                            <span>مقفلة طوال الجولة</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleFocusTeamCategories(index)}
+                            className="text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>
+                              {isTeamComplete
+                                ? 'تعديل الفئات ↑'
+                                : 'اختيار الفئات ↑'}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {teamPicks.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {teamPicks.map((sub) => (
+                            <span
+                              key={sub.id}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FEF2EC] border border-[#F07842]/35 text-xs font-bold text-[#1B1F1C]"
+                            >
+                              <span>{sub.name}</span>
+                              {!isGameLocked && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRemoveSubcategoryFromTeam(
+                                      team.id,
+                                      sub.id
+                                    )
+                                  }
+                                  aria-label={`إزالة ${sub.name}`}
+                                  className="text-[#666B62] hover:text-rose-600 cursor-pointer"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[#C74E1C] font-semibold">
+                          لم يختر هذا الفريق فئاته الثلاث بعد (0/3).
+                        </p>
+                      )}
                     </div>
-                    <div className="text-[11px] text-[#777B73] truncate">
-                      {t.players.length > 0
-                        ? t.players.join(' · ')
-                        : 'بدون أسماء لاعبين محددة'}
+
+                    {/* Team Name & Color Picker Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label
+                          htmlFor={`name-${team.id}`}
+                          className="block text-xs font-semibold text-[#1B1F1C]"
+                        >
+                          اسم الفريق
+                        </label>
+                        <input
+                          id={`name-${team.id}`}
+                          type="text"
+                          disabled={isGameLocked}
+                          readOnly={isGameLocked}
+                          value={team.name}
+                          onChange={(e) =>
+                            handleUpdateTeamName(team.id, e.target.value)
+                          }
+                          placeholder="مثال: فريق طويق"
+                          maxLength={35}
+                          className={`w-full min-h-[44px] px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-sm font-semibold text-[#1B1F1C] focus:outline-none focus:border-[#F07842] ${
+                            isGameLocked ? 'cursor-not-allowed opacity-80' : ''
+                          }`}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="block text-xs font-semibold text-[#1B1F1C]">
+                          لون الفريق
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          {TEAM_COLOR_OPTIONS.map((c) => {
+                            const selected = team.color === c.hex;
+                            return (
+                              <button
+                                key={c.hex}
+                                type="button"
+                                disabled={isGameLocked}
+                                onClick={() =>
+                                  handleUpdateTeamColor(team.id, c.hex)
+                                }
+                                title={
+                                  isGameLocked ? `${c.name} (مقفل)` : c.name
+                                }
+                                aria-label={c.name}
+                                className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-transform ${
+                                  isGameLocked
+                                    ? 'cursor-not-allowed'
+                                    : 'cursor-pointer'
+                                } ${
+                                  selected
+                                    ? 'scale-110 ring-2 ring-offset-2 ring-[#1B1F1C]'
+                                    : isGameLocked
+                                    ? 'opacity-40'
+                                    : 'opacity-85 hover:opacity-100'
+                                }`}
+                                style={{ backgroundColor: c.hex }}
+                              >
+                                {selected && (
+                                  <Check className="w-3.5 h-3.5 text-white" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Players List & Add Input */}
+                    <div className="space-y-2.5">
+                      <label
+                        htmlFor={`player-input-${team.id}`}
+                        className="block text-xs font-semibold text-[#1B1F1C]"
+                      >
+                        أعضاء الفريق
+                      </label>
+                      {!isGameLocked && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            id={`player-input-${team.id}`}
+                            type="text"
+                            value={playerInputs[team.id] || ''}
+                            onChange={(e) =>
+                              setPlayerInputs((prev) => ({
+                                ...prev,
+                                [team.id]: e.target.value,
+                              }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddPlayer(team.id);
+                              }
+                            }}
+                            placeholder="اكتب اسم اللاعب واضغط إضافة..."
+                            className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddPlayer(team.id)}
+                            className="min-h-[44px] px-4 py-2 bg-[#1B1F1C] hover:bg-[#2C312D] text-white text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-[#F07842]" />
+                            <span>إضافة</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {team.players.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                          {team.players.map((player, pIdx) => (
+                            <span
+                              key={`${player}-${pIdx}`}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-medium text-[#1B1F1C]"
+                            >
+                              <span>{player}</span>
+                              {!isGameLocked && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleRemovePlayer(team.id, pIdx)
+                                  }
+                                  aria-label={`حذف ${player}`}
+                                  className="text-[#777B73] hover:text-rose-600 cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[#666B62]">
+                          ما أضفتوا أسماء لاعبين بعد (اختياري).
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="pt-1 flex flex-col-reverse sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => scrollToSection('step-categories')}
-                className="w-full sm:w-auto min-h-[46px] px-4 py-2.5 text-xs font-bold text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <ArrowUp className="w-3.5 h-3.5 text-[#14543D]" />
-                <span>الرجوع لاختيار الفئات</span>
-              </button>
+            {/* Matchup Preview & Start Game Footer */}
+            <div className="border-t border-[#E5E8DD] pt-6 space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-[#F07842]">
+                    معاينة المواجهة والملخص النهائي
+                  </div>
+                  <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
+                    جاهزون لبداية النِزال؟
+                  </h3>
+                </div>
 
-              {isGameLocked ? (
-                <button
-                  type="button"
-                  disabled={isNavigating}
-                  onClick={handleReturnToBoard}
-                  className="w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
-                >
-                  <Lock className="w-4 h-4 text-[#F07842]" />
-                  <span>العودة إلى لوحة اللعب (الجولة مقفلة)</span>
-                </button>
-              ) : isAllTeamsComplete ? (
-                <button
-                  type="button"
-                  onClick={handleStartChallenge}
-                  className="w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
-                >
-                  <Play className="w-4 h-4 fill-current" />
+                <div className="text-xs text-[#52574E] flex flex-wrap items-center gap-2">
                   <span>
-                    يلا نبدأ! افتح لوحة التحدي ({totalRequiredCount} أعمدة)
+                    عدد الفرق:{' '}
+                    <strong className="font-mono tabular-nums text-[#1B1F1C]">
+                      {teams.length}
+                    </strong>
                   </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleStartChallenge}
-                  className="w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
-                >
-                  <Layers className="w-4 h-4" />
+                  <span aria-hidden="true">·</span>
                   <span>
-                    أكمل اختيار الـ {totalRequiredCount} فئات أولاً (
-                    {totalSelectedCount}/{totalRequiredCount})
+                    الأعمدة المختارة:{' '}
+                    <strong className="font-mono tabular-nums text-[#14543D]">
+                      {totalSelectedCount} / {totalRequiredCount}
+                    </strong>
                   </span>
-                </button>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    مدة الإجابة:{' '}
+                    <strong className="font-mono tabular-nums text-[#1B1F1C]">
+                      {timerDuration} ثانية
+                    </strong>
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {teams.map((t, tIdx) => {
+                  const teamPicks = (teamSubcategoryIds[t.id] || [])
+                    .slice(0, SUBCATEGORIES_PER_TEAM)
+                    .map((id) => subByIdMap.get(id)?.name)
+                    .filter(Boolean);
+
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-3.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-2.5 h-2.5 rounded-xs shrink-0"
+                            style={{ backgroundColor: t.color }}
+                          />
+                          <span className="font-display text-xs sm:text-sm font-bold text-[#1B1F1C] truncate">
+                            {t.name || `الفريق ${tIdx + 1}`}
+                          </span>
+                        </div>
+                        <span className="font-mono tabular-nums text-[11px] font-bold text-[#14543D]">
+                          {teamPicks.length}/{SUBCATEGORIES_PER_TEAM}
+                        </span>
+                      </div>
+                      <div className="text-xs text-[#1B1F1C] font-semibold line-clamp-1">
+                        {teamPicks.length > 0
+                          ? teamPicks.join(' · ')
+                          : 'لم يتم اختيار الفئات بعد'}
+                      </div>
+                      <div className="text-[11px] text-[#666B62] truncate">
+                        {t.players.length > 0
+                          ? t.players.join(' · ')
+                          : 'بدون أسماء لاعبين محددة'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {!isGameLocked && (
+                <div className="p-3 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#52574E] flex items-center gap-2">
+                  <Lock className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
+                  <span>
+                    ملاحظة: بمجرد الضغط على بدء التحدي، تُثبّت اختيارات الفرق
+                    والفئات طوال مدة المباراة.
+                  </span>
+                </div>
               )}
+
+              <div className="pt-1 flex flex-col-reverse sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('step-categories')}
+                  className="w-full sm:w-auto min-h-[46px] px-4 py-2.5 text-xs font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowUp className="w-3.5 h-3.5 text-[#14543D]" />
+                  <span>الرجوع لاختيار الفئات</span>
+                </button>
+
+                {isGameLocked ? (
+                  <button
+                    type="button"
+                    disabled={isNavigating}
+                    onClick={handleReturnToBoard}
+                    className="w-full sm:w-auto min-h-[48px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
+                  >
+                    <Lock className="w-4 h-4 text-[#F07842]" />
+                    <span>العودة إلى لوحة اللعب (الجولة مقفلة)</span>
+                  </button>
+                ) : isAllTeamsComplete ? (
+                  <button
+                    type="button"
+                    onClick={handleStartChallenge}
+                    className="w-full sm:w-auto min-h-[50px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>
+                      يلا نبدأ! افتح لوحة التحدي ({totalRequiredCount} أعمدة)
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartChallenge}
+                    className="w-full sm:w-auto min-h-[50px] px-6 sm:px-8 py-3.5 text-sm font-bold text-[#FFFFFF] bg-[#1B1F1C] hover:bg-[#2C312D] rounded-xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
+                  >
+                    <Layers className="w-4 h-4 text-[#F07842]" />
+                    <span>
+                      أكمل اختيار الـ {totalRequiredCount} فئات أولاً (
+                      {totalSelectedCount}/{totalRequiredCount})
+                    </span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
-    </div>
+    </MotionConfig>
   );
 };

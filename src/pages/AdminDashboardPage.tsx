@@ -68,6 +68,7 @@ import {
 import { CategoryIcon } from '../components/CategoryIcon';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
 import { ImageCropModal } from '../components/ImageCropModal';
+import { uploadCategoryImageToCloudinarySigned } from '../services/cloudinaryService';
 import {
   bulkDeleteFromFirestore,
   bulkUpdateStatusInFirestore,
@@ -88,7 +89,6 @@ import {
   saveSubcategoryToFirestore,
   updateQuestionInFirestore,
   updateQuestionStatusInFirestore,
-  uploadCategoryImageToFirebase,
   uploadQuestionAudioToStorage,
   uploadQuestionImageToCloudinary,
   uploadQuestionImageToStorage,
@@ -253,10 +253,17 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           type="button"
           disabled={actionLoading}
           onClick={() => onSelectImage(sub)}
-          title="رفع أو تغيير صورة الفئة الفرعية"
-          className="p-1.5 text-[#F07842] hover:bg-[#FEF2EC] rounded-lg cursor-pointer"
+          title={
+            sub.imageUrl
+              ? 'تغيير صورة الفئة الفرعية من الجهاز'
+              : 'اختيار صورة للفئة الفرعية من الجهاز'
+          }
+          className="px-2 py-1.5 text-[11px] font-bold text-[#F07842] bg-[#FEF2EC] hover:bg-[#FDE4D7] border border-[#F07842]/25 rounded-lg flex items-center gap-1 cursor-pointer"
         >
-          <ImageIcon className="w-3.5 h-3.5" />
+          <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">
+            {sub.imageUrl ? 'تغيير الصورة' : 'إضافة صورة'}
+          </span>
         </button>
         <button
           type="button"
@@ -416,6 +423,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [subFormIsActive, setSubFormIsActive] = useState<boolean>(true);
   const [subFormIsComingSoon, setSubFormIsComingSoon] = useState<boolean>(false);
   const [subFormImageUrl, setSubFormImageUrl] = useState<string>('');
+  const [subModalFeedback, setSubModalFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   // Safe Delete Subcategory Confirmation Modal State
   const [deletingSubcategory, setDeletingSubcategory] =
@@ -900,8 +911,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const handleImageFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const target = pendingImageTargetRef.current;
+    pendingImageTargetRef.current = null;
     e.target.value = '';
     if (!file || !target) return;
+
+    const validationError = validateQuestionImageFile(file);
+    if (validationError) {
+      setStatusBanner(validationError);
+      if (target.kind === 'sub_draft' || subModalOpen) {
+        setSubModalFeedback({ type: 'error', text: validationError });
+      }
+      return;
+    }
+
+    if (target.kind === 'sub_draft') {
+      setSubModalFeedback(null);
+    }
 
     setCropTarget({
       ...target,
@@ -911,41 +936,48 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   const handleConfirmSaveCroppedImage = async (
     croppedBlob: Blob,
-    croppedDataUrl: string
+    _croppedDataUrl: string
   ) => {
-    if (!user || !cropTarget) return;
+    if (!user || !cropTarget) {
+      throw new Error('يجب تسجيل الدخول بحساب المشرف قبل رفع الصورة.');
+    }
     setActionLoading(true);
     setStatusBanner(null);
 
     try {
+      const targetCategoryType: 'main' | 'sub' =
+        cropTarget.kind === 'main' || cropTarget.kind === 'main_draft'
+          ? 'main'
+          : 'sub';
+      const targetCategoryId =
+        cropTarget.kind === 'main'
+          ? cropTarget.mainCat?.id || `main-${Date.now()}`
+          : cropTarget.kind === 'main_draft'
+          ? editingMainCategory?.id || `main-draft-${Date.now()}`
+          : cropTarget.kind === 'sub_draft'
+          ? editingSubcategory?.id || `sub-draft-${Date.now()}`
+          : cropTarget.subCat?.id || `sub-${Date.now()}`;
+
+      const uploaded = await uploadCategoryImageToCloudinarySigned(croppedBlob, {
+        categoryType: targetCategoryType,
+        categoryId: targetCategoryId,
+      });
+      const finalUrl = uploaded.imageUrl?.trim() || '';
+      if (!isValidHttpUrl(finalUrl)) {
+        throw new Error('لم يُرجع Cloudinary رابط صورة صالحاً.');
+      }
+
       if (cropTarget.kind === 'main_draft') {
-        const tempId =
-          editingMainCategory?.id || `main-draft-${Date.now()}`;
-        const finalUrl = await uploadCategoryImageToFirebase(
-          'main',
-          tempId,
-          croppedBlob,
-          croppedDataUrl
-        );
         setMainFormImageUrl(finalUrl);
         setCropTarget(null);
       } else if (cropTarget.kind === 'sub_draft') {
-        const tempId = editingSubcategory?.id || `sub-draft-${Date.now()}`;
-        const finalUrl = await uploadCategoryImageToFirebase(
-          'sub',
-          tempId,
-          croppedBlob,
-          croppedDataUrl
-        );
         setSubFormImageUrl(finalUrl);
+        setSubModalFeedback({
+          type: 'success',
+          text: 'تم رفع الصورة إلى Cloudinary ومعاينتها بنجاح — اضغط «حفظ الفئة الفرعية» لتثبيتها.',
+        });
         setCropTarget(null);
       } else if (cropTarget.kind === 'main' && cropTarget.mainCat) {
-        const finalUrl = await uploadCategoryImageToFirebase(
-          'main',
-          cropTarget.mainCat.id,
-          croppedBlob,
-          croppedDataUrl
-        );
         await saveMainCategoryImageToFirestore(
           cropTarget.mainCat,
           finalUrl,
@@ -953,16 +985,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         );
         await onRefreshMainCategories();
         setStatusBanner(
-          `تم حفظ وتحديث صورة الفئة الرئيسية «${cropTarget.mainCat.name}» بنجاح.`
+          `تم رفع الصورة إلى Cloudinary وحفظها للفئة الرئيسية «${cropTarget.mainCat.name}» بنجاح.`
         );
         setCropTarget(null);
       } else if (cropTarget.kind === 'sub' && cropTarget.subCat) {
-        const finalUrl = await uploadCategoryImageToFirebase(
-          'sub',
-          cropTarget.subCat.id,
-          croppedBlob,
-          croppedDataUrl
-        );
         await saveSubcategoryImageToFirestore(
           cropTarget.subCat,
           finalUrl,
@@ -970,14 +996,21 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         );
         await onRefreshSubcategories();
         setStatusBanner(
-          `تم حفظ وتحديث صورة الفئة الفرعية «${cropTarget.subCat.name}» بنجاح.`
+          `تم رفع الصورة إلى Cloudinary وحفظها للفئة الفرعية «${cropTarget.subCat.name}» بنجاح.`
         );
         setCropTarget(null);
       }
     } catch (err) {
-      setStatusBanner(
-        `تعذر حفظ الصورة: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
-      );
+      const errorMsg =
+        err instanceof Error ? err.message : 'خطأ غير معروف أثناء رفع الصورة.';
+      setStatusBanner(`تعذر حفظ الصورة: ${errorMsg}`);
+      if (cropTarget.kind === 'sub_draft') {
+        setSubModalFeedback({
+          type: 'error',
+          text: `تعذر رفع الصورة: ${errorMsg}`,
+        });
+      }
+      throw err instanceof Error ? err : new Error(errorMsg);
     } finally {
       setActionLoading(false);
     }
@@ -1316,6 +1349,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     setSubFormIsActive(true);
     setSubFormIsComingSoon(false);
     setSubFormImageUrl('');
+    setSubModalFeedback(null);
     setSubModalOpen(true);
   };
 
@@ -1336,6 +1370,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       setSubFormIsActive(sub.isActive);
       setSubFormIsComingSoon(Boolean(sub.isComingSoon));
       setSubFormImageUrl(sub.imageUrl || '');
+      setSubModalFeedback(null);
       setSubModalOpen(true);
     },
     [sortedMainCategories]
@@ -1344,9 +1379,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const handleSaveSubcategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    setSubModalFeedback(null);
+    setStatusBanner(null);
+
     const cleanName = subFormName.trim();
     if (cleanName.length < 2) {
-      setStatusBanner('يرجى إدخال اسم الفئة الفرعية (حرفين على الأقل).');
+      const msg = 'يرجى إدخال اسم الفئة الفرعية (حرفين على الأقل).';
+      setSubModalFeedback({ type: 'error', text: msg });
+      setStatusBanner(msg);
+      return;
+    }
+
+    const cleanImageUrl = subFormImageUrl.trim();
+    if (cleanImageUrl && !isValidHttpUrl(cleanImageUrl)) {
+      const msg =
+        'رابط صورة الفئة الفرعية غير صالح. يرجى اختيار الصورة ورفعها عبر Cloudinary قبل الحفظ.';
+      setSubModalFeedback({ type: 'error', text: msg });
+      setStatusBanner(msg);
       return;
     }
 
@@ -1366,7 +1415,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           sortOrder: Number(subFormSortOrder) || 1,
           isActive: subFormIsActive,
           isComingSoon: subFormIsComingSoon,
-          imageUrl: subFormImageUrl,
+          imageUrl: cleanImageUrl,
         },
         user.uid,
         editingSubcategory?.name
@@ -1378,19 +1427,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           editingSubcategory.name.trim() !== cleanName
       );
       setSubModalOpen(false);
+      setSubModalFeedback(null);
       await onRefreshSubcategories();
       if (wasRenamed) {
         await onRefreshQuestions();
       }
       setStatusBanner(
         editingSubcategory
-          ? `تم تحديث الفئة الفرعية «${cleanName}» بنجاح.`
-          : `تمت إضافة الفئة الفرعية «${cleanName}» ضمن قسم «${parentMain?.name || ''}».`
+          ? `تم تحديث الفئة الفرعية «${cleanName}»${cleanImageUrl ? ' وحفظ صورتها' : ''} بنجاح.`
+          : `تمت إضافة الفئة الفرعية «${cleanName}» ضمن قسم «${parentMain?.name || ''}» بنجاح.`
       );
     } catch (err) {
-      setStatusBanner(
-        `تعذر حفظ الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
-      );
+      const errorMsg = `تعذر حفظ الفئة الفرعية: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`;
+      setSubModalFeedback({ type: 'error', text: errorMsg });
+      setStatusBanner(errorMsg);
     } finally {
       setActionLoading(false);
     }
@@ -2612,12 +2662,35 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       </div>
 
       {statusBanner && (
-        <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-xl px-5 py-3.5 flex items-center justify-between text-xs font-semibold text-[#252824]">
+        <div
+          role={
+            statusBanner.startsWith('تعذر') ||
+            statusBanner.startsWith('صيغة') ||
+            statusBanner.startsWith('حجم') ||
+            statusBanner.startsWith('يرجى') ||
+            statusBanner.startsWith('حدث') ||
+            statusBanner.startsWith('الملف') ||
+            statusBanner.includes('غير صالحة')
+              ? 'alert'
+              : 'status'
+          }
+          className={`rounded-xl px-5 py-3.5 flex items-center justify-between gap-3 text-xs font-semibold border-2 ${
+            statusBanner.startsWith('تعذر') ||
+            statusBanner.startsWith('صيغة') ||
+            statusBanner.startsWith('حجم') ||
+            statusBanner.startsWith('يرجى') ||
+            statusBanner.startsWith('حدث') ||
+            statusBanner.startsWith('الملف') ||
+            statusBanner.includes('غير صالحة')
+              ? 'bg-rose-50 border-rose-500 text-rose-900'
+              : 'bg-[#FFFFFF] border-[#14543D] text-[#252824]'
+          }`}
+        >
           <span>{statusBanner}</span>
           <button
             type="button"
             onClick={() => setStatusBanner(null)}
-            className="text-[#777B73] hover:text-[#252824] cursor-pointer"
+            className="text-[#777B73] hover:text-[#252824] cursor-pointer shrink-0"
           >
             إغلاق
           </button>
@@ -4871,6 +4944,26 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               onSubmit={handleSaveSubcategory}
               className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs"
             >
+              {subModalFeedback && (
+                <div
+                  role={subModalFeedback.type === 'error' ? 'alert' : 'status'}
+                  className={`rounded-xl px-3.5 py-2.5 text-xs font-semibold border flex items-center justify-between gap-2 ${
+                    subModalFeedback.type === 'error'
+                      ? 'bg-rose-50 border-rose-300 text-rose-800'
+                      : 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  }`}
+                >
+                  <span>{subModalFeedback.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSubModalFeedback(null)}
+                    className="text-[11px] underline shrink-0 cursor-pointer"
+                  >
+                    إخفاء
+                  </button>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="block font-bold text-[#252824]">
                   الفئة الرئيسية التابعة لها (يمكنك نقل الفئة الفرعية لأي قسم رئيسي)
@@ -4974,42 +5067,71 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </label>
 
               {/* Subcategory Image Upload in Modal */}
-              <div className="space-y-2 pt-1">
-                <label className="block font-bold text-[#252824]">
-                  صورة الفئة الفرعية
-                </label>
-                <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] shrink-0">
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-[#252824]">
+                    صورة الفئة الفرعية
+                  </label>
+                  {subFormImageUrl ? (
+                    <span className="text-[11px] font-bold text-[#14543D] bg-[#EAF2EE] px-2 py-0.5 rounded-md">
+                      مرتبطة بالصورة ✓
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-semibold text-[#777B73]">
+                      بدون صورة مخصصة
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl bg-[#F3F5E9]/70 border border-[#E5E8DD]">
+                  <div className="w-20 h-20 rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] shrink-0">
                     <CategoryCardArtwork
                       name={subFormName || 'فئة فرعية'}
+                      mainCategory={
+                        sortedMainCategories.find(
+                          (m) => m.id === subFormMainCategoryId
+                        )?.name
+                      }
                       imageUrl={subFormImageUrl}
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        triggerSelectCategoryImage({
-                          kind: 'sub_draft',
-                          subCat: editingSubcategory || undefined,
-                        })
-                      }
-                      className="px-3.5 py-2 rounded-xl bg-[#F07842] text-white font-bold flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Crop className="w-3.5 h-3.5" />
-                      <span>
-                        {subFormImageUrl ? 'تغيير الصورة' : 'رفع صورة'}
-                      </span>
-                    </button>
-                    {subFormImageUrl && (
+                  <div className="flex-1 space-y-2 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setSubFormImageUrl('')}
-                        className="px-3 py-2 rounded-xl bg-[#F3F5E9] text-rose-700 font-bold cursor-pointer"
+                        disabled={actionLoading}
+                        onClick={() =>
+                          triggerSelectCategoryImage({
+                            kind: 'sub_draft',
+                            subCat: editingSubcategory || undefined,
+                          })
+                        }
+                        className="px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                       >
-                        حذف الصورة
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>
+                          {subFormImageUrl
+                            ? 'تغيير الصورة من الجهاز'
+                            : 'اختيار صورة من الجهاز'}
+                        </span>
                       </button>
-                    )}
+                      {subFormImageUrl && (
+                        <button
+                          type="button"
+                          disabled={actionLoading}
+                          onClick={() => {
+                            setSubFormImageUrl('');
+                            setSubModalFeedback(null);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-rose-50 text-rose-700 font-bold cursor-pointer"
+                        >
+                          إزالة الصورة
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#777B73] leading-relaxed">
+                      الصيغ المدعومة: JPG, JPEG, PNG, WEBP · الحد الأقصى 5 ميجابايت · تُقص وتُرفع إلى Cloudinary ثم تُربط بالفئة عند الحفظ.
+                    </p>
                   </div>
                 </div>
               </div>

@@ -1105,19 +1105,70 @@ export async function saveSubcategoryImageToFirestore(
     const snap = await getDoc(docRef);
 
     if (snap.exists()) {
-      await updateDoc(docRef, {
+      const existingData = snap.data();
+      const updatePayload: Record<string, any> = {
         imageUrl: cleanUrl,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (!existingData.id) {
+        updatePayload.id = docId;
+      }
+      if (!existingData.authorId) {
+        updatePayload.authorId = adminUid.slice(0, 128);
+      }
+      if (!existingData.createdAt) {
+        updatePayload.createdAt = serverTimestamp();
+      }
+      if (
+        typeof existingData.name !== 'string' ||
+        existingData.name.trim().length < 2
+      ) {
+        updatePayload.name = sub.name.trim().slice(0, 80);
+      }
+      if (
+        typeof existingData.mainCategory !== 'string' ||
+        existingData.mainCategory.trim().length < 2
+      ) {
+        updatePayload.mainCategory = sub.mainCategory.trim().slice(0, 80);
+      }
+      if (!existingData.mainCategoryId) {
+        updatePayload.mainCategoryId = sanitizeId(
+          sub.mainCategoryId || resolveMainCategoryIdByName(sub.mainCategory)
+        );
+      }
+      if (typeof existingData.description !== 'string') {
+        updatePayload.description = (sub.description || '').trim().slice(0, 240);
+      }
+      if (
+        typeof existingData.sortOrder !== 'number' ||
+        !Number.isInteger(existingData.sortOrder)
+      ) {
+        updatePayload.sortOrder = Math.max(
+          0,
+          Math.min(10000, Math.round(Number(existingData.sortOrder ?? sub.sortOrder) || 1))
+        );
+      }
+      if (typeof existingData.isActive !== 'boolean') {
+        updatePayload.isActive = Boolean(sub.isActive);
+      }
+
+      await updateDoc(docRef, updatePayload);
     } else {
       await setDoc(docRef, {
         id: docId,
         name: sub.name.trim().slice(0, 80),
-        mainCategoryId: sub.mainCategoryId || resolveMainCategoryIdByName(sub.mainCategory),
+        mainCategoryId: sanitizeId(
+          sub.mainCategoryId || resolveMainCategoryIdByName(sub.mainCategory)
+        ),
         mainCategory: sub.mainCategory.trim().slice(0, 80),
         description: (sub.description || '').trim().slice(0, 240),
-        sortOrder: Math.max(0, Math.min(10000, Math.round(sub.sortOrder))),
-        isActive: sub.isActive,
+        sortOrder: Math.max(
+          0,
+          Math.min(10000, Math.round(Number(sub.sortOrder) || 1))
+        ),
+        isActive: Boolean(sub.isActive),
+        isComingSoon: Boolean(sub.isComingSoon),
         isDeleted: false,
         imageUrl: cleanUrl,
         authorId: adminUid.slice(0, 128),
@@ -1125,6 +1176,9 @@ export async function saveSubcategoryImageToFirestore(
         updatedAt: serverTimestamp(),
       });
     }
+
+    serviceCache.invalidate('active_subcategories');
+    serviceCache.invalidate('admin_subcategories');
   } catch (error) {
     handleFirestoreError(
       error,

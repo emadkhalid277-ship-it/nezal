@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { User } from 'firebase/auth';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import {
   Users,
   Copy,
@@ -37,6 +37,7 @@ import {
   ZoomIn,
   RefreshCw,
   WifiOff,
+  Trophy,
 } from 'lucide-react';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import {
@@ -84,8 +85,10 @@ import {
 } from '../services/multiplayerService';
 import { TEAM_COLOR_OPTIONS, DEFAULT_SUBCATEGORIES } from '../data/categoriesAndSeed';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
+import { CategoryIcon } from '../components/CategoryIcon';
 import { InviteFriendsModal } from '../components/InviteFriendsModal';
 import { QuestionAudioPlayer } from '../components/QuestionAudioPlayer';
+import { WhoAnsweredCorrectlyPanel } from '../components/WhoAnsweredCorrectlyPanel';
 import { inferQuestionMediaType } from '../services/questionService';
 import { saveMatchProgressToFirestore } from '../services/matchService';
 import { soundFX } from '../services/soundEffects';
@@ -237,7 +240,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const heartbeatRef = useRef<number | null>(null);
   const audioLoadingStartedAtRef = useRef<number | null>(null);
   const onlineFeedbackTimerRef = useRef<number | null>(null);
+  const inFlightAwardTileRef = useRef<string | null>(null);
   const prevModalTimeLeftRef = useRef<number>(60);
+  const [pendingHostChoice, setPendingHostChoice] = useState<number | 'none' | null>(null);
   const prevRoomSyncRef = useRef<{
     code: string;
     status: string;
@@ -1109,9 +1114,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     if (!currentRoom || !isHost || !currentRoom.activeQuestion || actionBusy) {
       return;
     }
-    const { tileKey, questionId, points } = currentRoom.activeQuestion;
-    const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
+    const { tileKey, questionId, points, isAnswerRevealed } = currentRoom.activeQuestion;
+    if (!isAnswerRevealed) return;
+    if ((currentRoom.usedTileKeys || []).includes(tileKey)) return;
+    if (inFlightAwardTileRef.current === tileKey) return;
+    if (awardedTeamIndex < 0 || awardedTeamIndex >= currentRoom.teams.length) return;
 
+    const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
+    inFlightAwardTileRef.current = tileKey;
+    setPendingHostChoice(awardedTeamIndex);
     setActionBusy(true);
     try {
       await hostAwardPoints({
@@ -1126,18 +1137,25 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     } catch (err) {
       console.error('Failed to award points:', err);
     } finally {
+      inFlightAwardTileRef.current = null;
+      setPendingHostChoice(null);
       setActionBusy(false);
     }
   };
 
-  // 8. Host Skip Question
+  // 8. Host Skip Question ("ولا فريق")
   const handleHostSkip = async () => {
     if (!currentRoom || !isHost || !currentRoom.activeQuestion || actionBusy) {
       return;
     }
-    const { tileKey, questionId } = currentRoom.activeQuestion;
-    const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
+    const { tileKey, questionId, isAnswerRevealed } = currentRoom.activeQuestion;
+    if (!isAnswerRevealed) return;
+    if ((currentRoom.usedTileKeys || []).includes(tileKey)) return;
+    if (inFlightAwardTileRef.current === tileKey) return;
 
+    const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
+    inFlightAwardTileRef.current = tileKey;
+    setPendingHostChoice('none');
     setActionBusy(true);
     try {
       await hostMarkTileNoPoints({
@@ -1150,6 +1168,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     } catch (err) {
       console.error('Failed to skip question:', err);
     } finally {
+      inFlightAwardTileRef.current = null;
+      setPendingHostChoice(null);
       setActionBusy(false);
     }
   };
@@ -2582,416 +2602,504 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // RENDER: 3. IN-GAME BOARD (المباراة المباشرة المتزامنة)
   // -------------------------------------------------------------
   if (currentRoom.status === 'in_game' || (currentRoom.status as string) === 'playing') {
-    return (
-      <div className="max-w-[1320px] mx-auto px-3 sm:px-4 py-4 md:py-6 space-y-4 sm:space-y-6">
-        {/* Offline Connection Warning Banner */}
-        {!isOnline && (
-          <div className="p-4 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#9A3412] text-sm flex items-center gap-3">
-            <WifiOff className="w-5 h-5 shrink-0 text-[#F07842]" />
-            <p className="font-bold">
-              انقطع الاتصال بالإنترنت — يتطلب اللعب عن بُعد اتصالاً بالإنترنت، وستعود المزامنة تلقائياً فور استعادة الاتصال.
-            </p>
-          </div>
-        )}
+    const remainingOnlineTiles = Math.max(
+      0,
+      totalPlayableTiles - (currentRoom.usedTileKeys?.length || 0)
+    );
+    const onlineTimerTotal = Math.max(1, currentRoom.timerDuration || 60);
+    const onlineTimerRatio = Math.max(
+      0,
+      Math.min(100, (modalTimeLeft / onlineTimerTotal) * 100)
+    );
 
-        {/* Synced Real-Time Answer Feedback Overlay (Correct / Wrong) */}
-        <AnimatePresence>
-          {onlineAnswerFeedback && (
-            <div className="pointer-events-none fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md">
-              <AnswerFeedbackBanner
-                type={onlineAnswerFeedback.type}
-                headline={onlineAnswerFeedback.headline}
-                detailText={onlineAnswerFeedback.detail}
-                effectKey={onlineAnswerFeedback.eventKey}
-                effects={effects}
-              />
+    return (
+      <MotionConfig reducedMotion="user">
+        <div className="max-w-[1380px] mx-auto px-3 sm:px-6 py-4 md:py-7 space-y-4 sm:space-y-6">
+          {/* Offline Connection Warning Banner */}
+          {!isOnline && (
+            <div className="p-4 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#9A3412] text-sm flex items-center gap-3">
+              <WifiOff className="w-5 h-5 shrink-0 text-[#F07842]" />
+              <p className="font-bold">
+                انقطع الاتصال بالإنترنت — يتطلب اللعب عن بُعد اتصالاً بالإنترنت، وستعود المزامنة تلقائياً فور استعادة الاتصال.
+              </p>
             </div>
           )}
-        </AnimatePresence>
 
-        {/* Toast Alert (non-answer notifications) */}
-        {toastNotification && !onlineAnswerFeedback && (
-          <div className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md bg-[#14543D] text-[#FFFFFF] px-4 py-2.5 rounded-2xl shadow-lg border border-[#FFFFFF]/20 text-xs font-bold flex items-center justify-center gap-2 text-center">
-            <BellRing className="w-4 h-4 text-[#F07842] shrink-0" />
-            <span>{toastNotification}</span>
-          </div>
-        )}
+          {/* Synced Real-Time Answer Feedback Overlay (Correct / Wrong) */}
+          <AnimatePresence>
+            {onlineAnswerFeedback && (
+              <div className="pointer-events-none fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md">
+                <AnswerFeedbackBanner
+                  type={onlineAnswerFeedback.type}
+                  headline={onlineAnswerFeedback.headline}
+                  detailText={onlineAnswerFeedback.detail}
+                  effectKey={onlineAnswerFeedback.eventKey}
+                  effects={effects}
+                />
+              </div>
+            )}
+          </AnimatePresence>
 
-        {/* TOP STATUS BAR: Teams Scores & Turn Indicator */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-3 sm:p-4 md:p-6 shadow-sm space-y-3 sm:space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-4 border-b border-[#E5E8DD] pb-3 sm:pb-4">
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#F07842]" />
-              <span className="text-xs font-bold text-[#14543D]">
-                غرفة: <span className="font-mono">{currentRoom.code}</span>
-              </span>
-              <span className="text-xs text-[#777B73]">•</span>
-              <span className="text-xs text-[#777B73]">
-                {isHost
-                  ? 'أنت المضيف 👑'
-                  : isSpectator
-                  ? 'وضع المشاهدة (للعرض فقط)'
-                  : `أنت متصل كـ ${playerProfile.name}`}
-              </span>
-              {spectatorsList.length > 0 && (
-                <>
-                  <span className="text-xs text-[#777B73]">•</span>
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-[#14543D] tabular-nums">
+          {/* Toast Alert (non-answer notifications) */}
+          {toastNotification && !onlineAnswerFeedback && (
+            <div className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md bg-[#1B1F1C] text-[#FFFFFF] px-4 py-2.5 rounded-2xl shadow-lg border border-white/15 text-xs font-bold flex items-center justify-center gap-2 text-center">
+              <BellRing className="w-4 h-4 text-[#F07842] shrink-0" />
+              <span>{toastNotification}</span>
+            </div>
+          )}
+
+          {/* TOP STATUS BAR: Teams Scores & Turn Indicator */}
+          <section
+            aria-label="لوحة النتائج والفرق المباشرة"
+            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-3.5 sm:p-5 lg:p-6 shadow-xs space-y-4"
+          >
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-3.5">
+              <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F7F8F1] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C]">
+                  <span className="w-2 h-2 rounded-full bg-[#F07842] animate-pulse" />
+                  <span>غرفة:</span>
+                  <span className="font-mono">{currentRoom.code}</span>
+                </span>
+                <span className="text-xs font-medium text-[#52574E]">
+                  {isHost
+                    ? 'أنت المضيف'
+                    : isSpectator
+                    ? 'وضع المشاهدة (للعرض فقط)'
+                    : `أنت متصل كـ ${playerProfile.name}`}
+                </span>
+                <span className="text-xs text-[#52574E] font-mono tabular-nums bg-[#F7F8F1] border border-[#E5E8DD] px-2.5 py-1 rounded-lg">
+                  المتبقي: {remainingOnlineTiles} / {totalPlayableTiles}
+                </span>
+                {spectatorsList.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-[#14543D] tabular-nums bg-[#EAF2EE] px-2.5 py-1 rounded-lg">
                     <Eye className="w-3.5 h-3.5 text-[#F07842]" />
                     <span>{spectatorsList.length} مشاهد</span>
                   </span>
-                </>
-              )}
-            </div>
-
-            {/* Turn badge */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#777B73]">الدور الآن:</span>
-              {activeTurnTeam && (
-                <div
-                  className="px-3 py-1 rounded-full text-xs font-bold text-[#FFFFFF] flex items-center gap-1.5 shadow-sm"
-                  style={{ backgroundColor: activeTurnTeam.color }}
-                >
-                  <span>{activeTurnTeam.name}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Sound, Invite & Host Controls */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap w-full sm:w-auto">
-              {!isSpectator && (
-                <button
-                  type="button"
-                  onClick={() => setIsInviteModalOpen(true)}
-                  className="min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-lg bg-[#14543D] text-white hover:bg-[#0E3D2C] cursor-pointer flex items-center gap-1.5"
-                >
-                  <Eye className="w-3.5 h-3.5 text-[#F07842]" />
-                  <span>دعوة للمشاهدة</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => soundFX.toggle()}
-                title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
-                className={`min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1.5 border transition-colors ${
-                  soundEnabled
-                    ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
-                    : 'bg-[#F3F5E9] border-[#E5E8DD] text-[#777B73]'
-                }`}
-              >
-                {soundEnabled ? (
-                  <>
-                    <Volume2 className="w-3.5 h-3.5" />
-                    <span>الأصوات</span>
-                  </>
-                ) : (
-                  <>
-                    <VolumeX className="w-3.5 h-3.5" />
-                    <span>مكتوم</span>
-                  </>
                 )}
-              </button>
+              </div>
 
-              {isHost && (
+              {/* Turn badge & Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 ml-1">
+                  <span className="text-xs font-bold text-[#52574E]">الدور الآن:</span>
+                  {activeTurnTeam && (
+                    <div
+                      className="px-3 py-1 rounded-xl text-xs font-bold text-[#FFFFFF] flex items-center gap-1.5 shadow-2xs"
+                      style={{ backgroundColor: activeTurnTeam.color }}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                      <span>{activeTurnTeam.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                {!isSpectator && (
+                  <button
+                    type="button"
+                    onClick={() => setIsInviteModalOpen(true)}
+                    className="min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-xl bg-[#14543D] text-white hover:bg-[#0E3D2C] cursor-pointer flex items-center gap-1.5 transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-[#F07842]" />
+                    <span>دعوة للمشاهدة</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => hostFinishGame(currentRoom.code, currentRoom.hostId)}
-                  className="min-h-[38px] px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer"
+                  onClick={() => soundFX.toggle()}
+                  title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
+                  className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 border transition-colors ${
+                    soundEnabled
+                      ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
+                      : 'bg-[#F7F8F1] border-[#E5E8DD] text-[#52574E]'
+                  }`}
                 >
-                  إنهاء المباراة
+                  {soundEnabled ? (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>الأصوات</span>
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX className="w-3.5 h-3.5" />
+                      <span>مكتوم</span>
+                    </>
+                  )}
                 </button>
-              )}
 
-              {isSpectator && (
-                <button
-                  type="button"
-                  onClick={handleLeaveRoom}
-                  className="min-h-[38px] px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer flex items-center gap-1"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>مغادرة المشاهدة</span>
-                </button>
-              )}
+                {isHost && (
+                  <button
+                    type="button"
+                    onClick={() => hostFinishGame(currentRoom.code, currentRoom.hostId)}
+                    className="min-h-[40px] px-3.5 py-1.5 text-xs font-bold text-white bg-[#1B1F1C] hover:bg-[#2F3530] rounded-xl cursor-pointer flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trophy className="w-3.5 h-3.5 text-[#F07842]" />
+                    <span>إنهاء المباراة</span>
+                  </button>
+                )}
+
+                {isSpectator && (
+                  <button
+                    type="button"
+                    onClick={handleLeaveRoom}
+                    className="min-h-[40px] px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl cursor-pointer flex items-center gap-1 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>مغادرة المشاهدة</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Teams Scores Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-            {currentRoom.teams.map((team, idx) => {
-              const isTurn = idx === currentRoom.activeTeamIndex % currentRoom.teams.length;
+            {/* Teams Scores Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5">
+              {currentRoom.teams.map((team, idx) => {
+                const isTurn = idx === currentRoom.activeTeamIndex % currentRoom.teams.length;
+                return (
+                  <div
+                    key={team.id}
+                    className={`relative overflow-hidden p-3.5 sm:p-4 rounded-2xl border-2 transition-all flex items-center justify-between gap-2 ${
+                      currentRoom.teams.length === 3 && idx === 2 ? 'col-span-2 md:col-span-1' : ''
+                    } ${
+                      isTurn
+                        ? 'bg-[#FFFDF9] shadow-md'
+                        : 'bg-[#F7F8F1]/80 border-[#E5E8DD] opacity-85'
+                    }`}
+                    style={{ borderColor: isTurn ? team.color : '#E5E8DD' }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-x-0 top-0 h-1"
+                      style={{ backgroundColor: isTurn ? team.color : 'transparent' }}
+                    />
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: team.color }}
+                        />
+                        <span className="font-display text-xs sm:text-sm font-bold text-[#1B1F1C] truncate">
+                          {team.name}
+                        </span>
+                      </div>
+                      {isTurn && (
+                        <span className="inline-block text-[10px] font-bold text-[#F07842] bg-[#FEF2EC] px-2 py-0.5 rounded-md">
+                          الدور الحالي
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-left shrink-0">
+                      <AnimatedScoreCounter
+                        value={team.score}
+                        animateOnMount={false}
+                        motionEnabled={effects.motion && effects.correct}
+                        showDeltaBadge={effects.correct}
+                        className="font-mono text-2xl sm:text-3xl font-extrabold leading-none"
+                        style={{ color: team.color }}
+                      />
+                      <div className="text-[10px] font-medium text-[#52574E] mt-1">
+                        نقطة
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Host Exhaustion Notice if a selected category has no remaining unseen questions */}
+          {isHost &&
+            !questionDedupSettings?.allowRepeatAfterExhaustion &&
+            (() => {
+              const exhaustedCols = onlineBoardColumns.filter((col) => {
+                if (
+                  isWalaKalimaCategory({
+                    subcategoryId: col.subId,
+                    subcategoryName: col.subName,
+                    mainCategoryName: col.mainCategoryName,
+                  })
+                ) {
+                  return false;
+                }
+                let hasPlayableUnused = false;
+                let hasExhaustedUnused = false;
+                for (const pts of POINT_TIERS) {
+                  const tk = `${col.subId}__${pts}`;
+                  if (currentRoom.usedTileKeys.includes(tk)) continue;
+                  const sl = findSlotForTile(col.subId, col.subName, pts, tk);
+                  if (sl.question) hasPlayableUnused = true;
+                  else if (sl.isExhausted) hasExhaustedUnused = true;
+                }
+                return !hasPlayableUnused && hasExhaustedUnused;
+              });
+              if (exhaustedCols.length === 0) return null;
               return (
                 <div
-                  key={team.id}
-                  className={`p-2.5 sm:p-3.5 rounded-xl border-2 transition-all flex items-center justify-between gap-2 ${
-                    currentRoom.teams.length === 3 && idx === 2 ? 'col-span-2 md:col-span-1' : ''
-                  } ${
-                    isTurn
-                      ? 'bg-[#F3F5E9] shadow-sm'
-                      : 'bg-[#FFFFFF] border-[#E5E8DD]'
-                  }`}
-                  style={{ borderColor: isTurn ? team.color : '#E5E8DD' }}
+                  role="status"
+                  className="bg-[#FEF2EC] border border-[#F07842]/35 rounded-2xl px-5 py-3.5 flex items-center gap-2 text-xs font-semibold text-[#1B1F1C]"
                 >
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: team.color }}
-                      />
-                      <span className="text-xs sm:text-sm font-bold text-[#252824] truncate">
-                        {team.name}
-                      </span>
-                    </div>
-                    {isTurn && (
-                      <span className="text-[10px] font-bold text-[#14543D]">
-                        الدور الحالي
-                      </span>
-                    )}
-                  </div>
-                  <AnimatedScoreCounter
-                    value={team.score}
-                    animateOnMount={false}
-                    motionEnabled={effects.motion && effects.correct}
-                    showDeltaBadge={effects.correct}
-                    className="font-mono text-xl sm:text-2xl font-bold text-[#14543D] shrink-0"
-                  />
+                  <ShieldAlert className="w-4 h-4 text-[#F07842] shrink-0" />
+                  <span>
+                    خلصت الأسئلة الجديدة في هذي الفئة:{' '}
+                    {exhaustedCols.map((c) => c.subName).join('، ')} — لن يتم عرض أسئلة سبق أن ظهرت في حسابك.
+                  </span>
                 </div>
               );
-            })}
-          </div>
-        </div>
+            })()}
 
-        {/* Host Exhaustion Notice if a selected category has no remaining unseen questions */}
-        {isHost &&
-          !questionDedupSettings?.allowRepeatAfterExhaustion &&
-          (() => {
-            const exhaustedCols = onlineBoardColumns.filter((col) => {
-              if (
-                isWalaKalimaCategory({
+          {/* GAME BOARD: Mobile 2-Column Vertical Board + Desktop Subcategory Columns × 5 Point Rows */}
+          <section
+            aria-label="لوحة الأسئلة المباشرة"
+            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-3 sm:p-5 lg:p-6 shadow-xs space-y-4"
+          >
+            {/* Mobile 2-Column Board (No horizontal scrolling on phones) */}
+            <div className="grid grid-cols-2 gap-3 md:hidden" data-testid="online-mobile-board">
+              {onlineBoardColumns.map((col, cIdx) => {
+                const isWkCol = isWalaKalimaCategory({
                   subcategoryId: col.subId,
                   subcategoryName: col.subName,
                   mainCategoryName: col.mainCategoryName,
-                })
-              ) {
-                return false;
-              }
-              let hasPlayableUnused = false;
-              let hasExhaustedUnused = false;
-              for (const pts of POINT_TIERS) {
-                const tk = `${col.subId}__${pts}`;
-                if (currentRoom.usedTileKeys.includes(tk)) continue;
-                const sl = findSlotForTile(col.subId, col.subName, pts, tk);
-                if (sl.question) hasPlayableUnused = true;
-                else if (sl.isExhausted) hasExhaustedUnused = true;
-              }
-              return !hasPlayableUnused && hasExhaustedUnused;
-            });
-            if (exhaustedCols.length === 0) return null;
-            return (
-              <div
-                role="status"
-                className="bg-[#FFF7ED] border border-[#F07842]/40 rounded-2xl px-5 py-3.5 flex items-center gap-2 text-xs font-semibold text-[#252824]"
-              >
-                <ShieldAlert className="w-4 h-4 text-[#F07842] shrink-0" />
-                <span>
-                  خلصت الأسئلة الجديدة في هذي الفئة:{' '}
-                  {exhaustedCols.map((c) => c.subName).join('، ')} — لن يتم عرض أسئلة سبق أن ظهرت في حسابك.
-                </span>
-              </div>
-            );
-          })()}
-
-        {/* GAME BOARD: Mobile 2-Column Vertical Board + Desktop Subcategory Columns × 5 Point Rows */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-3 sm:p-4 md:p-6 shadow-sm">
-          {/* Mobile 2-Column Board (No horizontal scrolling on phones) */}
-          <div className="grid grid-cols-2 gap-2.5 md:hidden" data-testid="online-mobile-board">
-            {onlineBoardColumns.map((col, cIdx) => (
-              <div
-                key={`online_mob_${cIdx}`}
-                className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-2 flex flex-col gap-1.5 min-w-0"
-              >
-                <div
-                  className="rounded-xl p-2.5 border text-center space-y-1.5 shadow-xs min-h-[84px] flex flex-col items-center justify-center"
-                  style={{
-                    backgroundColor: col.bgTint,
-                    borderColor: `${col.borderTint}40`,
-                  }}
-                >
+                });
+                return (
                   <div
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block text-white max-w-full truncate"
-                    style={{ backgroundColor: col.teamColor }}
+                    key={`online_mob_${cIdx}`}
+                    className="flex flex-col gap-2 min-w-0"
                   >
-                    {col.teamName}
+                    <div
+                      className="relative overflow-hidden rounded-2xl p-2.5 border text-center flex flex-col items-center justify-between gap-1.5 min-h-[100px]"
+                      style={{
+                        backgroundColor: col.bgTint,
+                        borderColor: col.borderTint,
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 top-0 h-1"
+                        style={{
+                          backgroundColor: isWkCol ? '#F07842' : col.accentColor,
+                        }}
+                      />
+                      <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-[#14543D] max-w-full pt-0.5">
+                        <CategoryIcon
+                          iconName={col.iconName}
+                          color={col.accentColor}
+                          className="w-3.5 h-3.5 shrink-0"
+                        />
+                        <span className="truncate">{col.mainCategoryName}</span>
+                      </div>
+                      <div className="font-display font-bold text-sm text-[#1B1F1C] line-clamp-2 leading-snug text-center">
+                        {col.subName}
+                      </div>
+                      {isWkCol ? (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FEF2EC] border border-[#F07842]/30 text-[10px] font-bold text-[#D9602B]">
+                          تمثيل صامت · QR
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FFFFFF]/90 border border-[#E5E8DD] text-[10px] font-bold text-[#1B1F1C] max-w-full">
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: col.teamColor }}
+                          />
+                          <span className="truncate">{col.teamName}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      {POINT_TIERS.map((points) => {
+                        const tileKey = `${col.subId}__${points}`;
+                        const isUsed = currentRoom.usedTileKeys.includes(tileKey);
+                        const isActiveSelected =
+                          currentRoom.activeQuestion?.tileKey === tileKey ||
+                          activeOnlineWkTile?.tileKey === tileKey;
+                        const hostSlot =
+                          !isUsed && !isWkCol && isHost
+                            ? findSlotForTile(col.subId, col.subName, points, tileKey)
+                            : null;
+                        const isHostExhausted = Boolean(
+                          !isWkCol && hostSlot && !hostSlot.question && hostSlot.isExhausted
+                        );
+
+                        return (
+                          <button
+                            key={`online_mob_${col.subId}_${points}`}
+                            type="button"
+                            disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
+                            onClick={() =>
+                              handleHostTileClick(col.subId, col.subName, points, tileKey)
+                            }
+                            aria-label={`${col.subName} ${points} نقطة`}
+                            className={`min-h-[46px] h-12 rounded-xl border font-mono tabular-nums text-base font-extrabold transition-all flex items-center justify-center gap-1 select-none ${
+                              isUsed
+                                ? 'bg-[#F3F5E9]/65 border-[#E5E8DD]/70 text-[#777B73]/45 cursor-not-allowed'
+                                : isActiveSelected
+                                ? 'bg-[#FEF2EC] border-[#F07842] text-[#D9602B] ring-2 ring-[#F07842]/30 shadow-sm'
+                                : isHostExhausted
+                                ? 'bg-[#F7F8F1]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-[10px] font-sans'
+                                : isHost
+                                ? 'bg-[#F7F8F1] hover:bg-[#F07842] border-[#E5E8DD] hover:border-[#F07842] text-[#1B1F1C] hover:text-white shadow-2xs cursor-pointer active:scale-[0.98]'
+                                : 'bg-[#F7F8F1] border-[#E5E8DD] text-[#1B1F1C]/85 cursor-default'
+                            }`}
+                          >
+                            {isUsed ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                                <span className="line-through text-sm">{points}</span>
+                              </>
+                            ) : isHostExhausted ? (
+                              <span className="text-[9px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
+                                خلصت الجديدة
+                              </span>
+                            ) : (
+                              <span>{points}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="font-display font-bold text-sm text-[#252824] line-clamp-2 leading-snug text-center">
-                    {col.subName}
-                  </div>
-                </div>
+                );
+              })}
+            </div>
 
-                <div className="flex flex-col gap-1.5">
-                  {POINT_TIERS.map((points) => {
-                    const tileKey = `${col.subId}__${points}`;
-                    const isUsed = currentRoom.usedTileKeys.includes(tileKey);
-                    const isWkCol = isWalaKalimaCategory({
-                      subcategoryId: col.subId,
-                      subcategoryName: col.subName,
-                      mainCategoryName: col.mainCategoryName,
-                    });
-                    const hostSlot =
-                      !isUsed && !isWkCol && isHost
-                        ? findSlotForTile(col.subId, col.subName, points, tileKey)
-                        : null;
-                    const isHostExhausted = Boolean(
-                      !isWkCol && hostSlot && !hostSlot.question && hostSlot.isExhausted
-                    );
+            {/* Desktop & Tablet Classic Board */}
+            <div className="hidden md:block overflow-x-auto pb-1">
+              <div
+                className="grid gap-3 min-w-[700px]"
+                style={{
+                  gridTemplateColumns: `repeat(${onlineBoardColumns.length}, minmax(136px, 1fr))`,
+                }}
+              >
+                {/* Column Headers (Subcategories) */}
+                {onlineBoardColumns.map((col, idx) => {
+                  const isWkCol = isWalaKalimaCategory({
+                    subcategoryId: col.subId,
+                    subcategoryName: col.subName,
+                    mainCategoryName: col.mainCategoryName,
+                  });
+                  return (
+                    <div
+                      key={idx}
+                      className="relative overflow-hidden rounded-2xl p-3.5 border text-center flex flex-col items-center justify-between gap-2 min-h-[118px]"
+                      style={{
+                        backgroundColor: col.bgTint,
+                        borderColor: col.borderTint,
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 top-0 h-1"
+                        style={{
+                          backgroundColor: isWkCol ? '#F07842' : col.accentColor,
+                        }}
+                      />
+                      <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-[#14543D] pt-0.5">
+                        <CategoryIcon
+                          iconName={col.iconName}
+                          color={col.accentColor}
+                          className="w-3.5 h-3.5 shrink-0"
+                        />
+                        <span className="truncate">{col.mainCategoryName}</span>
+                      </div>
+                      <div className="font-display font-bold text-sm sm:text-base text-[#1B1F1C] leading-snug line-clamp-2 flex items-center justify-center text-center">
+                        {col.subName}
+                      </div>
+                      {isWkCol ? (
+                        <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#FEF2EC] border border-[#F07842]/30 text-[10px] font-bold text-[#D9602B]">
+                          تمثيل صامت · QR
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-[#FFFFFF]/90 border border-[#E5E8DD] text-[10px] font-bold text-[#1B1F1C] max-w-full">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: col.teamColor }}
+                          />
+                          <span className="truncate max-w-[100px]">{col.teamName}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
 
-                    return (
-                      <button
-                        key={`online_mob_${col.subId}_${points}`}
-                        type="button"
-                        disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
-                        onClick={() =>
-                          handleHostTileClick(col.subId, col.subName, points, tileKey)
-                        }
-                        aria-label={`${col.subName} ${points} نقطة`}
-                        className={`min-h-[44px] h-11 rounded-xl border-2 font-display text-base font-bold transition-all flex items-center justify-center cursor-pointer select-none ${
-                          isUsed
-                            ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
-                            : isHostExhausted
-                            ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-[10px]'
-                            : isWkCol && isHost
-                            ? 'bg-[#FEF2EC] hover:bg-[#F07842] hover:text-white border-[#F07842]/45 text-[#D9602B] shadow-xs active:scale-95'
-                            : isHost
-                            ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] shadow-xs active:scale-95'
-                            : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
-                        }`}
-                      >
-                        {isUsed ? (
-                          <Check className="w-5 h-5 text-[#777B73]/40" />
-                        ) : isHostExhausted ? (
-                          <span className="text-[9px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
-                            خلصت الجديدة
-                          </span>
-                        ) : isWkCol ? (
-                          <span className="text-xs font-sans font-bold">
-                            ولا كلمة QR
-                          </span>
-                        ) : (
-                          <span>{points}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+                {/* 5 Point Rows (100, 200, 300, 400, 500) */}
+                {POINT_TIERS.map((points) => (
+                  <React.Fragment key={points}>
+                    {onlineBoardColumns.map((col) => {
+                      const tileKey = `${col.subId}__${points}`;
+                      const isUsed = currentRoom.usedTileKeys.includes(tileKey);
+                      const isActiveSelected =
+                        currentRoom.activeQuestion?.tileKey === tileKey ||
+                        activeOnlineWkTile?.tileKey === tileKey;
+                      const isWkCol = isWalaKalimaCategory({
+                        subcategoryId: col.subId,
+                        subcategoryName: col.subName,
+                        mainCategoryName: col.mainCategoryName,
+                      });
+                      const hostSlot =
+                        !isUsed && !isWkCol && isHost
+                          ? findSlotForTile(col.subId, col.subName, points, tileKey)
+                          : null;
+                      const isHostExhausted = Boolean(
+                        !isWkCol && hostSlot && !hostSlot.question && hostSlot.isExhausted
+                      );
 
-          {/* Desktop & Tablet Classic Board */}
-          <div className="hidden md:block overflow-x-auto">
-            <div
-              className="grid gap-3 min-w-[700px]"
-              style={{
-                gridTemplateColumns: `repeat(${onlineBoardColumns.length}, minmax(130px, 1fr))`,
-              }}
-            >
-              {/* Column Headers (Subcategories) */}
-              {onlineBoardColumns.map((col, idx) => (
-                <div
-                  key={idx}
-                  className="rounded-2xl p-3.5 border text-center space-y-2 shadow-xs flex flex-col items-center justify-center min-h-[96px]"
-                  style={{
-                    backgroundColor: col.bgTint,
-                    borderColor: `${col.borderTint}40`,
-                  }}
-                >
-                  <div
-                    className="text-[11px] font-bold px-2.5 py-0.5 rounded-full inline-block text-white"
-                    style={{ backgroundColor: col.teamColor }}
-                  >
-                    {col.teamName}
-                  </div>
-                  <div className="font-display font-bold text-sm sm:text-base text-[#252824] leading-snug line-clamp-2 min-h-[2.6em] flex items-center justify-center text-center">
-                    {col.subName}
-                  </div>
-                </div>
-              ))}
-
-              {/* 5 Point Rows (100, 200, 300, 400, 500) */}
-              {POINT_TIERS.map((points) => (
-                <React.Fragment key={points}>
-                  {onlineBoardColumns.map((col) => {
-                    const tileKey = `${col.subId}__${points}`;
-                    const isUsed = currentRoom.usedTileKeys.includes(tileKey);
-                    const isWkCol = isWalaKalimaCategory({
-                      subcategoryId: col.subId,
-                      subcategoryName: col.subName,
-                      mainCategoryName: col.mainCategoryName,
-                    });
-                    const hostSlot =
-                      !isUsed && !isWkCol && isHost
-                        ? findSlotForTile(col.subId, col.subName, points, tileKey)
-                        : null;
-                    const isHostExhausted = Boolean(
-                      !isWkCol && hostSlot && !hostSlot.question && hostSlot.isExhausted
-                    );
-
-                    return (
-                      <button
-                        key={`${col.subId}_${points}`}
-                        type="button"
-                        disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
-                        title={
-                          isHostExhausted
-                            ? 'خلصت الأسئلة الجديدة في هذي الفئة'
-                            : undefined
-                        }
-                        onClick={() =>
-                          handleHostTileClick(col.subId, col.subName, points, tileKey)
-                        }
-                        className={`h-20 md:h-24 rounded-2xl border-2 font-display text-2xl md:text-3xl font-bold transition-all flex flex-col items-center justify-center cursor-pointer select-none ${
-                          isUsed
-                            ? 'bg-[#E5E8DD]/40 border-transparent text-[#777B73]/40 cursor-not-allowed'
-                            : isHostExhausted
-                            ? 'bg-[#F3F5E9]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-xs'
-                            : isWkCol && isHost
-                            ? 'bg-[#FEF2EC] hover:bg-[#F07842] hover:text-white border-[#F07842]/45 text-[#D9602B] hover:scale-[1.02] shadow-sm active:scale-95'
-                            : isHost
-                            ? 'bg-[#FFFFFF] hover:bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D] hover:scale-[1.02] shadow-sm active:scale-95'
-                            : 'bg-[#FFFFFF] border-[#14543D]/20 text-[#14543D]/80 cursor-default'
-                        }`}
-                      >
-                        {isUsed ? (
-                          <Check className="w-6 h-6 text-[#777B73]/40" />
-                        ) : isHostExhausted ? (
-                          <span className="text-[10px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
-                            خلصت الأسئلة الجديدة
-                          </span>
-                        ) : isWkCol ? (
-                          <div className="flex flex-col items-center gap-0.5 leading-tight">
-                            <span className="text-sm font-sans font-bold">ولا كلمة QR</span>
-                            <span className="text-[10px] font-sans opacity-80">
-                              {POINT_TO_DIFFICULTY[points]}
+                      return (
+                        <button
+                          key={`${col.subId}_${points}`}
+                          type="button"
+                          disabled={isUsed || isHostExhausted || (!isHost && !isUsed)}
+                          title={
+                            isHostExhausted
+                              ? 'خلصت الأسئلة الجديدة في هذي الفئة'
+                              : undefined
+                          }
+                          onClick={() =>
+                            handleHostTileClick(col.subId, col.subName, points, tileKey)
+                          }
+                          className={`h-18 md:h-20 rounded-2xl border font-mono tabular-nums text-xl md:text-2xl font-extrabold transition-all duration-150 flex flex-col items-center justify-center select-none ${
+                            isUsed
+                              ? 'bg-[#F3F5E9]/65 border-[#E5E8DD]/70 text-[#777B73]/45 cursor-not-allowed'
+                              : isActiveSelected
+                              ? 'bg-[#FEF2EC] border-[#F07842] text-[#D9602B] ring-2 ring-[#F07842]/30 shadow-sm'
+                              : isHostExhausted
+                              ? 'bg-[#F7F8F1]/60 border-dashed border-[#E5E8DD] text-[#F07842] cursor-not-allowed text-xs font-sans'
+                              : isHost
+                              ? 'bg-[#F7F8F1] hover:bg-[#F07842] border-[#E5E8DD] hover:border-[#F07842] text-[#1B1F1C] hover:text-white hover:-translate-y-0.5 hover:shadow-md cursor-pointer active:translate-y-0 active:scale-[0.98]'
+                              : 'bg-[#F7F8F1] border-[#E5E8DD] text-[#1B1F1C]/85 cursor-default'
+                          }`}
+                        >
+                          {isUsed ? (
+                            <div className="flex flex-col items-center leading-none gap-1">
+                              <span className="line-through text-base md:text-xl">
+                                {points}
+                              </span>
+                              <span className="text-[10px] font-sans font-semibold no-underline inline-flex items-center gap-0.5">
+                                <Check className="w-3 h-3" />
+                                مُستخدم
+                              </span>
+                            </div>
+                          ) : isHostExhausted ? (
+                            <span className="text-[10px] font-sans font-bold text-[#F07842] px-1 text-center leading-tight">
+                              خلصت الأسئلة الجديدة
                             </span>
-                          </div>
-                        ) : (
-                          <span>{points}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
+                          ) : (
+                            <span>{points}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Bottom notice for non-hosts */}
-          {!isHost && (
-            <div className="pt-4 text-center text-xs font-bold text-[#777B73]">
-              المضيف ({currentRoom.hostName}) هو من يملك صلاحية فتح الأسئلة وتسجيل النقاط.
-            </div>
-          )}
-        </div>
+            {/* Bottom notice for non-hosts */}
+            {!isHost && (
+              <div className="pt-2 text-center text-xs font-bold text-[#52574E]">
+                المضيف ({currentRoom.hostName}) هو من يملك صلاحية فتح الأسئلة وتسجيل النقاط.
+              </div>
+            )}
+          </section>
 
         {/* SYNCHRONIZED WALA KALIMA QR MODAL (HOST OR SYNCED ROOM PLAYERS) */}
         {(activeOnlineWkTile || currentRoom.activeQuestion?.isWalaKalima) && (() => {
@@ -3014,6 +3122,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               tileKey={wkTile.tileKey}
               subcategoryId={wkTile.subId}
               subcategoryName={wkTile.subName}
+              initialPoints={wkTile.points}
               preferredDifficulty={POINT_TO_DIFFICULTY[wkTile.points]}
               activeTeam={{
                 id: targetTeam?.id || 'team_1',
@@ -3021,9 +3130,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                 color: targetTeam?.color || '#14543D',
                 players: teamRoster,
               }}
+              teams={currentRoom.teams}
               canControl={isHost}
               settings={walaKalimaSettings}
-              sharedOnlineSession={!isHost && aq?.walaKalimaMeta ? aq.walaKalimaMeta : null}
+              sharedOnlineSession={aq?.walaKalimaMeta || null}
               onOnlineSessionCreated={async (created) => {
                 if (!isHost) return;
                 await hostSelectQuestion(currentRoom.code, currentRoom.hostId, {
@@ -3056,6 +3166,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     earnedPoints: created.earnedPoints,
                     totalWords: created.totalWords,
                     timerSeconds: created.timerSeconds,
+                    serverNow: created.serverNow,
                     startedAt: created.startedAt,
                     expiresAt: created.expiresAt,
                     endReason: created.endReason,
@@ -3082,20 +3193,25 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                     earnedPoints: status.earnedPoints,
                     totalWords: status.totalWords,
                     timerSeconds: status.timerSeconds,
+                    serverNow: status.serverNow,
                     startedAt: status.startedAt,
                     expiresAt: status.expiresAt,
                     endReason: status.endReason,
                   },
                 });
               }}
-              onCommitResult={async ({ earnedPoints, tileKey, sessionId }) => {
+              onCommitResult={async ({ awardedTeamIndex, earnedPoints, tileKey, sessionId }) => {
                 if (!isHost) return;
+                if ((currentRoom.usedTileKeys || []).includes(tileKey)) {
+                  setActiveOnlineWkTile(null);
+                  return;
+                }
                 const totalTiles = currentRoom.selectedSubcategoryIds.length * 5;
-                if (earnedPoints > 0) {
+                if (awardedTeamIndex !== null && earnedPoints > 0) {
                   await hostAwardPoints({
                     code: currentRoom.code,
                     hostId: currentRoom.hostId,
-                    awardedTeamIndex: activeTurnIdx,
+                    awardedTeamIndex,
                     points: earnedPoints,
                     tileKey,
                     questionId: sessionId,
@@ -3125,27 +3241,28 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         {/* SYNCHRONIZED QUESTION MODAL (POPS UP FOR ALL PLAYERS IN REAL TIME) */}
         {currentRoom.activeQuestion && !currentRoom.activeQuestion.isWalaKalima && (() => {
           const aq = currentRoom.activeQuestion;
+          const isAudioWaiting = inferQuestionMediaType(aq) === 'audio' && !onlineAudioReady;
 
           return (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
-              <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-3xl p-4 sm:p-6 md:p-8 max-w-2xl w-full max-h-[94dvh] overflow-y-auto space-y-4 sm:space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-                {/* Modal Top Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/20">
+            <div className="fixed inset-0 z-50 bg-[#1B1F1C]/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl overflow-hidden max-w-2xl w-full max-h-[94dvh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                {/* Dark Charcoal Modal Header */}
+                <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-white/10 text-white border border-white/15">
                       {aq.subcategoryName}
                     </span>
-                    <span className="font-mono text-sm font-bold text-[#F07842]">
+                    <span className="font-mono tabular-nums text-xs sm:text-sm font-bold text-white bg-[#F07842] px-2.5 py-1 rounded-lg">
                       {aq.points} نقطة
                     </span>
                     {inferQuestionMediaType(aq) === 'audio' ? (
-                      <span className="text-xs font-bold text-[#14543D] flex items-center gap-1">
+                      <span className="text-xs font-bold text-white/80 flex items-center gap-1">
                         <Volume2 className="w-3.5 h-3.5 text-[#F07842]" />
                         <span>سؤال صوتي</span>
                       </span>
                     ) : inferQuestionMediaType(aq) === 'image' ? (
-                      <span className="text-xs font-bold text-[#F07842] flex items-center gap-1">
-                        <ImageIcon className="w-3.5 h-3.5" />
+                      <span className="text-xs font-bold text-white/80 flex items-center gap-1">
+                        <ImageIcon className="w-3.5 h-3.5 text-[#F07842]" />
                         <span>سؤال صورة</span>
                       </span>
                     ) : null}
@@ -3153,248 +3270,256 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
                   {/* Countdown Timer */}
                   <div
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-mono text-base font-bold ${
-                      inferQuestionMediaType(aq) === 'audio' && !onlineAudioReady
-                        ? 'bg-[#EAF2EE] text-[#14543D]'
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono tabular-nums text-sm font-bold transition-colors ${
+                      isAudioWaiting
+                        ? 'bg-white/15 text-white'
+                        : modalTimeLeft === 0
+                        ? 'bg-rose-600 text-white'
                         : modalTimeLeft <= 10
-                        ? 'bg-rose-100 text-rose-700 animate-pulse'
-                        : 'bg-[#F3F5E9] text-[#252824]'
+                        ? 'bg-[#F07842] text-white'
+                        : 'bg-white/12 text-white'
                     }`}
                   >
                     <Clock className="w-4 h-4" />
                     <span>
-                      {inferQuestionMediaType(aq) === 'audio' && !onlineAudioReady
-                        ? `متوقف (${modalTimeLeft}s)`
-                        : `${modalTimeLeft}s`}
+                      {isAudioWaiting
+                        ? `متوقف (${modalTimeLeft}ث)`
+                        : modalTimeLeft === 0
+                        ? 'انتهى الوقت (0ث)'
+                        : `${modalTimeLeft}ث`}
                     </span>
                   </div>
                 </div>
 
-                {/* Question Body */}
-                <div className="space-y-4 text-center py-1">
-                  <h3 className="font-display text-xl md:text-2xl font-bold text-[#252824] leading-relaxed">
-                    {aq.questionText}
-                  </h3>
-
-                  {/* Optional Question Image with Error Retry & Zoom */}
-                  {inferQuestionMediaType(aq) === 'image' && aq.imageUrl && (
-                    onlineImageLoadFailed ? (
-                      <div className="bg-[#F3F5E9] border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-right">
-                        <div className="space-y-0.5">
-                          <div className="text-xs font-bold text-rose-800">
-                            تعذر تحميل صورة السؤال
-                          </div>
-                          <p className="text-[11px] text-rose-700/90">
-                            تأكد من الاتصال ثم اضغط على «إعادة المحاولة».
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOnlineImageLoadFailed(false);
-                            setOnlineImageRetryNonce((n) => n + 1);
-                          }}
-                          className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>إعادة المحاولة</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="max-w-lg mx-auto rounded-2xl overflow-hidden border border-[#E5E8DD] bg-[#F3F5E9]/50 p-2.5 space-y-2">
-                        <div className="relative flex items-center justify-center">
-                          <img
-                            key={`${aq.imageUrl}_${onlineImageRetryNonce}`}
-                            src={aq.imageUrl}
-                            referrerPolicy="no-referrer"
-                            alt={aq.imageDescription || 'صورة السؤال'}
-                            onError={() => setOnlineImageLoadFailed(true)}
-                            onClick={() => setOnlineZoomedImageUrl(aq.imageUrl || null)}
-                            className="w-full max-h-72 object-contain rounded-xl bg-[#FFFFFF] cursor-zoom-in"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setOnlineZoomedImageUrl(aq.imageUrl || null)}
-                            className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-[#252824]/75 hover:bg-[#252824] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                            title="تكبير الصورة"
-                          >
-                            <ZoomIn className="w-3.5 h-3.5" />
-                            <span>تكبير</span>
-                          </button>
-                        </div>
-                        {aq.imageDescription && (
-                          <p className="text-xs text-[#777B73] text-center">
-                            {aq.imageDescription}
-                          </p>
-                        )}
-                      </div>
-                    )
-                  )}
-
-                  {/* Question Audio Player */}
-                  {inferQuestionMediaType(aq) === 'audio' && aq.audioUrl && (
-                    <QuestionAudioPlayer
-                      audioUrl={aq.audioUrl}
-                      maxPlays={aq.audioMaxPlays ?? null}
-                      questionKey={`online_${currentRoom.code}_${aq.tileKey}_${aq.openedAt}`}
-                      onReadyChange={(ready) => {
-                        setOnlineAudioReady(ready);
-                        if (ready && audioLoadingStartedAtRef.current) {
-                          setOnlineAudioLoadWaitMs(
-                            Math.max(0, Date.now() - audioLoadingStartedAtRef.current)
-                          );
-                          audioLoadingStartedAtRef.current = null;
-                        } else if (!ready && !audioLoadingStartedAtRef.current) {
-                          audioLoadingStartedAtRef.current = Date.now();
-                        }
-                      }}
-                    />
-                  )}
+                {/* Remaining Time Progress Bar */}
+                <div
+                  aria-hidden="true"
+                  className="h-1.5 w-full bg-[#E5E8DD] overflow-hidden shrink-0"
+                >
+                  <div
+                    className={`h-full transition-all duration-500 ease-linear ${
+                      modalTimeLeft === 0
+                        ? 'bg-rose-600'
+                        : modalTimeLeft <= 10
+                        ? 'bg-[#F07842]'
+                        : 'bg-[#14543D]'
+                    }`}
+                    style={{ width: `${onlineTimerRatio}%` }}
+                  />
                 </div>
 
-                {/* Answer Area */}
-                {aq.isAnswerRevealed ? (
-                  <div className="p-4 rounded-2xl bg-[#EAF2EE] border-2 border-[#14543D] text-center space-y-1 animate-in fade-in">
-                    <div className="text-xs font-bold text-[#14543D]">
-                      الإجابة الصحيحة:
-                    </div>
-                    <div className="font-display text-xl font-bold text-[#14543D]">
-                      {aq.correctAnswer}
-                    </div>
-                    {aq.explanation && (
-                      <p className="text-xs text-[#777B73] pt-1">
-                        {aq.explanation}
-                      </p>
+                <div className="p-4 sm:p-6 md:p-8 overflow-y-auto space-y-5 flex-1">
+                  {/* Question Body */}
+                  <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-5 sm:p-7 space-y-4 text-center">
+                    <h3 className="font-display text-lg sm:text-xl md:text-2xl font-bold text-[#1B1F1C] leading-relaxed">
+                      {aq.questionText}
+                    </h3>
+
+                    {/* Optional Question Image with Error Retry & Zoom */}
+                    {inferQuestionMediaType(aq) === 'image' && aq.imageUrl && (
+                      onlineImageLoadFailed ? (
+                        <div className="bg-[#FFFFFF] border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-right">
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-bold text-rose-800">
+                              تعذر تحميل صورة السؤال
+                            </div>
+                            <p className="text-[11px] text-rose-700/90">
+                              تأكد من الاتصال ثم اضغط على «إعادة المحاولة».
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOnlineImageLoadFailed(false);
+                              setOnlineImageRetryNonce((n) => n + 1);
+                            }}
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>إعادة المحاولة</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="max-w-lg mx-auto rounded-2xl overflow-hidden border border-[#E5E8DD] bg-[#FFFFFF] p-2.5 space-y-2">
+                          <div className="relative flex items-center justify-center">
+                            <img
+                              key={`${aq.imageUrl}_${onlineImageRetryNonce}`}
+                              src={aq.imageUrl}
+                              referrerPolicy="no-referrer"
+                              alt={aq.imageDescription || 'صورة السؤال'}
+                              onError={() => setOnlineImageLoadFailed(true)}
+                              onClick={() => setOnlineZoomedImageUrl(aq.imageUrl || null)}
+                              className="w-full max-h-72 object-contain rounded-xl bg-[#FFFFFF] cursor-zoom-in"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setOnlineZoomedImageUrl(aq.imageUrl || null)}
+                              className="absolute bottom-2 left-2 px-2.5 py-1.5 rounded-lg bg-[#1B1F1C]/80 hover:bg-[#1B1F1C] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                              title="تكبير الصورة"
+                            >
+                              <ZoomIn className="w-3.5 h-3.5" />
+                              <span>تكبير</span>
+                            </button>
+                          </div>
+                          {aq.imageDescription && (
+                            <p className="text-xs text-[#52574E] text-center">
+                              {aq.imageDescription}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    )}
+
+                    {/* Question Audio Player */}
+                    {inferQuestionMediaType(aq) === 'audio' && aq.audioUrl && (
+                      <QuestionAudioPlayer
+                        audioUrl={aq.audioUrl}
+                        maxPlays={aq.audioMaxPlays ?? null}
+                        questionKey={`online_${currentRoom.code}_${aq.tileKey}_${aq.openedAt}`}
+                        onReadyChange={(ready) => {
+                          setOnlineAudioReady(ready);
+                          if (ready && audioLoadingStartedAtRef.current) {
+                            setOnlineAudioLoadWaitMs(
+                              Math.max(0, Date.now() - audioLoadingStartedAtRef.current)
+                            );
+                            audioLoadingStartedAtRef.current = null;
+                          } else if (!ready && !audioLoadingStartedAtRef.current) {
+                            audioLoadingStartedAtRef.current = Date.now();
+                          }
+                        }}
+                      />
                     )}
                   </div>
-                ) : (
-                  <div className="p-4 rounded-2xl bg-[#F3F5E9] border border-[#E5E8DD] text-center space-y-2">
-                    <div className="text-xs font-bold text-[#777B73]">
-                      الإجابة مخفية عن الجميع حالياً
-                    </div>
 
-                    {isHost ? (
-                      <div className="space-y-2">
-                        <div className="text-xs text-[#777B73]">
-                          يمكنك التحقق من الإجابة بشكل خاص على شاشتك دون كشفها للاعبين.
+                  {/* Answer Area */}
+                  {aq.isAnswerRevealed ? (
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#EAF2EE] border border-[#14543D]/30 text-center space-y-1.5 animate-in fade-in">
+                      <div className="text-xs font-bold text-[#14543D]">
+                        الإجابة الصحيحة:
+                      </div>
+                      <div className="font-display text-xl sm:text-2xl font-bold text-[#1B1F1C]">
+                        {aq.correctAnswer}
+                      </div>
+                      {aq.explanation && (
+                        <p className="text-xs text-[#52574E] pt-1 leading-relaxed">
+                          {aq.explanation}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl bg-[#F7F8F1] border border-[#E5E8DD] text-center space-y-2">
+                      <div className="text-xs font-bold text-[#52574E]">
+                        الإجابة مخفية عن الجميع حالياً
+                      </div>
+
+                      {isHost ? (
+                        <div className="space-y-2">
+                          <div className="text-xs text-[#52574E]">
+                            يمكنك التحقق من الإجابة بشكل خاص على شاشتك دون كشفها للاعبين.
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setHostAnswerPeek((p) => !p)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842] text-xs font-bold text-[#1B1F1C] cursor-pointer transition-colors"
+                          >
+                            {hostAnswerPeek ? (
+                              <>
+                                <EyeOff className="w-3.5 h-3.5 text-[#F07842]" />
+                                <span>إخفاء المعاينة الخاصة</span>
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-3.5 h-3.5 text-[#14543D]" />
+                                <span>معاينة الإجابة للمضيف فقط</span>
+                              </>
+                            )}
+                          </button>
+                          {hostAnswerPeek && (
+                            <div className="mt-2 p-3 rounded-xl bg-[#FFFFFF] border border-[#14543D]/30 text-sm font-bold text-[#1B1F1C]">
+                              {aq.correctAnswer}
+                            </div>
+                          )}
                         </div>
+                      ) : (
+                        <div className="text-xs text-[#52574E]">
+                          بانتظار المضيف لكشف الإجابة...
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ACTION BUTTONS */}
+                  {isHost ? (
+                    <div className="space-y-3 pt-1">
+                      {!aq.isAnswerRevealed ? (
                         <button
                           type="button"
-                          onClick={() => setHostAnswerPeek((p) => !p)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#14543D]/40 text-xs font-bold text-[#14543D] cursor-pointer"
+                          disabled={actionBusy}
+                          onClick={handleHostReveal}
+                          className="w-full min-h-[50px] py-3.5 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] disabled:opacity-50 rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm transition-colors"
                         >
-                          {hostAnswerPeek ? (
-                            <>
-                              <EyeOff className="w-3.5 h-3.5" />
-                              <span>إخفاء المعاينة الخاصة</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>معاينة الإجابة للمضيف فقط</span>
-                            </>
-                          )}
+                          <Eye className="w-5 h-5 text-white" />
+                          <span>إظهار الإجابة للجميع</span>
                         </button>
-                        {hostAnswerPeek && (
-                          <div className="mt-2 p-3 rounded-xl bg-[#FFFFFF] border border-[#14543D]/30 text-sm font-bold text-[#252824]">
-                            {aq.correctAnswer}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-[#777B73]">
-                        بانتظار المضيف لكشف الإجابة...
-                      </div>
-                    )}
-                  </div>
-                )}
+                      ) : (
+                        <div className="space-y-3">
+                          <WhoAnsweredCorrectlyPanel
+                            teams={currentRoom.teams}
+                            points={aq.points}
+                            disabled={actionBusy}
+                            pendingChoice={pendingHostChoice}
+                            onSelectTeam={(tIdx) => void handleHostAward(tIdx)}
+                            onSelectNoTeam={() => void handleHostSkip()}
+                          />
 
-                {/* ACTION BUTTONS */}
-                {isHost ? (
-                  <div className="space-y-3 pt-1">
-                    {!aq.isAnswerRevealed ? (
-                      <button
-                        type="button"
-                        disabled={actionBusy}
-                        onClick={handleHostReveal}
-                        className="w-full min-h-[48px] py-3.5 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#14543D] hover:bg-[#0E3F2D] disabled:opacity-50 rounded-xl cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-                      >
-                        <Eye className="w-5 h-5 text-[#F07842]" />
-                        <span>إظهار الإجابة للجميع</span>
-                      </button>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="text-xs font-bold text-center text-[#252824]">
-                          اختر الفريق الذي أجاب إجابة صحيحة لمنحه النقاط:
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {currentRoom.teams.map((t, tIdx) => (
+                          <div className="flex justify-center pt-1">
                             <button
-                              key={t.id}
                               type="button"
                               disabled={actionBusy}
-                              onClick={() => handleHostAward(tIdx)}
-                              className="min-h-[46px] py-3 px-3 rounded-xl text-xs font-bold text-[#FFFFFF] hover:opacity-95 disabled:opacity-50 cursor-pointer shadow-xs transition-transform active:scale-95"
-                              style={{ backgroundColor: t.color }}
+                              onClick={() =>
+                                hostCloseActiveQuestion(
+                                  currentRoom.code,
+                                  currentRoom.hostId
+                                )
+                              }
+                              className="min-h-[40px] py-2 px-4 rounded-xl border border-[#E5E8DD] text-xs font-bold text-[#52574E] hover:text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-50 transition-colors"
                             >
-                              + {aq.points} لـ {t.name}
+                              إغلاق بدون احتساب السؤال
                             </button>
-                          ))}
+                          </div>
                         </div>
+                      )}
+                    </div>
+                  ) : isSpectator ? (
+                    <div className="pt-2 text-center text-xs font-bold text-[#14543D] bg-[#EAF2EE] py-3 px-4 rounded-xl border border-[#14543D]/15">
+                      تتابع السؤال الآن بوضع المشاهد (للعرض فقط — يتم تحديث الإجابة والنقاط مباشرة).
+                    </div>
+                  ) : aq.isAnswerRevealed ? (
+                    <div className="pt-2 text-center text-xs font-bold text-[#14543D] bg-[#EAF2EE] py-3 px-4 rounded-xl border border-[#14543D]/15">
+                      تم كشف الإجابة — يحدد المضيف الآن «مين جاوب صح؟»...
+                    </div>
+                  ) : (
+                    /* Non-Host Player Interactive Buttons */
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePlayerBuzz('buzz_in')}
+                        className="flex-1 w-full min-h-[48px] py-3 text-xs sm:text-sm font-bold rounded-xl bg-[#F07842] text-[#FFFFFF] hover:bg-[#D9632E] cursor-pointer flex items-center justify-center gap-2 transition-colors shadow-xs"
+                      >
+                        <Hand className="w-4 h-4 text-white" />
+                        <span>أنا جاهز للإجابة! (رفع اليد)</span>
+                      </button>
 
-                        <div className="flex items-center gap-2 pt-2">
-                          <button
-                            type="button"
-                            disabled={actionBusy}
-                            onClick={handleHostSkip}
-                            className="flex-1 min-h-[44px] py-2.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] disabled:opacity-50 text-xs font-bold text-[#777B73] cursor-pointer"
-                          >
-                            تخطي بدون نقاط
-                          </button>
-                          <button
-                            type="button"
-                            disabled={actionBusy}
-                            onClick={() =>
-                              hostCloseActiveQuestion(
-                                currentRoom.code,
-                                currentRoom.hostId
-                              )
-                            }
-                            className="min-h-[44px] py-2.5 px-4 rounded-xl border border-[#E5E8DD] text-xs font-bold text-rose-600 hover:bg-rose-50 cursor-pointer"
-                          >
-                            إغلاق
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : isSpectator ? (
-                  <div className="pt-2 text-center text-xs font-bold text-[#14543D] bg-[#EAF2EE] py-3 px-4 rounded-xl border border-[#14543D]/15">
-                    تتابع السؤال الآن بوضع المشاهد (للعرض فقط — يتم تحديث الإجابة والنقاط مباشرة).
-                  </div>
-                ) : (
-                  /* Non-Host Player Interactive Buttons */
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => handlePlayerBuzz('buzz_in')}
-                      className="flex-1 w-full min-h-[46px] py-3 text-xs font-bold rounded-xl bg-[#14543D] text-[#FFFFFF] hover:bg-[#0E3D2C] cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Hand className="w-4 h-4 text-[#F07842]" />
-                      <span>أنا جاهز للإجابة! (رفع اليد)</span>
-                    </button>
-
-                    {!aq.isAnswerRevealed && (
                       <button
                         type="button"
                         onClick={() => handlePlayerBuzz('reveal_answer')}
-                        className="min-h-[46px] py-3 px-4 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] cursor-pointer"
+                        className="min-h-[48px] py-3 px-4 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F7F8F1] text-xs font-bold text-[#1B1F1C] cursor-pointer transition-colors"
                       >
                         طلب كشف الإجابة 📢
                       </button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -3402,7 +3527,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
         {onlineZoomedImageUrl && currentRoom.activeQuestion && (
           <div
-            className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/90 backdrop-blur-xs"
+            className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/92 backdrop-blur-xs"
             onClick={() => setOnlineZoomedImageUrl(null)}
             role="dialog"
             aria-modal="true"
@@ -3437,7 +3562,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           roomCode={currentRoom.code}
           canInviteToPlay={false}
         />
-      </div>
+        </div>
+      </MotionConfig>
     );
   }
 
@@ -3450,131 +3576,142 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     .join('_')}`;
 
   return (
-    <motion.div
-      initial={effects.motion ? { opacity: 0, y: 8 } : false}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      className="max-w-[800px] mx-auto px-3 sm:px-4 py-6 md:py-12 text-center space-y-6 md:space-y-8"
-    >
-      <div
-        className={`relative overflow-hidden bg-[#FFFFFF] border-2 rounded-3xl p-4 sm:p-8 md:p-12 space-y-5 sm:space-y-6 shadow-xl ${
-          onlineOutcome.isTie
-            ? 'border-amber-400'
-            : onlineOutcome.isZeroScore
-            ? 'border-[#E5E8DD]'
-            : 'border-[#14543D]'
-        }`}
+    <MotionConfig reducedMotion="user">
+      <motion.div
+        initial={effects.motion ? { opacity: 0, y: 10 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        className="max-w-[840px] mx-auto px-3 sm:px-6 py-6 md:py-12 text-center space-y-6"
       >
-        <MatchCelebrationHeader
-          outcome={onlineOutcome}
-          celebrationKey={onlineCelebrationKey}
-          subtitleMeta={`أونلاين · غرفة ${currentRoom.code}`}
-          effects={effects}
-        />
+        <div
+          className={`relative overflow-hidden bg-[#FFFFFF] border rounded-3xl p-4 sm:p-8 md:p-11 space-y-6 shadow-xl ${
+            onlineOutcome.isTie ? 'border-amber-300' : 'border-[#E5E8DD]'
+          }`}
+        >
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-1.5"
+            style={{
+              backgroundColor: onlineOutcome.isTie
+                ? '#F59E0B'
+                : onlineOutcome.isZeroScore
+                ? '#E5E8DD'
+                : onlineOutcome.singleWinner?.color || '#F07842',
+            }}
+          />
 
-        {/* Final Scoreboard */}
-        <div className="space-y-3 pt-2 sm:pt-4 max-w-md mx-auto">
-          {onlineOutcome.sortedTeams.map((team, idx) => {
-            const isTop = team.score === onlineOutcome.topScore && onlineOutcome.topScore > 0;
-            const rankNum = onlineOutcome.teamRanks[idx] ?? idx + 1;
-            return (
-              <motion.div
-                key={team.id}
-                initial={
-                  effects.motion && effects.winner
-                    ? { opacity: 0, y: 10 }
-                    : false
-                }
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.26,
-                  delay: effects.motion ? Math.min(idx * 0.08, 0.32) : 0,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
-                className={`p-3.5 sm:p-4 rounded-2xl border-2 flex items-center justify-between gap-2 ${
-                  isTop
-                    ? onlineOutcome.isTie
-                      ? 'bg-amber-50/70 border-amber-400 shadow-xs'
-                      : 'bg-[#EAF2EE] border-[#14543D] shadow-xs'
-                    : 'bg-[#F3F5E9] border-[#E5E8DD]'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                  <span className="font-bold text-sm text-[#777B73] shrink-0">
-                    #{rankNum}
-                  </span>
-                  <span
-                    className="w-3.5 h-3.5 rounded-full shrink-0"
-                    style={{ backgroundColor: team.color }}
-                  />
-                  <span className="font-display font-bold text-sm text-[#252824] truncate">
-                    {team.name}
-                  </span>
-                  {isTop && (
+          <MatchCelebrationHeader
+            outcome={onlineOutcome}
+            celebrationKey={onlineCelebrationKey}
+            subtitleMeta={`أونلاين · غرفة ${currentRoom.code}`}
+            effects={effects}
+          />
+
+          {/* Final Scoreboard */}
+          <div className="space-y-3 pt-1 max-w-lg mx-auto text-right">
+            {onlineOutcome.sortedTeams.map((team, idx) => {
+              const isTop = team.score === onlineOutcome.topScore && onlineOutcome.topScore > 0;
+              const rankNum = onlineOutcome.teamRanks[idx] ?? idx + 1;
+              return (
+                <motion.div
+                  key={team.id}
+                  initial={
+                    effects.motion && effects.winner
+                      ? { opacity: 0, y: 10 }
+                      : false
+                  }
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.26,
+                    delay: effects.motion ? Math.min(idx * 0.08, 0.32) : 0,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                  className={`p-4 rounded-2xl border flex items-center justify-between gap-3 transition-shadow ${
+                    isTop
+                      ? onlineOutcome.isTie
+                        ? 'bg-[#FFFBEB] border-amber-300 shadow-sm'
+                        : 'bg-[#F7F8F1] border-[#F07842]/50 shadow-sm'
+                      : 'bg-[#FFFFFF] border-[#E5E8DD]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
                     <span
-                      className={`text-[11px] font-bold shrink-0 ${
-                        onlineOutcome.isTie ? 'text-amber-700' : 'text-[#14543D]'
-                      }`}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center font-mono tabular-nums font-extrabold text-sm text-white shrink-0 shadow-2xs"
+                      style={{ backgroundColor: team.color }}
                     >
-                      {onlineOutcome.isTie ? '★ متعادل' : '★ الفائز'}
+                      #{rankNum}
                     </span>
-                  )}
-                </div>
-                <div className="font-mono text-lg sm:text-xl font-bold text-[#14543D] shrink-0 flex items-center gap-1">
-                  <AnimatedScoreCounter
-                    value={team.score}
-                    animateOnMount
-                    motionEnabled={effects.motion && effects.winner}
-                    durationMs={600}
-                  />
-                  <span className="text-xs font-medium text-[#777B73]">نقطة</span>
-                </div>
-              </motion.div>
-            );
-          })}
+                    <span className="font-display font-bold text-sm sm:text-base text-[#1B1F1C] truncate">
+                      {team.name}
+                    </span>
+                    {isTop && (
+                      <span
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
+                          onlineOutcome.isTie
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-[#FEF2EC] text-[#F07842]'
+                        }`}
+                      >
+                        {onlineOutcome.isTie ? '★ متعادل' : '★ الفائز'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-mono text-xl sm:text-2xl font-extrabold shrink-0 flex items-center gap-1" style={{ color: team.color }}>
+                    <AnimatedScoreCounter
+                      value={team.score}
+                      animateOnMount
+                      motionEnabled={effects.motion && effects.winner}
+                      durationMs={600}
+                    />
+                    <span className="text-[11px] font-sans font-medium text-[#52574E]">نقطة</span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Action Controls */}
+          <div className="pt-5 border-t border-[#E5E8DD] flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3">
+            {isHost ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => hostRestartGame(currentRoom.code, currentRoom.hostId, false)}
+                  className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-[#F07842] text-[#FFFFFF] text-sm font-bold hover:bg-[#D9632E] cursor-pointer flex items-center justify-center gap-2 shadow-sm transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>جولة جديدة بنفس الغرفة</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => hostRestartGame(currentRoom.code, currentRoom.hostId, true)}
+                  className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-[#1B1F1C] text-[#FFFFFF] text-sm font-bold hover:bg-[#2F3530] cursor-pointer flex items-center justify-center transition-colors"
+                >
+                  العودة لصالة الانتظار
+                </button>
+              </>
+            ) : isSpectator ? (
+              <div className="text-xs font-bold text-[#52574E]">
+                انتهت المباراة — كنت تشاهد هذه المواجهة كمشاهد.
+              </div>
+            ) : (
+              <div className="text-xs font-bold text-[#52574E]">
+                بانتظار المضيف لإعادة بدء جولة جديدة أو العودة للانتظار.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleLeaveRoom}
+              className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold cursor-pointer flex items-center justify-center gap-2 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{isSpectator ? 'مغادرة المشاهدة' : 'مغادرة الغرفة'}</span>
+            </button>
+          </div>
         </div>
-
-        {/* Action Controls */}
-        <div className="pt-4 sm:pt-6 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 sm:gap-4">
-          {isHost ? (
-            <>
-              <button
-                type="button"
-                onClick={() => hostRestartGame(currentRoom.code, currentRoom.hostId, false)}
-                className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>جولة جديدة بنفس الغرفة</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => hostRestartGame(currentRoom.code, currentRoom.hostId, true)}
-                className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-sm font-bold text-[#252824] hover:bg-[#F3F5E9] cursor-pointer flex items-center justify-center"
-              >
-                العودة لصالة الانتظار
-              </button>
-            </>
-          ) : isSpectator ? (
-            <div className="text-xs font-bold text-[#777B73]">
-              انتهت المباراة — كنت تشاهد هذه المواجهة كمشاهد.
-            </div>
-          ) : (
-            <div className="text-xs font-bold text-[#777B73]">
-              بانتظار المضيف لإعادة بدء جولة جديدة أو العودة للانتظار.
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleLeaveRoom}
-            className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold cursor-pointer flex items-center justify-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>{isSpectator ? 'مغادرة المشاهدة' : 'مغادرة الغرفة'}</span>
-          </button>
-        </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </MotionConfig>
   );
 };

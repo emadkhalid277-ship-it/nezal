@@ -80,6 +80,7 @@ export interface ActiveQuestionState {
     timerSeconds: number;
     startedAt?: number | null;
     expiresAt?: number | null;
+    serverNow?: number;
     endReason?: 'correct_guess' | 'time_up' | 'completed_all' | 'player_finished' | 'host_ended' | null;
   };
 }

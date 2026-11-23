@@ -6,6 +6,7 @@ import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import {
   attachHostStream,
+  attachPlayerStream,
   claimWalaKalimaQrSession,
   createAdminWalaKalimaWord,
   createWalaKalimaSession,
@@ -17,6 +18,7 @@ import {
   performPlayerSessionAction,
   updateAdminWalaKalimaSettings,
   updateAdminWalaKalimaWord,
+  validatePlayerStreamAccess,
 } from './server/walaKalimaEngine.ts';
 import type { WalaKalimaContentTypeId } from './src/types/walaKalima.ts';
 import type { DifficultyLevel } from './src/types/game.ts';
@@ -335,7 +337,14 @@ async function startServer() {
     }
 
     const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
-    const scope = body.scope === 'admin_question' ? 'admin_question' : body.scope === 'user_question' ? 'user_question' : null;
+    const scope =
+      body.scope === 'admin_question'
+        ? 'admin_question'
+        : body.scope === 'admin_category'
+        ? 'admin_category'
+        : body.scope === 'user_question'
+        ? 'user_question'
+        : null;
     if (!scope) {
       res.status(400).json({
         code: 'cloudinary/invalid-scope',
@@ -344,7 +353,7 @@ async function startServer() {
       return;
     }
 
-    if (scope === 'admin_question') {
+    if (scope === 'admin_question' || scope === 'admin_category') {
       const isAdmin = await checkIsAdminUser(verifiedUser, idToken);
       if (!isAdmin) {
         res.status(403).json({
@@ -375,11 +384,15 @@ async function startServer() {
     const folder =
       scope === 'admin_question'
         ? `nizal/questions/${sanitizeSegment(body.folderHint, 'general')}`
+        : scope === 'admin_category'
+        ? `nizal/categories/${sanitizeSegment(body.folderHint, 'subcategories')}`
         : `nizal/user-questions/${sanitizeSegment(verifiedUser.uid, 'user', 128)}`;
 
     const prefix =
       scope === 'admin_question'
         ? sanitizeSegment(body.questionIdHint, 'q')
+        : scope === 'admin_category'
+        ? sanitizeSegment(body.questionIdHint, 'cat')
         : 'uq';
     const publicId = `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     const timestamp = Math.floor(Date.now() / 1000);
@@ -458,6 +471,12 @@ async function startServer() {
   // Public safe settings (no words ever returned)
   app.get('/api/wala-kalima/config', (_req: Request, res: Response) => {
     res.json(getPublicWalaKalimaConfig());
+  });
+
+  // Authoritative server clock endpoint for client clock-offset synchronization
+  app.get('/api/wala-kalima/server-time', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ serverNow: Date.now() });
   });
 
   // Admin: fetch word bank & settings
@@ -556,6 +575,7 @@ async function startServer() {
         teamName: String(body.teamName || ''),
         playerName: String(body.playerName || ''),
         contentType: String(body.contentType || 'football_players') as WalaKalimaContentTypeId,
+        points: body.points !== undefined && body.points !== null ? Number(body.points) : undefined,
         preferredDifficulty:
           typeof body.preferredDifficulty === 'string'
             ? (body.preferredDifficulty as DifficultyLevel)
@@ -611,6 +631,36 @@ async function startServer() {
           : 403;
       const message = err instanceof Error ? err.message : 'تعذّر فتح البث المباشر.';
       res.status(statusCode).json({ code: 'wk/stream-failed', error: message });
+    }
+  });
+
+  // Mobile Player: SSE real-time stream (requires playerToken, synced timer + status + current word)
+  app.get('/api/wala-kalima/sessions/:id/player-stream', (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization || '';
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const playerToken = String(
+      bearerMatch?.[1] || req.query.playerToken || ''
+    ).trim();
+    const sessionId = String(req.params.id || '');
+    try {
+      validatePlayerStreamAccess(sessionId, playerToken);
+
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+
+      const detach = attachPlayerStream(sessionId, playerToken, res);
+      req.on('close', () => {
+        detach();
+      });
+    } catch (err: unknown) {
+      const statusCode =
+        typeof (err as { status?: unknown })?.status === 'number'
+          ? (err as { status: number }).status
+          : 403;
+      const message = err instanceof Error ? err.message : 'تعذّر فتح البث المباشر للاعب.';
+      res.status(statusCode).json({ code: 'wk/player-stream-failed', error: message });
     }
   });
 

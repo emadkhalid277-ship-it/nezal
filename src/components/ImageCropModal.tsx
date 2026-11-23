@@ -8,6 +8,7 @@ import {
   Move,
   Upload,
 } from 'lucide-react';
+import { validateQuestionImageFile } from '../utils/questionMedia';
 
 interface ImageCropModalProps {
   isOpen: boolean;
@@ -53,16 +54,16 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
   const loadFileIntoImage = useCallback((file: File) => {
     setErrorMsg(null);
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (
-      !validTypes.includes(file.type.toLowerCase()) &&
-      !/\.(jpe?g|png|webp)$/i.test(file.name)
-    ) {
-      setErrorMsg('يرجى اختيار صورة بصيغة JPG أو JPEG أو PNG أو WEBP فقط.');
+    const validationError = validateQuestionImageFile(file);
+    if (validationError) {
+      setErrorMsg(validationError);
       return;
     }
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      setErrorMsg('تعذر قراءة ملف الصورة المختار من الجهاز.');
+    };
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
@@ -71,7 +72,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         setOffset({ x: 0, y: 0 });
       };
       img.onerror = () => {
-        setErrorMsg('تعذر قراءة ملف الصورة. جرب صورة أخرى.');
+        setErrorMsg('تعذر قراءة ملف الصورة. جرب صورة أخرى بصيغة JPG أو PNG أو WEBP.');
       };
       img.src = String(reader.result || '');
     };
@@ -153,31 +154,55 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     setIsDragging(false);
   };
 
+  const exportCanvasBlob = (
+    canvas: HTMLCanvasElement,
+    mime: 'image/webp' | 'image/jpeg',
+    quality: number
+  ): Promise<Blob | null> =>
+    new Promise((resolve) => {
+      canvas.toBlob((b) => resolve(b), mime, quality);
+    });
+
   const handleConfirm = async () => {
     const canvas = canvasRef.current;
-    if (!canvas || !imageElement) return;
+    if (!canvas || !imageElement || saving) return;
+    setErrorMsg(null);
 
-    // Export compressed WebP or JPEG
     let dataUrl = canvas.toDataURL('image/webp', 0.82);
+    let preferredMime: 'image/webp' | 'image/jpeg' = 'image/webp';
+    let quality = 0.82;
     if (!dataUrl.startsWith('data:image/webp') || dataUrl.length > 420000) {
-      dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      preferredMime = 'image/jpeg';
     }
 
-    canvas.toBlob(
-      async (blob) => {
-        if (!blob) return;
-        await onConfirmSave(blob, dataUrl);
-      },
-      'image/webp',
-      0.82
-    );
+    let blob = await exportCanvasBlob(canvas, preferredMime, quality);
+    if (!blob && preferredMime === 'image/webp') {
+      dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      blob = await exportCanvasBlob(canvas, 'image/jpeg', 0.82);
+    }
+
+    if (!blob || blob.size <= 0) {
+      setErrorMsg('تعذر تجهيز ملف الصورة بعد القص. يرجى تجربة صورة أخرى.');
+      return;
+    }
+
+    try {
+      await onConfirmSave(blob, dataUrl);
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذر رفع أو حفظ الصورة. يرجى المحاولة مرة أخرى.'
+      );
+    }
   };
 
   if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/70 backdrop-blur-xs"
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[#252824]/70 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
     >
@@ -206,7 +231,10 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6">
           {errorMsg && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-300 text-xs font-bold text-rose-800">
+            <div
+              role="alert"
+              className="p-3.5 rounded-xl bg-rose-50 border border-rose-300 text-xs font-bold text-rose-800"
+            >
               {errorMsg}
             </div>
           )}

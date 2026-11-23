@@ -5,7 +5,10 @@ import {
   validateQuestionImageFile,
 } from '../utils/questionMedia';
 
-export type CloudinaryUploadScope = 'admin_question' | 'user_question';
+export type CloudinaryUploadScope =
+  | 'admin_question'
+  | 'admin_category'
+  | 'user_question';
 
 interface CloudinarySignResponse {
   cloudName: string;
@@ -23,6 +26,34 @@ interface CloudinaryUploadApiResponse {
   error?: {
     message?: string;
   };
+}
+
+export async function uploadCategoryImageToCloudinarySigned(
+  croppedBlob: Blob,
+  options: {
+    categoryType: 'main' | 'sub';
+    categoryId: string;
+  }
+): Promise<{ imageUrl: string; imageStoragePath: string }> {
+  const rawType = (croppedBlob.type || '').toLowerCase();
+  const mime =
+    rawType === 'image/png' || rawType === 'image/jpeg' || rawType === 'image/webp'
+      ? rawType
+      : 'image/webp';
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'webp';
+  const safeId = options.categoryId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64) || 'cat';
+  const file =
+    croppedBlob instanceof File
+      ? croppedBlob
+      : new File([croppedBlob], `${options.categoryType}-${safeId}.${ext}`, {
+          type: mime,
+        });
+
+  return uploadQuestionImageToCloudinarySigned(file, {
+    scope: 'admin_category',
+    folderHint: options.categoryType === 'main' ? 'main' : 'sub',
+    questionIdHint: safeId,
+  });
 }
 
 export async function uploadQuestionImageToCloudinarySigned(
@@ -55,7 +86,7 @@ export async function uploadQuestionImageToCloudinarySigned(
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error(
-      '[auth/unauthenticated] يجب تسجيل الدخول أولًا قبل رفع صورة السؤال.'
+      '[auth/unauthenticated] يجب تسجيل الدخول أولًا قبل رفع الصورة.'
     );
   }
 

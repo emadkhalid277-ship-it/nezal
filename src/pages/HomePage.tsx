@@ -5,13 +5,13 @@ import {
   Layers,
   Zap,
   Trophy,
-  CheckCircle2,
   Radio,
-  WifiOff,
   RefreshCw,
   Clock,
   Lock,
   X,
+  Play,
+  BookOpen,
 } from 'lucide-react';
 import { motion, MotionConfig, useReducedMotion } from 'motion/react';
 import { MainCategoryMeta, PageView, SubcategoryItem } from '../types/game';
@@ -34,29 +34,18 @@ interface HomePageProps {
   onSyncOfflineData?: () => void;
 }
 
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+
 const categoryCardVariants = {
-  rest: { y: 0, scale: 1 },
+  rest: { y: 0 },
   hover: {
-    y: -6,
-    scale: 1.025,
-    transition: { type: 'spring' as const, stiffness: 460, damping: 28, mass: 0.7 },
+    y: -5,
+    transition: { duration: 0.18, ease: EASE_OUT },
   },
   tap: {
     y: -1,
-    scale: 0.96,
-    transition: { type: 'spring' as const, stiffness: 560, damping: 32, mass: 0.6 },
-  },
-};
-
-const categoryArtworkVariants = {
-  rest: { scale: 1 },
-  hover: {
-    scale: 1.06,
-    transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] as const },
-  },
-  tap: {
-    scale: 1.02,
-    transition: { duration: 0.12, ease: [0.16, 1, 0.3, 1] as const },
+    scale: 0.985,
+    transition: { duration: 0.12, ease: EASE_OUT },
   },
 };
 
@@ -64,23 +53,10 @@ const categoryArrowVariants = {
   rest: { x: 0 },
   hover: {
     x: -4,
-    transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] as const },
+    transition: { duration: 0.16, ease: EASE_OUT },
   },
   tap: {
     x: -2,
-    transition: { duration: 0.1 },
-  },
-};
-
-const comingSoonCardVariants = {
-  rest: { y: 0, scale: 1 },
-  hover: {
-    y: -2,
-    scale: 1.01,
-    transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] as const },
-  },
-  tap: {
-    scale: 0.98,
     transition: { duration: 0.1 },
   },
 };
@@ -98,6 +74,10 @@ export const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const [comingSoonNotice, setComingSoonNotice] = useState<string | null>(null);
+  const [selectedBoardTile, setSelectedBoardTile] = useState<{
+    colIndex: number;
+    points: number;
+  }>({ colIndex: 0, points: 300 });
 
   const visibleMainCategories = useMemo(
     () =>
@@ -105,6 +85,11 @@ export const HomePage: React.FC<HomePageProps> = ({
         .filter((m) => m.isActive && !m.isDeleted)
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [mainCategories]
+  );
+
+  const activeSubcategoriesCount = useMemo(
+    () => subcategories.filter((s) => s.isActive && !s.isDeleted).length,
+    [subcategories]
   );
 
   const subcategoryCountByMain = useMemo(() => {
@@ -119,9 +104,25 @@ export const HomePage: React.FC<HomePageProps> = ({
     return counts;
   }, [subcategories, visibleMainCategories]);
 
+  const heroBoardCategories = useMemo(() => {
+    const playable = visibleMainCategories.filter((m) => !m.isComingSoon);
+    const source = playable.length > 0 ? playable : visibleMainCategories;
+    return source.slice(0, 3);
+  }, [visibleMainCategories]);
+
+  const handlePrimaryPlay = () => {
+    if (onStartOfflineLocalGame) {
+      onStartOfflineLocalGame();
+    } else {
+      onStartCategorySelection();
+    }
+  };
+
   const handleCategoryCardClick = (mainCat: MainCategoryMeta) => {
     if (mainCat.isComingSoon) {
-      setComingSoonNotice(`فئة «${mainCat.name}» قادمة قريباً، ترقبوها في التحديث القادم!`);
+      setComingSoonNotice(
+        `فئة «${mainCat.name}» قادمة قريباً، ترقبوها في التحديث القادم!`
+      );
       return;
     }
     setComingSoonNotice(null);
@@ -132,251 +133,330 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  const heroCategoryColumns = useMemo(
-    () => [
-      {
-        name: 'كأس العالم',
-        mainId: 'main-football',
-        pts: [100, 200, 300],
-        activeIdx: 2,
-      },
-      {
-        name: 'ون بيس',
-        mainId: 'main-anime',
-        pts: [100, 200, 300],
-        activeIdx: -1,
-      },
-      {
-        name: 'معلومات عامة',
-        mainId: 'main-general',
-        pts: [100, 200, 300],
-        activeIdx: -1,
-      },
-    ],
-    []
-  );
+  const safeSelectedCol =
+    heroBoardCategories[selectedBoardTile.colIndex] || heroBoardCategories[0];
 
   const steps = [
     {
       num: '01',
-      title: 'كوّنوا فرقكم',
-      description: 'اختاروا عدد الفرق، واكتبوا أسماء الفرق واللاعبين.',
+      title: 'كوّن فريقك',
+      description: 'حدّدوا عدد الفرق المتنافسة، وسمّوا كل فريق قبل دخول ساحة النِزال.',
       icon: Users,
-      accent: '#14543D',
-      bgTint: '#EAF2EE',
+      accent: '#F07842',
+      surface: '#FEF2EC',
     },
     {
       num: '02',
-      title: 'اختاروا الفئات',
-      description: 'اختاروا الفئات الرئيسية والفرعية اللي تناسبكم.',
+      title: 'اختر الفئات التي تناسبكم',
+      description: 'ينتقي كل فريق فئاته المفضلة من الأقسام الرئيسية والفرعية المتاحة.',
       icon: Layers,
-      accent: '#F07842',
-      bgTint: '#FEF2EC',
+      accent: '#14543D',
+      surface: '#EAF2EE',
     },
     {
       num: '03',
-      title: 'ابدأوا التحدي',
-      description: 'اختاروا الأسئلة وجاوبوا واجمعوا النقاط.',
+      title: 'ابدأ التحدي وأجب عن الأسئلة',
+      description: 'افتحوا مربعات النقاط من 100 إلى 500 نقطة وأجيبوا قبل انتهاء الوقت.',
       icon: Zap,
-      accent: '#14543D',
-      bgTint: '#EAF2EE',
+      accent: '#F07842',
+      surface: '#FEF2EC',
     },
     {
       num: '04',
-      title: 'احسموا المنافسة',
-      description: 'الفريق اللي يجمع أعلى نقاط يفوز!',
+      title: 'اجمع النقاط ونافس للفوز',
+      description: 'ارفعوا رصيدكم مع كل إجابة صحيحة واحسموا المواجهة بأعلى مجموع.',
       icon: Trophy,
-      accent: '#F07842',
-      bgTint: '#FEF2EC',
+      accent: '#14543D',
+      surface: '#EAF2EE',
     },
   ];
 
+  const tierPoints = [100, 300, 500];
+
   return (
     <MotionConfig reducedMotion="user">
-      <div className="space-y-12 md:space-y-24 pb-8 md:pb-12">
-        {/* SECTION 1: WELCOME HERO */}
-        <section className="pt-4 sm:pt-8 md:pt-12">
+      <div className="space-y-14 sm:space-y-20 md:space-y-24 pb-10 md:pb-16">
+        {/* SECTION 1: HERO SECTION */}
+        <section
+          aria-labelledby="hero-heading"
+          className="pt-4 sm:pt-7 md:pt-10"
+        >
           <div className="max-w-[1320px] mx-auto px-3 sm:px-6">
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-12 lg:p-16 grid grid-cols-1 lg:grid-cols-12 gap-7 sm:gap-10 lg:gap-12 items-center">
-              {/* Right Column (RTL): Headline, Description & Primary CTA */}
-              <div className="lg:col-span-7 space-y-4 sm:space-y-6 text-right">
-                <div className="inline-flex items-center gap-2 text-xs font-bold text-[#14543D] tracking-wide">
-                  <span className="w-2 h-2 rounded-full bg-[#F07842]" />
-                  <span>لعبة التحدي الجماعي للجمعات والأصحاب</span>
-                </div>
-
-                <h1 className="font-display text-[clamp(1.75rem,4.4vw,3.75rem)] font-bold text-[#252824] leading-[1.22]">
-                  جاهزين تختبرون معلوماتكم؟
-                </h1>
-
-                <p className="text-sm sm:text-base md:text-xl text-[#777B73] leading-relaxed max-w-[54ch]">
-                  اجمعوا أصحابكم، اختاروا فئاتكم، وتحدّوا بعض في لعبة مليانة حماس وأسئلة متنوعة!
-                </p>
-
-                <div className="pt-2 sm:pt-3 grid grid-cols-1 sm:flex sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-4">
-                  <button
-                    type="button"
-                    onClick={onStartOfflineLocalGame || onStartCategorySelection}
-                    className="w-full sm:w-auto min-h-[48px] px-6 sm:px-7 py-3.5 sm:py-4 text-sm sm:text-base md:text-lg font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-2xl transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
+            <div className="relative overflow-hidden bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-11 lg:p-14">
+              {/* Subtle architectural grid & radial arena line art */}
+              <svg
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 w-full h-full opacity-[0.35]"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <pattern
+                    id="nizal-hero-grid"
+                    width="36"
+                    height="36"
+                    patternUnits="userSpaceOnUse"
                   >
-                    <WifiOff className="w-5 h-5 shrink-0" />
-                    <span>اللعب المحلي دون إنترنت</span>
-                    <ArrowLeft className="w-5 h-5 shrink-0" />
-                  </button>
+                    <path
+                      d="M 36 0 L 0 0 0 36"
+                      fill="none"
+                      stroke="#E5E8DD"
+                      strokeWidth="0.75"
+                    />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#nizal-hero-grid)" />
+              </svg>
 
-                  <button
-                    type="button"
-                    onClick={() => onNavigate?.('online_multiplayer')}
-                    className="w-full sm:w-auto min-h-[48px] px-6 sm:px-7 py-3.5 sm:py-4 text-sm sm:text-base md:text-lg font-bold text-[#14543D] bg-[#EAF2EE] hover:bg-[#D5E6DC] border-2 border-[#14543D]/30 active:scale-[0.99] rounded-2xl transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-sm"
-                  >
-                    <Radio className="w-5 h-5 text-[#F07842] animate-pulse shrink-0" />
-                    <span>العب عن بُعد</span>
-                    <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-[#14543D] text-[#FFFFFF]">
-                      أونلاين
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onNavigate?.('how_to_play')}
-                    className="w-full sm:w-auto min-h-[46px] px-6 py-3 sm:py-4 text-sm md:text-base font-bold text-[#14543D] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-2xl transition-colors cursor-pointer flex items-center justify-center"
-                  >
-                    كيف تلعب؟
-                  </button>
-                </div>
-
-                {offlineStatus && (
-                  <div className="pt-1 flex flex-wrap items-center gap-3 text-xs text-[#777B73]">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-[#14543D]">
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          offlineStatus.syncing
-                            ? 'bg-[#F07842] animate-pulse'
-                            : offlineStatus.ready
-                            ? 'bg-[#14543D]'
-                            : 'bg-amber-500'
-                        }`}
+              <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-10 lg:gap-12 items-center">
+                {/* Right Column (RTL): Brand Lockup, Headline, Value Prop & CTAs */}
+                <div className="lg:col-span-7 space-y-5 sm:space-y-6 text-right">
+                  {/* Clear NIZAL Logo + Bilingual Wordmark */}
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-16 h-11 sm:w-20 sm:h-[52px] rounded-xl bg-[#124833] border border-[#14543D]/25 overflow-hidden flex items-center justify-center shrink-0 shadow-xs">
+                      <img
+                        src="/assets/aistudio/Screenshot_2026-11-03_192625_a95ae528.png"
+                        alt="شعار منصة نِزال NIZAL"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-contain p-1.5 select-none"
                       />
-                      {offlineStatus.syncing
-                        ? 'جاري تحديث النسخة المحلية للعب دون إنترنت...'
-                        : offlineStatus.ready
-                        ? `البيانات المحلية جاهزة دون إنترنت (${offlineStatus.questionsCount} سؤال · ${offlineStatus.categoriesCount} فئات)`
-                        : 'بيانات اللعب دون إنترنت تحتاج مزامنة أولى عند توفر الاتصال'}
-                    </span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="flex items-baseline gap-2.5">
+                        <span className="font-display text-xl sm:text-2xl font-bold text-[#1B1F1C]">
+                          نِزال
+                        </span>
+                        <span
+                          dir="ltr"
+                          className="font-mono text-xs sm:text-sm font-bold tracking-[0.2em] text-[#F07842]"
+                        >
+                          NIZAL
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-[#666B62]">
+                        منصة المسابقات والتحديات الجماعية
+                      </p>
+                    </div>
+                  </div>
 
-                    {isOnline && onSyncOfflineData && !offlineStatus.syncing && (
+                  {/* Hero Headline */}
+                  <div className="space-y-3 sm:space-y-4">
+                    <h1
+                      id="hero-heading"
+                      className="font-display text-[clamp(2rem,4.6vw,3.75rem)] font-bold text-[#1B1F1C] leading-[1.16] tracking-tight"
+                    >
+                      التحدي يبدأ{' '}
+                      <span className="text-[#F07842]">هنا</span>
+                    </h1>
+
+                    <p className="text-sm sm:text-base md:text-lg text-[#52574E] leading-relaxed max-w-[54ch]">
+                      نِزال منصة مسابقات وتحديات جماعية تجمع الأصدقاء والعائلة في
+                      منافسة مباشرة عبر فئات معرفية متنوعة، سواءً على جهاز واحد أو
+                      عن بُعد.
+                    </p>
+                  </div>
+
+                  {/* Primary & Secondary CTAs */}
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 pt-1">
+                    <motion.button
+                      type="button"
+                      onClick={handlePrimaryPlay}
+                      whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+                      whileTap={
+                        shouldReduceMotion ? undefined : { scale: 0.98 }
+                      }
+                      transition={{ duration: 0.15, ease: EASE_OUT }}
+                      className="min-h-[52px] px-7 py-3.5 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] rounded-2xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer shadow-xs whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] focus-visible:ring-offset-2"
+                    >
+                      <Play className="w-4 h-4 fill-current shrink-0" />
+                      <span>العب الآن</span>
+                      <ArrowLeft className="w-4 h-4 shrink-0" />
+                    </motion.button>
+
+                    <button
+                      type="button"
+                      onClick={() => onNavigate?.('how_to_play')}
+                      className="min-h-[52px] px-6 py-3.5 text-sm sm:text-base font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#D7DCCB] rounded-2xl transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14543D]"
+                    >
+                      <BookOpen className="w-4 h-4 text-[#14543D] shrink-0" />
+                      <span>كيف تلعب؟</span>
+                    </button>
+                  </div>
+
+                  {/* Secondary Play Mode & Real Data Metadata Strip (No Pill Clutter) */}
+                  <div className="pt-2 border-t border-[#E5E8DD] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                       <button
                         type="button"
-                        onClick={onSyncOfflineData}
-                        className="inline-flex items-center gap-1 text-[#14543D] hover:text-[#F07842] font-bold underline underline-offset-4 cursor-pointer"
+                        onClick={() => onNavigate?.('online_multiplayer')}
+                        className="inline-flex items-center gap-2 font-bold text-[#14543D] hover:text-[#F07842] transition-colors cursor-pointer min-h-[36px]"
                       >
-                        <RefreshCw className="w-3 h-3" />
-                        <span>تحديث النسخة المحلية</span>
+                        <Radio className="w-4 h-4 text-[#F07842] shrink-0" />
+                        <span>اللعب عن بُعد (أونلاين)</span>
+                        <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
                       </button>
-                    )}
-                  </div>
-                )}
-              </div>
 
-              {/* Left Column (RTL): Interactive Trivia & Category Preview */}
-              <div className="lg:col-span-5">
-                <div className="bg-[#F3F5E9] border-2 border-[#E5E8DD] rounded-2xl p-4 sm:p-6 space-y-4 sm:space-y-5">
-                  {/* Team Competition Header */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-[#FFFFFF] border-2 border-[#14543D] rounded-xl p-3.5 flex items-center justify-between">
-                      <div>
-                        <div className="text-[11px] font-bold text-[#14543D]">
-                          الدور الآن
-                        </div>
-                        <div className="font-display text-sm font-bold text-[#252824]">
-                          فريق طويق
-                        </div>
-                      </div>
-                      <div className="font-mono tabular-nums text-xl font-bold text-[#14543D]">
-                        900
-                      </div>
+                      {offlineStatus && (
+                        <>
+                          <span
+                            aria-hidden="true"
+                            className="hidden sm:inline text-[#D0D5C8]"
+                          >
+                            |
+                          </span>
+                          <span className="text-[#52574E] font-medium">
+                            {offlineStatus.syncing
+                              ? 'جاري تحديث النسخة المحلية...'
+                              : offlineStatus.ready
+                              ? `جاهز دون إنترنت · ${offlineStatus.questionsCount} سؤال`
+                              : 'وضع الأونلاين متاح'}
+                          </span>
+                          {isOnline &&
+                            onSyncOfflineData &&
+                            !offlineStatus.syncing && (
+                              <button
+                                type="button"
+                                onClick={onSyncOfflineData}
+                                className="inline-flex items-center gap-1 text-[#14543D] hover:text-[#F07842] font-bold underline underline-offset-4 cursor-pointer"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>تحديث المحلي</span>
+                              </button>
+                            )}
+                        </>
+                      )}
                     </div>
 
-                    <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3.5 flex items-center justify-between">
-                      <div>
-                        <div className="text-[11px] text-[#777B73]">المنافس</div>
-                        <div className="font-display text-sm font-bold text-[#252824]">
-                          فريق الصقور
-                        </div>
-                      </div>
-                      <div className="font-mono tabular-nums text-xl font-bold text-[#F07842]">
-                        800
-                      </div>
+                    <div className="text-[#666B62] font-semibold tabular-nums whitespace-nowrap">
+                      {visibleMainCategories.length} فئات رئيسية
+                      <span aria-hidden="true" className="mx-1.5">
+                        ·
+                      </span>
+                      {activeSubcategoriesCount} فئة فرعية
                     </div>
                   </div>
+                </div>
 
-                  {/* Interactive Mini Category Columns Visual */}
-                  <div className="grid grid-cols-3 gap-2.5 text-center">
-                    {heroCategoryColumns.map((col) => (
-                      <motion.button
-                        key={col.name}
-                        type="button"
-                        onClick={() =>
-                          onSelectMainCategory
-                            ? onSelectMainCategory(col.mainId)
-                            : onStartCategorySelection()
-                        }
-                        whileHover={
-                          shouldReduceMotion ? undefined : { y: -3, scale: 1.02 }
-                        }
-                        whileTap={
-                          shouldReduceMotion ? undefined : { scale: 0.96 }
-                        }
-                        transition={{
-                          type: 'spring',
-                          stiffness: 460,
-                          damping: 28,
-                        }}
-                        className="space-y-2 text-center rounded-xl p-1 -m-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842]"
-                      >
-                        <div className="bg-[#14543D] text-white text-[11px] sm:text-xs font-bold py-2 px-1.5 rounded-lg min-h-[40px] flex items-center justify-center leading-snug shadow-xs">
-                          {col.name}
+                {/* Left Column (RTL): Creative Interactive NIZAL Arena Stage */}
+                <div className="lg:col-span-5">
+                  <div className="relative rounded-2xl bg-[#1B1F1C] text-[#FFFFFF] p-4 sm:p-5 border border-[#2C312D] overflow-hidden">
+                    {/* Subtle geometric arena accent */}
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 320 220"
+                      className="pointer-events-none absolute -top-12 -left-12 w-64 h-48 opacity-20"
+                    >
+                      <circle
+                        cx="120"
+                        cy="100"
+                        r="88"
+                        fill="none"
+                        stroke="#F07842"
+                        strokeWidth="1"
+                        strokeDasharray="4 6"
+                      />
+                      <circle
+                        cx="120"
+                        cy="100"
+                        r="56"
+                        fill="none"
+                        stroke="#FFFFFF"
+                        strokeWidth="0.75"
+                      />
+                    </svg>
+
+                    <div className="relative space-y-4">
+                      {/* Arena Versus Header */}
+                      <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/10">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-[#F07842] shrink-0" />
+                          <span className="font-display text-xs sm:text-sm font-bold text-white truncate">
+                            الفريق الأول
+                          </span>
                         </div>
-                        {col.pts.map((pt, idx) => {
-                          const isHighlighted = col.activeIdx === idx;
-                          return (
-                            <div
-                              key={pt}
-                              className={`py-2 rounded-lg font-mono tabular-nums text-xs font-bold border transition-colors ${
-                                isHighlighted
-                                  ? 'bg-[#F07842] text-white border-[#F07842]'
-                                  : 'bg-[#FFFFFF] text-[#252824] border-[#E5E8DD]'
-                              }`}
-                            >
-                              {pt}
+
+                        <div
+                          dir="ltr"
+                          className="font-mono text-[11px] font-bold tracking-widest px-2.5 py-1 rounded-md bg-[#F07842] text-white shrink-0"
+                        >
+                          VS
+                        </div>
+
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-display text-xs sm:text-sm font-bold text-[#E5E8DD] truncate">
+                            الفريق الثاني
+                          </span>
+                          <span className="w-2.5 h-2.5 rounded-xs bg-[#14543D] border border-white/30 shrink-0" />
+                        </div>
+                      </div>
+
+                      {/* Real Categories Interactive Board Matrix */}
+                      {heroBoardCategories.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                          {heroBoardCategories.map((cat, colIndex) => (
+                            <div key={cat.id} className="space-y-2 min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => handleCategoryCardClick(cat)}
+                                className="w-full min-h-[44px] px-1.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#19694C] border border-white/10 text-[11px] sm:text-xs font-bold text-white leading-tight flex items-center justify-center text-center transition-colors cursor-pointer"
+                              >
+                                <span className="line-clamp-2">{cat.name}</span>
+                              </button>
+
+                              {tierPoints.map((pts) => {
+                                const isActiveTile =
+                                  selectedBoardTile.colIndex === colIndex &&
+                                  selectedBoardTile.points === pts;
+                                return (
+                                  <button
+                                    key={pts}
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedBoardTile({
+                                        colIndex,
+                                        points: pts,
+                                      })
+                                    }
+                                    className={`w-full min-h-[44px] rounded-xl font-mono tabular-nums text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
+                                      isActiveTile
+                                        ? 'bg-[#F07842] border-[#F07842] text-white -translate-y-0.5'
+                                        : 'bg-[#252824] hover:bg-[#2F332E] border-white/10 text-[#F3F5E9]'
+                                    }`}
+                                  >
+                                    {pts}
+                                  </button>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </motion.button>
-                    ))}
-                  </div>
+                          ))}
+                        </div>
+                      )}
 
-                  {/* Active Trivia Challenge Preview Card */}
-                  <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-2.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-[#F07842]">
-                        سؤال التحدي · 300 نقطة
-                      </span>
-                      <span className="font-mono tabular-nums font-bold text-[#14543D]">
-                        00:45
-                      </span>
-                    </div>
-                    <p className="font-display text-sm font-bold text-[#252824] leading-snug">
-                      أي منتخب حقق الفوز التاريخي على الأرجنتين في مونديال 2022؟
-                    </p>
-                    <div className="pt-1 flex items-center justify-between text-xs text-[#14543D] font-bold">
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-[#14543D]" />
-                        <span>صح عليكم! +300 نقطة</span>
-                      </span>
-                      <span className="text-[#777B73] font-normal">
-                        المنتخب السعودي
-                      </span>
+                      {/* Active Board Selection Prompt Footer */}
+                      {safeSelectedCol && (
+                        <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-3">
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="text-[11px] font-bold text-[#F07842] tabular-nums">
+                              جولة {safeSelectedCol.name} ·{' '}
+                              {selectedBoardTile.points} نقطة
+                            </div>
+                            <p className="text-xs text-[#D5D9CE] truncate">
+                              {safeSelectedCol.tagline ||
+                                'اختر مستوى النقاط لبدء التحدي'}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCategoryCardClick(safeSelectedCol)
+                            }
+                            className="min-h-[38px] px-3.5 py-2 rounded-xl bg-white text-[#1B1F1C] hover:bg-[#F07842] hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                          >
+                            <span>ابدأ</span>
+                            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -385,7 +465,101 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </section>
 
-        {/* SECTION 2: INTERACTIVE CATEGORY CARDS */}
+        {/* SECTION 2: HOW TO PLAY */}
+        <section
+          id="how-to-play"
+          aria-labelledby="how-to-play-heading"
+          className="max-w-[1320px] mx-auto px-3 sm:px-6 scroll-mt-24"
+        >
+          <div className="space-y-8 sm:space-y-10">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div className="space-y-2 text-right">
+                <p className="text-xs font-bold text-[#F07842]">
+                  آلية اللعب في نِزال
+                </p>
+                <h2
+                  id="how-to-play-heading"
+                  className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#1B1F1C]"
+                >
+                  كيف تلعب؟
+                </h2>
+                <p className="text-sm md:text-base text-[#52574E] max-w-[54ch]">
+                  أربع خطوات واضحة تنقل فريقك من التحضير إلى حسم المنافسة.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.('how_to_play')}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 text-xs sm:text-sm font-bold text-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] border border-[#E5E8DD] hover:border-[#14543D]/40 rounded-xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shrink-0 whitespace-nowrap"
+              >
+                <span>الدليل الكامل للقواعد</span>
+                <ArrowLeft className="w-4 h-4 shrink-0" />
+              </button>
+            </div>
+
+            {/* 4 Connected Step Cards */}
+            <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+              {steps.map((step, index) => {
+                const IconComponent = step.icon;
+                return (
+                  <motion.div
+                    key={step.num}
+                    initial={
+                      shouldReduceMotion ? false : { opacity: 0, y: 16 }
+                    }
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.15 }}
+                    transition={{
+                      duration: 0.35,
+                      delay: shouldReduceMotion ? 0 : index * 0.06,
+                      ease: EASE_OUT,
+                    }}
+                    className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842]/60 rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 transition-colors"
+                  >
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div
+                          className="w-12 h-12 rounded-xl flex items-center justify-center border border-[#E5E8DD]"
+                          style={{
+                            backgroundColor: step.surface,
+                            color: step.accent,
+                          }}
+                        >
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        <span className="font-mono tabular-nums text-xl font-bold text-[#C7CDC0]">
+                          {step.num}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <h3 className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]">
+                          {step.title}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#52574E] leading-relaxed">
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-[#E5E8DD] flex items-center justify-between text-xs font-semibold text-[#666B62]">
+                      <span className="tabular-nums">
+                        الخطوة {index + 1} من 4
+                      </span>
+                      <span
+                        className="h-1 w-8 rounded-full"
+                        style={{ backgroundColor: step.accent }}
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 3: MAIN CATEGORIES FROM DATABASE */}
         {visibleMainCategories.length > 0 && (
           <section
             id="home-categories"
@@ -395,32 +569,29 @@ export const HomePage: React.FC<HomePageProps> = ({
             <div className="space-y-6 sm:space-y-8">
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div className="space-y-2 text-right">
-                  <div className="inline-flex items-center gap-2 text-xs font-bold text-[#F07842]">
-                    <span className="w-2 h-2 rounded-full bg-[#14543D]" />
-                    <span>تصفح ميادين المعرفة</span>
-                  </div>
+                  <p className="text-xs font-bold text-[#F07842]">
+                    ميادين المعرفة المعتمدة
+                  </p>
                   <h2
                     id="home-categories-heading"
-                    className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#252824]"
+                    className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#1B1F1C]"
                   >
                     فئات التحدي في نِزال
                   </h2>
-                  <p className="text-sm md:text-base text-[#777B73] max-w-[56ch]">
-                    اختر الفئة التي تفضلونها للانتقال مباشرة إلى اختيار الفئات الفرعية وبدء الجولة.
+                  <p className="text-sm md:text-base text-[#52574E] max-w-[56ch]">
+                    اختر الفئة التي تفضلونها للانتقال مباشرة إلى اختيار الفئات
+                    الفرعية وتكوين الفرق.
                   </p>
                 </div>
 
-                <motion.button
+                <button
                   type="button"
                   onClick={onStartCategorySelection}
-                  whileHover={shouldReduceMotion ? undefined : { y: -2 }}
-                  whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }}
-                  transition={{ duration: 0.15 }}
-                  className="w-full sm:w-auto min-h-[46px] px-5 py-3 text-sm font-bold text-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] border border-[#E5E8DD] hover:border-[#14543D]/50 rounded-2xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                  className="w-full sm:w-auto min-h-[46px] px-5 py-3 text-sm font-bold text-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] border border-[#E5E8DD] hover:border-[#14543D]/50 rounded-xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer shrink-0 whitespace-nowrap"
                 >
                   <span>عرض كل الفئات</span>
                   <ArrowLeft className="w-4 h-4 shrink-0" />
-                </motion.button>
+                </button>
               </div>
 
               {comingSoonNotice && (
@@ -436,7 +607,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     type="button"
                     onClick={() => setComingSoonNotice(null)}
                     aria-label="إغلاق التنبيه"
-                    className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#D9602B] hover:bg-[#F07842]/10 cursor-pointer"
+                    className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg text-[#D9602B] hover:bg-[#F07842]/10 cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -444,7 +615,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               )}
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-5">
-                {visibleMainCategories.map((mainCat) => {
+                {visibleMainCategories.map((mainCat, index) => {
                   const isComingSoon = Boolean(mainCat.isComingSoon);
                   const subsCount = subcategoryCountByMain.get(mainCat.id) ?? 0;
 
@@ -455,14 +626,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                         type="button"
                         aria-disabled="true"
                         onClick={() => handleCategoryCardClick(mainCat)}
-                        variants={shouldReduceMotion ? undefined : comingSoonCardVariants}
-                        initial="rest"
-                        whileHover={shouldReduceMotion ? undefined : 'hover'}
-                        whileTap={shouldReduceMotion ? undefined : 'tap'}
+                        initial={
+                          shouldReduceMotion ? false : { opacity: 0, y: 14 }
+                        }
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, amount: 0.1 }}
+                        transition={{
+                          duration: 0.3,
+                          delay: shouldReduceMotion
+                            ? 0
+                            : Math.min(index, 7) * 0.04,
+                          ease: EASE_OUT,
+                        }}
                         aria-label={`${mainCat.name} - قريباً، هذه الفئة غير متاحة حالياً`}
-                        className="group relative w-full rounded-2xl overflow-hidden bg-[#F3F5E9] border-2 border-dashed border-[#D4D9CC] hover:border-[#F07842]/70 flex flex-col select-none cursor-not-allowed shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842]"
+                        className="group relative w-full min-w-0 rounded-2xl overflow-hidden bg-[#F7F8F1] border border-dashed border-[#D4D9CC] hover:border-[#F07842]/60 flex flex-col select-none cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842]"
                       >
-                        <div className="relative h-28 sm:h-36 w-full overflow-hidden shrink-0">
+                        <div className="relative h-28 sm:h-36 md:h-40 w-full overflow-hidden shrink-0">
                           <CategoryCardArtwork
                             name={mainCat.name}
                             mainCategory={mainCat.name}
@@ -471,19 +650,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                             className="grayscale-[45%] brightness-80"
                           />
                           <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                            <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[11px] font-bold flex items-center gap-1 shadow-sm">
+                            <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[11px] font-bold flex items-center gap-1">
                               <Clock className="w-3 h-3 shrink-0" />
                               <span>قريباً</span>
                             </span>
-                            <span className="w-7 h-7 rounded-lg bg-[#252824]/80 border border-white/20 text-[#F3F5E9] flex items-center justify-center">
+                            <span className="w-7 h-7 rounded-lg bg-[#1B1F1C]/80 border border-white/20 text-[#F3F5E9] flex items-center justify-center">
                               <Lock className="w-3.5 h-3.5" />
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex-1 w-full p-3.5 sm:p-5 flex flex-col items-center justify-between text-center gap-2 bg-[#F3F5E9]">
-                          <div className="space-y-1.5 w-full">
-                            <h3 className="font-display text-base sm:text-xl md:text-2xl font-bold text-[#252824] leading-snug">
+                        <div className="flex-1 w-full p-3.5 sm:p-5 flex flex-col justify-between text-right gap-2 bg-[#F7F8F1]">
+                          <div className="space-y-1">
+                            <h3 className="font-display text-base sm:text-xl font-bold text-[#252824] leading-snug">
                               {mainCat.name}
                             </h3>
                             <p className="text-xs font-semibold text-[#D9602B] leading-relaxed">
@@ -500,32 +679,40 @@ export const HomePage: React.FC<HomePageProps> = ({
                       key={mainCat.id}
                       type="button"
                       onClick={() => handleCategoryCardClick(mainCat)}
-                      variants={shouldReduceMotion ? undefined : categoryCardVariants}
-                      initial="rest"
+                      variants={
+                        shouldReduceMotion ? undefined : categoryCardVariants
+                      }
+                      initial={
+                        shouldReduceMotion ? 'rest' : { opacity: 0, y: 14 }
+                      }
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, amount: 0.1 }}
                       whileHover={shouldReduceMotion ? undefined : 'hover'}
                       whileTap={shouldReduceMotion ? undefined : 'tap'}
+                      transition={{
+                        duration: 0.3,
+                        delay: shouldReduceMotion
+                          ? 0
+                          : Math.min(index, 7) * 0.04,
+                        ease: EASE_OUT,
+                      }}
                       aria-label={`استعراض فئة ${mainCat.name}`}
-                      className="group relative w-full rounded-2xl overflow-hidden bg-[#FFFFFF] border-2 border-[#E5E8DD] hover:border-[#F07842] flex flex-col select-none cursor-pointer shadow-xs hover:shadow-xl transition-[border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F3F5E9]"
+                      className="group relative w-full min-w-0 rounded-2xl overflow-hidden bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842] flex flex-col select-none cursor-pointer shadow-xs hover:shadow-md transition-[border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F3F5E9]"
                     >
-                      {/* Top Artwork Zone (Never obscures category title) */}
+                      {/* Clean Artwork Frame using official category images */}
                       <div className="relative h-28 sm:h-36 md:h-40 w-full overflow-hidden shrink-0 bg-[#14543D]">
-                        <motion.div
-                          variants={shouldReduceMotion ? undefined : categoryArtworkVariants}
-                          className="w-full h-full will-change-transform"
-                        >
-                          <CategoryCardArtwork
-                            name={mainCat.name}
-                            mainCategory={mainCat.name}
-                            imageUrl={mainCat.imageUrl}
-                            isMainCategory
-                          />
-                        </motion.div>
+                        <CategoryCardArtwork
+                          name={mainCat.name}
+                          mainCategory={mainCat.name}
+                          imageUrl={mainCat.imageUrl}
+                          isMainCategory
+                        />
                       </div>
 
-                      {/* Bottom Solid High-Contrast Title & Action Zone */}
-                      <div className="flex-1 w-full p-3.5 sm:p-5 flex flex-col justify-between text-center sm:text-right gap-2.5 bg-[#FFFFFF]">
+                      {/* Clean High-Contrast Info Zone */}
+                      <div className="flex-1 w-full p-3.5 sm:p-5 flex flex-col justify-between text-right gap-2.5 bg-[#FFFFFF]">
                         <div className="space-y-1.5">
-                          <h3 className="font-display text-base sm:text-xl md:text-2xl font-bold text-[#14543D] group-hover:text-[#F07842] leading-snug transition-colors">
+                          <h3 className="font-display text-base sm:text-xl font-bold text-[#1B1F1C] group-hover:text-[#F07842] leading-snug transition-colors">
                             {mainCat.name}
                           </h3>
                           <p className="text-xs sm:text-sm text-[#52574E] line-clamp-2 leading-relaxed">
@@ -534,11 +721,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                         </div>
 
                         <div className="pt-2.5 flex items-center justify-between text-xs font-bold border-t border-[#E5E8DD]">
-                          <span className="tabular-nums text-[#52574E]">
-                            {subsCount > 0 ? `${subsCount} فئات فرعية` : 'تحدي مفتوح'}
+                          <span className="tabular-nums text-[#666B62]">
+                            {subsCount > 0
+                              ? `${subsCount} فئات فرعية`
+                              : 'تحدي مفتوح'}
                           </span>
                           <motion.span
-                            variants={shouldReduceMotion ? undefined : categoryArrowVariants}
+                            variants={
+                              shouldReduceMotion
+                                ? undefined
+                                : categoryArrowVariants
+                            }
                             className="inline-flex items-center gap-1 text-[#F07842]"
                           >
                             <span>ابدأ</span>
@@ -554,109 +747,81 @@ export const HomePage: React.FC<HomePageProps> = ({
           </section>
         )}
 
-        {/* SECTION 3: HOW TO PLAY SECTION */}
+        {/* SECTION 4: FINAL CALL TO ACTION */}
         <section
-          id="how-to-play"
-          className="max-w-[1320px] mx-auto px-3 sm:px-6 scroll-mt-24"
+          aria-labelledby="cta-heading"
+          className="max-w-[1320px] mx-auto px-3 sm:px-6"
         >
-          <div className="space-y-8 md:space-y-10">
-            <div className="text-center max-w-2xl mx-auto space-y-2.5">
-              <div className="text-xs font-bold text-[#F07842]">
-                خطوات سريعة وواضحة
-              </div>
-              <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#252824]">
-                كيف تلعب؟
-              </h2>
-              <p className="text-sm md:text-base text-[#777B73]">
-                أربع خطوات بسيطة تفصلكم عن بداية التحدي:
+          <motion.div
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.15 }}
+            transition={{ duration: 0.35, ease: EASE_OUT }}
+            className="relative overflow-hidden bg-[#14543D] rounded-2xl sm:rounded-3xl p-6 sm:p-10 md:p-12 lg:p-14 text-white flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 sm:gap-8"
+          >
+            {/* Subtle geometric arena curves */}
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 400 220"
+              className="pointer-events-none absolute left-0 top-0 h-full w-auto opacity-15"
+            >
+              <circle
+                cx="80"
+                cy="110"
+                r="130"
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth="1"
+              />
+              <circle
+                cx="80"
+                cy="110"
+                r="82"
+                fill="none"
+                stroke="#F07842"
+                strokeWidth="1.2"
+                strokeDasharray="5 5"
+              />
+            </svg>
+
+            <div className="relative space-y-2.5 sm:space-y-3 max-w-2xl text-right">
+              <p className="text-xs font-bold text-[#F07842] tracking-wide">
+                ساحة النِزال بانتظاركم
               </p>
-            </div>
-
-            {/* 4 Visually Connected Steps */}
-            <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-              {steps.map((step, index) => {
-                const IconComponent = step.icon;
-                return (
-                  <div
-                    key={step.num}
-                    className="relative bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#14543D] rounded-2xl p-6 md:p-7 flex flex-col justify-between space-y-5 transition-colors"
-                  >
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div
-                          className="w-12 h-12 rounded-2xl flex items-center justify-center border border-[#E5E8DD]"
-                          style={{
-                            backgroundColor: step.bgTint,
-                            color: step.accent,
-                          }}
-                        >
-                          <IconComponent className="w-6 h-6" />
-                        </div>
-                        <span className="font-mono tabular-nums text-lg font-bold text-[#777B73]/60">
-                          {step.num}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2">
-                        <h3 className="font-display text-xl font-bold text-[#252824]">
-                          {step.title}
-                        </h3>
-                        <p className="text-sm text-[#777B73] leading-relaxed">
-                          {step.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Step progress connector bar */}
-                    <div className="pt-3 border-t border-[#E5E8DD] flex items-center justify-between text-xs font-semibold text-[#777B73]">
-                      <span>الخطوة {index + 1} من 4</span>
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: step.accent }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-center pt-2">
-              <button
-                type="button"
-                onClick={() => onNavigate?.('how_to_play')}
-                className="w-full sm:w-auto min-h-[46px] px-7 py-3 text-sm font-bold text-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] border border-[#E5E8DD] hover:border-[#14543D]/50 rounded-2xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
+              <h2
+                id="cta-heading"
+                className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#FFFFFF] leading-tight"
               >
-                <span>اقرأ القواعد الكاملة لطريقة اللعب</span>
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* SECTION 4: CALL TO ACTION SECTION */}
-        <section className="max-w-[1320px] mx-auto px-3 sm:px-6">
-          <div className="bg-[#14543D] rounded-2xl sm:rounded-3xl p-6 sm:p-8 md:p-12 lg:p-14 text-white flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 sm:gap-8">
-            <div className="space-y-2.5 sm:space-y-3 max-w-2xl">
-              <div className="text-xs font-bold text-[#F07842] tracking-wide">
-                الميدان جاهز للتحدي
-              </div>
-              <h2 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#FFFFFF] leading-tight">
-                التحدي بدأ.. مين قدّها؟
+                اجمعوا الفريق وأطلقوا الجولة الأولى
               </h2>
               <p className="text-sm sm:text-base md:text-lg text-[#F3F5E9]/85 leading-relaxed">
-                لا تضيعون الوقت، اجمعوا فريقكم وورّونا مين أكثر واحد يعرف!
+                اختاروا الفئات، حدّدوا التحدي، واكتشفوا من يحسم الصدارة في نِزال.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={onStartCategorySelection}
-              className="w-full sm:w-auto min-h-[48px] px-8 sm:px-9 py-3.5 sm:py-4 text-base md:text-lg font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.99] rounded-2xl transition-all flex items-center justify-center gap-3 shrink-0 cursor-pointer shadow-sm"
-            >
-              <span>العب الآن</span>
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          </div>
+            <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto shrink-0">
+              <motion.button
+                type="button"
+                onClick={handlePrimaryPlay}
+                whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
+                transition={{ duration: 0.15, ease: EASE_OUT }}
+                className="min-h-[52px] px-8 py-3.5 text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] rounded-2xl transition-colors flex items-center justify-center gap-2.5 shrink-0 cursor-pointer shadow-xs whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                <span>ابدأ التحدي الآن</span>
+                <ArrowLeft className="w-5 h-5 shrink-0" />
+              </motion.button>
+
+              <button
+                type="button"
+                onClick={() => onNavigate?.('online_multiplayer')}
+                className="min-h-[52px] px-5 py-3.5 text-sm font-bold text-[#FFFFFF] bg-white/10 hover:bg-white/15 border border-white/20 rounded-2xl transition-colors flex items-center justify-center gap-2 shrink-0 cursor-pointer whitespace-nowrap"
+              >
+                <Radio className="w-4 h-4 text-[#F07842] shrink-0" />
+                <span>غرفة أونلاين</span>
+              </button>
+            </div>
+          </motion.div>
         </section>
       </div>
     </MotionConfig>

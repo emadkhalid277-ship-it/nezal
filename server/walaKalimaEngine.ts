@@ -5,6 +5,8 @@ import type { Response } from 'express';
 import {
   DEFAULT_WALA_KALIMA_SETTINGS,
   WALA_KALIMA_CONTENT_TYPES,
+  WALA_KALIMA_POINT_LEVELS,
+  isValidWalaKalimaPointLevel,
   type WalaKalimaContentTypeId,
   type WalaKalimaCreateSessionResponse,
   type WalaKalimaEndReason,
@@ -14,7 +16,12 @@ import {
   type WalaKalimaSettings,
   type WalaKalimaWordEntry,
 } from '../src/types/walaKalima.ts';
-import type { DifficultyLevel } from '../src/types/game.ts';
+import {
+  DIFFICULTY_TO_POINTS,
+  POINT_TO_DIFFICULTY,
+  type DifficultyLevel,
+  type PointValue,
+} from '../src/types/game.ts';
 
 interface SeedWordTuple {
   word: string;
@@ -206,6 +213,7 @@ interface InternalSessionRecord {
   endReason: WalaKalimaEndReason;
   timeoutHandle: NodeJS.Timeout | null;
   sseClients: Set<Response>;
+  playerSseClients: Set<Response>;
 }
 
 const DATA_DIR = path.resolve(process.cwd(), '.data');
@@ -419,6 +427,7 @@ function getSessionRemainingSkips(session: InternalSessionRecord): number {
 
 function toPublicStatus(session: InternalSessionRecord): WalaKalimaSessionPublicStatus {
   // SECURITY INVARIANT: Never expose `words`, `word`, `activeWord`, or `forbiddenWords` here.
+  const now = Date.now();
   return {
     sessionId: session.sessionId,
     matchId: session.matchId,
@@ -431,6 +440,7 @@ function toPublicStatus(session: InternalSessionRecord): WalaKalimaSessionPublic
     status: session.status,
     timerSeconds: session.timerSeconds,
     remainingSeconds: getRemainingSeconds(session),
+    serverNow: now,
     startedAt: session.startedAt,
     expiresAt: session.expiresAt,
     totalWords: session.words.length,
@@ -449,6 +459,7 @@ function toPlayerSessionState(
   session: InternalSessionRecord,
   playerToken: string
 ): WalaKalimaPlayerSessionState {
+  const now = Date.now();
   const activeEntry =
     session.status === 'active' && session.currentIndex < session.words.length
       ? session.words[session.currentIndex]
@@ -466,6 +477,7 @@ function toPlayerSessionState(
     status: session.status,
     timerSeconds: session.timerSeconds,
     remainingSeconds: getRemainingSeconds(session),
+    serverNow: now,
     startedAt: session.startedAt,
     expiresAt: session.expiresAt,
     totalWords: session.words.length,
@@ -483,18 +495,30 @@ function toPlayerSessionState(
           contentType: activeEntry.contentType,
           contentTypeLabel: session.contentTypeLabel,
           difficulty: activeEntry.difficulty,
+          points: session.pointsPerCorrectWord as PointValue,
         }
       : null,
   };
 }
 
-function broadcastToHostStreams(session: InternalSessionRecord): void {
-  const payload = `data: ${JSON.stringify(toPublicStatus(session))}\n\n`;
+function broadcastToAllStreams(session: InternalSessionRecord): void {
+  const hostPayload = `data: ${JSON.stringify(toPublicStatus(session))}\n\n`;
   for (const res of session.sseClients) {
     try {
-      res.write(payload);
+      res.write(hostPayload);
     } catch {
       session.sseClients.delete(res);
+    }
+  }
+
+  if (session.playerSseClients.size > 0) {
+    const playerPayload = `data: ${JSON.stringify(toPlayerSessionState(session, ''))}\n\n`;
+    for (const res of session.playerSseClients) {
+      try {
+        res.write(playerPayload);
+      } catch {
+        session.playerSseClients.delete(res);
+      }
     }
   }
 }
@@ -520,7 +544,7 @@ function finalizeSession(
   // Burn QR secret & player token permanently once round closes
   session.qrSecret = '';
   session.claimedPlayerToken = null;
-  broadcastToHostStreams(session);
+  broadcastToAllStreams(session);
 }
 
 function enforceDeadlineIfExpired(session: InternalSessionRecord): void {
@@ -552,7 +576,15 @@ setInterval(() => {
           // ignore
         }
       }
+      for (const client of session.playerSseClients) {
+        try {
+          client.end();
+        } catch {
+          // ignore
+        }
+      }
       session.sseClients.clear();
+      session.playerSseClients.clear();
       activeSessions.delete(sid);
     }
   }
@@ -701,6 +733,7 @@ export function createWalaKalimaSession(params: {
   teamName: string;
   playerName: string;
   contentType: WalaKalimaContentTypeId;
+  points?: number;
   preferredDifficulty?: DifficultyLevel;
 }): WalaKalimaCreateSessionResponse {
   if (!store.settings.enabled) {
@@ -715,6 +748,20 @@ export function createWalaKalimaSession(params: {
   if (!enabledSet.has(ctMeta.id)) {
     throw new Error(`نوع المحتوى «${ctMeta.label}» غير مفعّل حالياً من المشرف.`);
   }
+
+  let selectedPoints: PointValue = 100;
+  if (params.points !== undefined && params.points !== null) {
+    if (!isValidWalaKalimaPointLevel(params.points)) {
+      throw new Error(
+        'مستوى النقاط غير صالح. المستويات المعتمدة في «ولا كلمة» هي: 100، 200، 300، 400، 500 فقط.'
+      );
+    }
+    selectedPoints = Number(params.points) as PointValue;
+  } else if (params.preferredDifficulty && DIFFICULTY_TO_POINTS[params.preferredDifficulty]) {
+    selectedPoints = DIFFICULTY_TO_POINTS[params.preferredDifficulty];
+  }
+
+  const targetDifficulty = POINT_TO_DIFFICULTY[selectedPoints];
 
   const matchId = String(params.matchId || '').trim().slice(0, 128);
   const tileKey = String(params.tileKey || '').trim().slice(0, 128);
@@ -753,23 +800,30 @@ export function createWalaKalimaSession(params: {
 
   const neededWordsCount = Math.max(1, store.settings.maxSkips + 1);
   const matchHistory = matchUsedWordIds.get(matchId)?.ids || new Set<string>();
-  const freshPool = typePool.filter((w) => !matchHistory.has(w.id));
-  const candidatePool = freshPool.length >= neededWordsCount ? freshPool : typePool;
 
-  // Prioritize preferred difficulty first, then fill with shuffled remaining candidates
-  let prioritized: WalaKalimaWordEntry[] = [];
-  if (params.preferredDifficulty) {
-    const diffMatches = shuffleArray(
-      candidatePool.filter((w) => w.difficulty === params.preferredDifficulty)
-    );
-    const rest = shuffleArray(
-      candidatePool.filter((w) => w.difficulty !== params.preferredDifficulty)
-    );
-    prioritized = [...diffMatches, ...rest];
-  } else {
-    prioritized = shuffleArray(candidatePool);
-  }
+  // Prioritize words matching the team's selected point level first (fresh before repeated),
+  // then fill any remaining reserve skip slots sorted by level proximity.
+  const selectedLevelIdx = WALA_KALIMA_POINT_LEVELS.findIndex((l) => l.points === selectedPoints);
+  const difficultyRank = (diff: DifficultyLevel): number => {
+    const idx = WALA_KALIMA_POINT_LEVELS.findIndex((l) => l.difficulty === diff);
+    if (idx < 0 || selectedLevelIdx < 0) return 99;
+    return Math.abs(idx - selectedLevelIdx);
+  };
 
+  const freshTarget = shuffleArray(
+    typePool.filter((w) => w.difficulty === targetDifficulty && !matchHistory.has(w.id))
+  );
+  const usedTarget = shuffleArray(
+    typePool.filter((w) => w.difficulty === targetDifficulty && matchHistory.has(w.id))
+  );
+  const freshOthers = shuffleArray(
+    typePool.filter((w) => w.difficulty !== targetDifficulty && !matchHistory.has(w.id))
+  ).sort((a, b) => difficultyRank(a.difficulty) - difficultyRank(b.difficulty));
+  const usedOthers = shuffleArray(
+    typePool.filter((w) => w.difficulty !== targetDifficulty && matchHistory.has(w.id))
+  ).sort((a, b) => difficultyRank(a.difficulty) - difficultyRank(b.difficulty));
+
+  const prioritized = [...freshTarget, ...usedTarget, ...freshOthers, ...usedOthers];
   const chosenWords = prioritized.slice(0, neededWordsCount);
 
   // Record only the initial drawn word right away; skipped reserve words become used when shown
@@ -799,7 +853,7 @@ export function createWalaKalimaSession(params: {
     status: 'waiting_scan',
     timerSeconds: store.settings.timerSeconds,
     maxSkips: Math.min(store.settings.maxSkips, Math.max(0, chosenWords.length - 1)),
-    pointsPerCorrectWord: store.settings.pointsPerCorrectWord,
+    pointsPerCorrectWord: selectedPoints,
     startedAt: null,
     expiresAt: null,
     createdAt: Date.now(),
@@ -810,6 +864,7 @@ export function createWalaKalimaSession(params: {
     endReason: null,
     timeoutHandle: null,
     sseClients: new Set<Response>(),
+    playerSseClients: new Set<Response>(),
   };
 
   activeSessions.set(sessionId, session);
@@ -858,11 +913,65 @@ export function attachHostStream(
     } catch {
       clearInterval(keepAlive);
     }
-  }, 15_000);
+  }, 10_000);
 
   return () => {
     clearInterval(keepAlive);
     session.sseClients.delete(res);
+  };
+}
+
+function isAuthorizedPlayerToken(session: InternalSessionRecord, playerToken: string): boolean {
+  if (!playerToken) return false;
+  if (session.claimedPlayerToken && safeEqualStrings(session.claimedPlayerToken, playerToken)) {
+    return true;
+  }
+  if (session.lastPlayerTokenHash) {
+    const candidateHash = crypto.createHash('sha256').update(playerToken).digest('hex');
+    return safeEqualStrings(session.lastPlayerTokenHash, candidateHash);
+  }
+  return false;
+}
+
+export function validatePlayerStreamAccess(sessionId: string, playerToken: string): void {
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    throw Object.assign(new Error('الجولة غير موجودة.'), { status: 404 });
+  }
+  enforceDeadlineIfExpired(session);
+  if (!isAuthorizedPlayerToken(session, playerToken)) {
+    throw Object.assign(new Error('غير مصرح بمتابعة بث جوال اللاعب.'), { status: 403 });
+  }
+}
+
+export function attachPlayerStream(
+  sessionId: string,
+  playerToken: string,
+  res: Response
+): () => void {
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    throw Object.assign(new Error('الجولة غير موجودة.'), { status: 404 });
+  }
+  enforceDeadlineIfExpired(session);
+  if (!isAuthorizedPlayerToken(session, playerToken)) {
+    throw Object.assign(new Error('غير مصرح بمتابعة بث جوال اللاعب.'), { status: 403 });
+  }
+
+  session.playerSseClients.add(res);
+  res.write(`data: ${JSON.stringify(toPlayerSessionState(session, ''))}\n\n`);
+
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch {
+      clearInterval(keepAlive);
+    }
+  }, 10_000);
+
+  return () => {
+    clearInterval(keepAlive);
+    session.playerSseClients.delete(res);
   };
 }
 
@@ -879,6 +988,13 @@ export function performHostSessionAction(
     throw Object.assign(new Error('غير مصرح بتنفيذ هذا الإجراء.'), { status: 403 });
   }
   enforceDeadlineIfExpired(session);
+  if (
+    session.status === 'finished' ||
+    session.status === 'expired' ||
+    session.status === 'cancelled'
+  ) {
+    return toPublicStatus(session);
+  }
   if (action === 'cancel') {
     finalizeSession(session, 'cancelled', 'host_ended');
   } else if (action === 'correct') {
@@ -963,9 +1079,9 @@ export function claimWalaKalimaQrSession(params: {
 
   session.timeoutHandle = setTimeout(() => {
     enforceDeadlineIfExpired(session);
-  }, session.timerSeconds * 1000 + 50);
+  }, session.timerSeconds * 1000 + 20);
 
-  broadcastToHostStreams(session);
+  broadcastToAllStreams(session);
   return toPlayerSessionState(session, issuedPlayerToken);
 }
 
@@ -1066,6 +1182,6 @@ export function performPlayerSessionAction(params: {
     }
   }
 
-  broadcastToHostStreams(session);
+  broadcastToAllStreams(session);
   return toPlayerSessionState(session, session.claimedPlayerToken);
 }

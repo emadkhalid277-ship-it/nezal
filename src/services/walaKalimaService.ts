@@ -1,5 +1,5 @@
 import { auth } from '../lib/firebase';
-import { DifficultyLevel } from '../types/game';
+import { DifficultyLevel, PointValue } from '../types/game';
 import {
   DEFAULT_WALA_KALIMA_SETTINGS,
   WalaKalimaContentTypeId,
@@ -46,6 +46,7 @@ export async function createWalaKalimaRoundSession(params: {
   teamName: string;
   playerName: string;
   contentType: WalaKalimaContentTypeId;
+  points?: PointValue;
   preferredDifficulty?: DifficultyLevel;
 }): Promise<WalaKalimaCreateSessionResponse> {
   const res = await fetch('/api/wala-kalima/sessions', {
@@ -54,6 +55,41 @@ export async function createWalaKalimaRoundSession(params: {
     body: JSON.stringify(params),
   });
   return parseJsonOrThrow<WalaKalimaCreateSessionResponse>(res);
+}
+
+export function computeClockOffsetMs(
+  serverNow: number | undefined,
+  requestStartMs?: number,
+  responseEndMs?: number
+): number | null {
+  if (typeof serverNow !== 'number' || !Number.isFinite(serverNow)) {
+    return null;
+  }
+  if (
+    typeof requestStartMs === 'number' &&
+    typeof responseEndMs === 'number' &&
+    responseEndMs >= requestStartMs
+  ) {
+    const midpoint = requestStartMs + (responseEndMs - requestStartMs) / 2;
+    return Math.round(serverNow - midpoint);
+  }
+  return Math.round(serverNow - Date.now());
+}
+
+export async function fetchWalaKalimaServerTimeOffset(): Promise<number | null> {
+  try {
+    const t0 = Date.now();
+    const res = await fetch('/api/wala-kalima/server-time', {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    const t1 = Date.now();
+    if (!res.ok) return null;
+    const data = (await res.json()) as { serverNow?: number };
+    return computeClockOffsetMs(data.serverNow, t0, t1);
+  } catch {
+    return null;
+  }
 }
 
 export async function getWalaKalimaHostStatus(
@@ -77,16 +113,55 @@ export function subscribeWalaKalimaHostStream(
   sessionId: string,
   hostSecret: string,
   onUpdate: (status: WalaKalimaSessionPublicStatus) => void,
-  onError?: () => void
+  onError?: () => void,
+  onOpen?: () => void
 ): () => void {
   const url = `/api/wala-kalima/sessions/${encodeURIComponent(
     sessionId
   )}/stream?hostSecret=${encodeURIComponent(hostSecret)}`;
   const es = new EventSource(url);
 
+  es.onopen = () => {
+    if (onOpen) onOpen();
+  };
+
   es.onmessage = (evt) => {
     try {
       const parsed = JSON.parse(evt.data) as WalaKalimaSessionPublicStatus;
+      onUpdate(parsed);
+    } catch {
+      // ignore malformed heartbeat
+    }
+  };
+
+  es.onerror = () => {
+    if (onError) onError();
+  };
+
+  return () => {
+    es.close();
+  };
+}
+
+export function subscribeWalaKalimaPlayerStream(
+  sessionId: string,
+  playerToken: string,
+  onUpdate: (state: WalaKalimaPlayerSessionState) => void,
+  onError?: () => void,
+  onOpen?: () => void
+): () => void {
+  const url = `/api/wala-kalima/sessions/${encodeURIComponent(
+    sessionId
+  )}/player-stream?playerToken=${encodeURIComponent(playerToken)}`;
+  const es = new EventSource(url);
+
+  es.onopen = () => {
+    if (onOpen) onOpen();
+  };
+
+  es.onmessage = (evt) => {
+    try {
+      const parsed = JSON.parse(evt.data) as WalaKalimaPlayerSessionState;
       onUpdate(parsed);
     } catch {
       // ignore malformed heartbeat
