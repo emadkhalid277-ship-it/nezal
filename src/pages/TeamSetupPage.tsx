@@ -21,6 +21,7 @@ import {
 } from '../types/game';
 import { TEAM_COLOR_OPTIONS } from '../data/categoriesAndSeed';
 import { DEFAULT_TEAM_TEMPLATES } from '../App';
+import { AlertBanner, UI_CLASSES } from '../components/ui';
 
 interface TeamSetupPageProps {
   teams: TeamConfig[];
@@ -150,33 +151,36 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
   };
 
   return (
-    <div className="max-w-[1240px] mx-auto px-3 sm:px-6 py-5 md:py-14 space-y-6 md:space-y-10">
+    <div className="max-w-[1240px] mx-auto px-3 sm:px-6 py-4 sm:py-6 md:py-12 space-y-4 sm:space-y-6 md:space-y-10">
       {/* Game Locked Notice */}
       {isGameLocked && (
-        <div className="p-4 md:p-5 rounded-2xl bg-[#EAF2EE] border-2 border-[#14543D] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-start gap-3 text-xs md:text-sm text-[#14543D] font-bold">
-            <Lock className="w-5 h-5 shrink-0 mt-0.5 text-[#F07842]" />
-            <div className="space-y-0.5">
-              <div>إعدادات الفرق والفئات مقفلة تماماً (الجولة قيد التشغيل)</div>
-              <p className="text-xs text-[#252824] font-normal">
-                بدأت الجولة بالفعل. تم قفل عدد الفرق وأسمائها وألوانها، والفئات الـ {totalRequiredCount} المختارة لمنع التعديل أثناء سير اللعبة حتى إعلان الفائز والبدء في «لعبة جديدة».
+        <AlertBanner tone="info">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 font-bold text-[#1B1F1C]">
+                <Lock className="w-4 h-4 text-[#F07842] shrink-0" />
+                <span>إعدادات الفرق والفئات مقفلة تماماً (الجولة قيد التشغيل)</span>
+              </div>
+              <p className="text-xs text-[#52574E] font-normal leading-relaxed">
+                {`بدأت الجولة بالفعل. تم قفل عدد الفرق وأسمائها وألوانها، والفئات الـ ${totalRequiredCount} المختارة لمنع التعديل أثناء سير اللعبة حتى إعلان الفائز والبدء في «لعبة جديدة».`}
               </p>
             </div>
+            {onGoToBoard && (
+              <button
+                type="button"
+                onClick={onGoToBoard}
+                className={`${UI_CLASSES.btnGreen} shrink-0 self-start sm:self-center`}
+              >
+                <span>العودة للوحة اللعب</span>
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
           </div>
-          {onGoToBoard && (
-            <button
-              type="button"
-              onClick={onGoToBoard}
-              className="px-4 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center gap-2 shrink-0 cursor-pointer"
-            >
-              <span>العودة للوحة اللعب</span>
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        </AlertBanner>
       )}
+
       {/* Selected Subcategories Summary Strip (Grouped by Team) */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 md:p-6 space-y-4">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 md:p-6 space-y-3.5 sm:space-y-4 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-bold text-[#14543D]">
@@ -186,7 +190,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                 {totalRequiredCount} أعمدة · {totalRequiredCount * 5} سؤال):
               </span>
             </div>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               لكل فريق {SUBCATEGORIES_PER_TEAM} فئات فرعية مستقلة بدون أي تكرار بين الفرق.
             </p>
           </div>
@@ -194,7 +198,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
           <button
             type="button"
             onClick={() => onBackToCategories()}
-            className="px-4 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#252824] flex items-center gap-2 shrink-0 self-start sm:self-center cursor-pointer"
+            className={`${UI_CLASSES.btnNeutral} min-h-[44px] text-xs shrink-0 self-start sm:self-center`}
           >
             <ArrowRight className="w-4 h-4 text-[#14543D]" />
             <span>
@@ -207,44 +211,40 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
 
         {/* Incomplete Selection Warning if team count was increased */}
         {!isAllTeamsSelectionComplete && (
-          <div className="p-4 rounded-xl bg-[#FEF2EC] border-2 border-[#F07842] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-start gap-2.5 text-xs font-bold text-[#D9602B]">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>
-                عدد الفرق الحالي ({teams.length} فرق) يتطلب اختيار{' '}
-                {totalRequiredCount} فئات فرعية (3 فئات لكل فريق). يرجى إكمال اختيار الفئات المتبقية قبل بدء الجولة.
+          <AlertBanner tone="warning">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+              <span className="text-xs font-semibold text-[#1B1F1C] leading-relaxed">
+                {`عدد الفرق الحالي (${teams.length} فرق) يتطلب اختيار ${totalRequiredCount} فئات فرعية (3 فئات لكل فريق). يرجى إكمال اختيار الفئات المتبقية قبل بدء الجولة.`}
               </span>
+              <button
+                type="button"
+                disabled={isGameLocked}
+                onClick={() =>
+                  onBackToCategories(
+                    firstIncompleteTeamIndex >= 0 ? firstIncompleteTeamIndex : 0
+                  )
+                }
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold whitespace-nowrap cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 transition-colors shrink-0 self-start sm:self-center"
+              >
+                إكمال اختيار فئات الفرق ({totalSelectedCount}/{totalRequiredCount})
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={isGameLocked}
-              onClick={() =>
-                onBackToCategories(
-                  firstIncompleteTeamIndex >= 0 ? firstIncompleteTeamIndex : 0
-                )
-              }
-              className={`px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold whitespace-nowrap ${
-                isGameLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-              }`}
-            >
-              إكمال اختيار فئات الفرق ({totalSelectedCount}/{totalRequiredCount})
-            </button>
-          </div>
+          </AlertBanner>
         )}
       </div>
 
       {/* Header */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6 shadow-xs">
         <div className="space-y-2">
           <div className="text-xs font-semibold text-[#F07842]">
             {isGameLocked
               ? 'معلومات الجولة الحالية · إعدادات الفرق مقفلة'
               : 'الخطوة الثانية · تجهيز الفرق ومراجعة الاختيارات'}
           </div>
-          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#1B1F1C]">
             {isGameLocked ? 'بيانات الفرق المشاركة في الجولة' : 'سوّ فريقك وجهّز المتنافسين'}
           </h1>
-          <p className="text-sm text-[#777B73]">
+          <p className="text-sm text-[#52574E]">
             {isGameLocked
               ? 'الجولة نشطة حالياً. جميع الفرق والفئات مقفلة لمنع التغيير أثناء اللعب.'
               : 'حدد عدد الفرق (3 فئات لكل فريق)، سمّ كل فريق، وتأكد من الفئات الثلاث المختارة لكل فريق قبل فتح لوحة التحدي.'}
@@ -253,8 +253,8 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
 
         {/* Team Count & Timer Controls */}
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          <div className="w-full sm:w-auto bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 sm:p-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold text-[#777B73] px-2 flex items-center gap-1">
+          <div className="w-full sm:w-auto bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-1.5 sm:p-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-[#52574E] px-2 flex items-center gap-1">
               <Users className="w-3.5 h-3.5 text-[#14543D]" />
               <span>عدد الفرق:</span>
             </span>
@@ -265,14 +265,14 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                 disabled={isGameLocked}
                 onClick={() => handleTeamCountChange(num)}
                 title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                className={`min-h-[40px] px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                className={`min-h-[44px] sm:min-h-[40px] px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
                   isGameLocked
                     ? 'cursor-not-allowed opacity-80'
                     : 'cursor-pointer'
                 } ${
                   teams.length === num
                     ? 'bg-[#14543D] text-white'
-                    : 'text-[#252824] hover:bg-white'
+                    : 'text-[#1B1F1C] hover:bg-white'
                 }`}
               >
                 {num} فرق ({num * SUBCATEGORIES_PER_TEAM})
@@ -280,8 +280,8 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
             ))}
           </div>
 
-          <div className="w-full sm:w-auto bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-1.5 sm:p-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold text-[#777B73] px-2 flex items-center gap-1">
+          <div className="w-full sm:w-auto bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-1.5 sm:p-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-[#52574E] px-2 flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-[#F07842]" />
               <span>وقت السؤال:</span>
             </span>
@@ -292,14 +292,14 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                 disabled={isGameLocked}
                 onClick={() => onUpdateTimer(sec)}
                 title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                className={`min-h-[44px] sm:min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
                   isGameLocked
                     ? 'cursor-not-allowed opacity-80'
                     : 'cursor-pointer'
                 } ${
                   timerDuration === sec
                     ? 'bg-[#F07842] text-white'
-                    : 'text-[#252824] hover:bg-white'
+                    : 'text-[#1B1F1C] hover:bg-white'
                 }`}
               >
                 {sec} ث
@@ -311,12 +311,12 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
 
       {/* Warning if database has 0 approved questions */}
       {approvedQuestionsCount === 0 && (
-        <div className="bg-[#FFFFFF] border-2 border-[#F07842] rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="bg-[#FFFFFF] border-2 border-[#F07842] rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
           <div className="space-y-1">
-            <h2 className="font-display text-base font-bold text-[#252824]">
+            <h2 className="font-display text-base font-bold text-[#1B1F1C]">
               تنبيه: قاعدة بيانات Firestore لا تحتوي على أسئلة معتمدة بعد
             </h2>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               لتشغيل اللوحة بأسئلة حقيقية، يمكنك تعبئة الحزمة التأسيسية المعتمدة في Firestore بضغطة زر.
             </p>
           </div>
@@ -325,7 +325,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
               type="button"
               onClick={onSeedQuestions}
               disabled={seeding}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl whitespace-nowrap shrink-0 flex items-center gap-2 cursor-pointer"
+              className={`${UI_CLASSES.btnGreen} text-xs whitespace-nowrap shrink-0`}
             >
               <Sparkles className="w-4 h-4" />
               <span>
@@ -339,7 +339,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
       )}
 
       {/* Teams Configuration Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {teams.map((team, index) => {
           const teamPicks = (teamSubcategoryIds[team.id] || [])
             .slice(0, SUBCATEGORIES_PER_TEAM)
@@ -350,15 +350,15 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
           return (
             <div
               key={team.id}
-              className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-6"
+              className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-6 space-y-5 sm:space-y-6 shadow-xs"
             >
               <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-4">
                 <div className="flex items-center gap-3">
                   <span
-                    className="w-4 h-4 rounded-full shrink-0"
+                    className="w-4 h-4 rounded-xs shrink-0"
                     style={{ backgroundColor: team.color }}
                   />
-                  <span className="font-display text-base font-bold text-[#252824]">
+                  <span className="font-display text-base font-bold text-[#1B1F1C]">
                     الفريق رقم {index + 1}
                   </span>
                 </div>
@@ -374,13 +374,13 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
               </div>
 
               {/* Team's 3 Selected Subcategories Box */}
-              <div className="p-3.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] space-y-2.5">
+              <div className="p-3.5 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#252824]">
+                  <span className="text-xs font-bold text-[#1B1F1C]">
                     فئات هذا الفريق (3 فئات):
                   </span>
                   {isGameLocked ? (
-                    <span className="text-xs font-bold text-[#777B73] flex items-center gap-1">
+                    <span className="text-xs font-bold text-[#52574E] flex items-center gap-1">
                       <Lock className="w-3.5 h-3.5 text-[#F07842]" />
                       <span>مقفلة طوال الجولة</span>
                     </span>
@@ -388,7 +388,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                     <button
                       type="button"
                       onClick={() => onBackToCategories(index)}
-                      className="text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer"
+                      className="min-h-[40px] px-2.5 text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer transition-colors"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>
@@ -410,7 +410,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-[#D9602B] font-semibold">
+                  <p className="text-xs text-[#C74E1C] font-semibold">
                     لم يختر هذا الفريق فئاته الثلاث بعد (0/3).
                   </p>
                 )}
@@ -420,7 +420,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
               <div className="space-y-2">
                 <label
                   htmlFor={`name-${team.id}`}
-                  className="block text-xs font-semibold text-[#252824]"
+                  className="block text-xs font-semibold text-[#1B1F1C]"
                 >
                   اسم الفريق
                 </label>
@@ -433,7 +433,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                   onChange={(e) => handleNameChange(team.id, e.target.value)}
                   placeholder="مثال: فريق طويق"
                   maxLength={35}
-                  className={`w-full px-4 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-sm font-semibold text-[#252824] focus:outline-none focus:border-[#14543D] ${
+                  className={`${UI_CLASSES.inputSoft} font-semibold ${
                     isGameLocked ? 'cursor-not-allowed opacity-80' : ''
                   }`}
                 />
@@ -441,7 +441,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
 
               {/* Team Color Picker */}
               <div className="space-y-2">
-                <span className="block text-xs font-semibold text-[#252824]">
+                <span className="block text-xs font-semibold text-[#1B1F1C]">
                   لون الفريق
                 </span>
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -454,16 +454,18 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                         disabled={isGameLocked}
                         onClick={() => handleColorChange(team.id, c.hex)}
                         title={isGameLocked ? `${c.name} (مقفل)` : c.name}
-                        className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-transform ${
+                        aria-label={c.name}
+                        aria-pressed={selected}
+                        className={`min-w-[44px] min-h-[44px] w-11 h-11 rounded-xl flex items-center justify-center transition-transform ${
                           isGameLocked
                             ? 'cursor-not-allowed'
                             : 'cursor-pointer'
                         } ${
                           selected
-                            ? 'scale-110 ring-2 ring-offset-2 ring-[#252824]'
+                            ? 'scale-105 ring-2 ring-offset-2 ring-[#1B1F1C]'
                             : isGameLocked
                             ? 'opacity-40'
-                            : 'opacity-80 hover:opacity-100'
+                            : 'opacity-85 hover:opacity-100'
                         }`}
                         style={{ backgroundColor: c.hex }}
                       >
@@ -478,7 +480,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
               <div className="space-y-3">
                 <label
                   htmlFor={`player-input-${team.id}`}
-                  className="block text-xs font-semibold text-[#252824]"
+                  className="block text-xs font-semibold text-[#1B1F1C]"
                 >
                   أعضاء الفريق
                 </label>
@@ -501,12 +503,12 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                         }
                       }}
                       placeholder="اكتب اسم اللاعب واضغط إضافة..."
-                      className="flex-1 px-3.5 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none focus:border-[#14543D]"
+                      className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
                     />
                     <button
                       type="button"
                       onClick={() => handleAddPlayer(team.id)}
-                      className="px-3.5 py-2 bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 cursor-pointer"
+                      className="min-h-[44px] px-4 py-2 bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold rounded-xl flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>إضافة</span>
@@ -519,7 +521,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                     {team.players.map((player, pIdx) => (
                       <span
                         key={`${player}-${pIdx}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-xs font-medium text-[#252824]"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#F7F8F1] border border-[#E5E8DD] text-xs font-medium text-[#1B1F1C]"
                       >
                         <span>{player}</span>
                         {!isGameLocked && (
@@ -527,7 +529,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                             type="button"
                             onClick={() => handleRemovePlayer(team.id, pIdx)}
                             aria-label={`حذف ${player}`}
-                            className="text-[#777B73] hover:text-rose-600 cursor-pointer"
+                            className="relative min-w-[32px] min-h-[32px] -ml-1 flex items-center justify-center rounded-md text-[#52574E] hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors after:content-[''] after:absolute after:-inset-1.5"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -536,7 +538,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-[#777B73]">
+                  <p className="text-xs text-[#52574E]">
                     ما أضفتوا أسماء لاعبين بعد (اختياري).
                   </p>
                 )}
@@ -547,19 +549,19 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
       </div>
 
       {/* Preview & Start Action */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 md:p-8 space-y-6">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
           <div>
             <div className="text-xs font-semibold text-[#14543D]">
               معاينة المواجهة والملخص النهائي
             </div>
-            <h2 className="font-display text-xl font-bold text-[#252824]">
+            <h2 className="font-display text-xl font-bold text-[#1B1F1C]">
               مين يتحدى مين؟
             </h2>
           </div>
-          <div className="text-xs text-[#777B73]">
+          <div className="text-xs text-[#52574E]">
             <span>عدد الفرق: </span>
-            <strong className="font-mono tabular-nums text-[#252824]">
+            <strong className="font-mono tabular-nums text-[#1B1F1C]">
               {teams.length}
             </strong>
             <span className="mx-2" aria-hidden="true">
@@ -573,7 +575,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
               ·
             </span>
             <span>مدة الإجابة: </span>
-            <strong className="font-mono tabular-nums text-[#252824]">
+            <strong className="font-mono tabular-nums text-[#1B1F1C]">
               {timerDuration} ثانية
             </strong>
           </div>
@@ -589,28 +591,28 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
             return (
               <div
                 key={t.id}
-                className="p-4 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] space-y-2"
+                className="p-4 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] space-y-2"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span
-                      className="w-3 h-3 rounded-full shrink-0"
+                      className="w-3 h-3 rounded-xs shrink-0"
                       style={{ backgroundColor: t.color }}
                     />
-                    <span className="font-display text-sm font-bold text-[#252824] truncate">
+                    <span className="font-display text-sm font-bold text-[#1B1F1C] truncate">
                       {t.name || `الفريق ${tIdx + 1}`}
                     </span>
                   </div>
-                  <span className="font-mono text-xs font-bold text-[#14543D]">
+                  <span className="font-mono tabular-nums text-xs font-bold text-[#14543D]">
                     {teamPicks.length}/{SUBCATEGORIES_PER_TEAM}
                   </span>
                 </div>
-                <div className="text-xs text-[#252824] font-semibold">
+                <div className="text-xs text-[#1B1F1C] font-semibold">
                   {teamPicks.length > 0
                     ? teamPicks.join(' · ')
                     : 'لم يتم اختيار الفئات بعد'}
                 </div>
-                <div className="text-[11px] text-[#777B73] truncate">
+                <div className="text-[11px] text-[#52574E] truncate">
                   {t.players.length > 0
                     ? t.players.join(' · ')
                     : 'بدون أسماء لاعبين محددة'}
@@ -624,7 +626,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
           <button
             type="button"
             onClick={() => onBackToCategories()}
-            className="w-full sm:w-auto min-h-[44px] px-5 py-3 text-xs font-bold text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-xl transition-colors cursor-pointer flex items-center justify-center"
+            className="w-full sm:w-auto min-h-[44px] px-5 py-3 text-xs font-bold text-[#1B1F1C] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors cursor-pointer flex items-center justify-center"
           >
             {isGameLocked ? 'عرض الفئات المختارة (مقفلة)' : 'الرجوع لتعديل الفئات'}
           </button>

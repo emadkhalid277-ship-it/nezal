@@ -19,6 +19,7 @@ import {
   MatchCelebrationHeader,
 } from './GameVisualEffects';
 import { evaluateMatchOutcome } from '../utils/matchOutcome';
+import { AlertBanner } from './ui';
 
 interface AdminVisualEffectsSectionProps {
   adminUid: string;
@@ -126,10 +127,10 @@ export const AdminVisualEffectsSection: React.FC<
               <Sparkles className="w-3.5 h-3.5" />
               <span>تجربة اللعب التفاعلية · التحكم البصري</span>
             </div>
-            <h2 className="font-display text-xl font-bold text-[#252824]">
+            <h2 className="font-display text-xl font-bold text-[#1B1F1C]">
               إعدادات المؤثرات البصرية والحركية
             </h2>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               فعّل أو عطّل مؤثرات الإجابة الصحيحة، الإجابة الخاطئة، واحتفالية الفوز أو التعادل. يحترم الموقع تلقائياً تفضيل تقليل الحركة (Reduced Motion) في جهاز اللاعب.
             </p>
           </div>
@@ -138,7 +139,7 @@ export const AdminVisualEffectsSection: React.FC<
             type="button"
             disabled={saving}
             onClick={() => void handleSave()}
-            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-xs"
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-xs transition-colors"
           >
             <Check className="w-4 h-4" />
             <span>{saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}</span>
@@ -146,25 +147,25 @@ export const AdminVisualEffectsSection: React.FC<
         </div>
 
         {statusMessage && (
-          <div className="rounded-xl bg-[#EAF2EE] border border-[#14543D]/30 px-4 py-3 text-xs font-bold text-[#14543D]">
+          <AlertBanner tone="success" onDismiss={() => setStatusMessage(null)}>
             {statusMessage}
-          </div>
+          </AlertBanner>
         )}
         {errorMessage && (
-          <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs font-bold text-rose-700">
+          <AlertBanner tone="error" onDismiss={() => setErrorMessage(null)}>
             {errorMessage}
-          </div>
+          </AlertBanner>
         )}
 
         {/* 4 Clean Switch Toggles */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F3F5E9]/50 cursor-pointer hover:border-[#14543D]/40 transition-colors">
+          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] cursor-pointer hover:border-[#14543D]/40 transition-colors">
             <div className="space-y-1">
-              <div className="font-display text-sm font-bold text-[#252824] flex items-center gap-1.5">
+              <div className="font-display text-sm font-bold text-[#1B1F1C] flex items-center gap-1.5">
                 <Wand2 className="w-4 h-4 text-[#14543D]" />
                 <span>المؤثرات الحركية بشكل عام</span>
               </div>
-              <p className="text-xs text-[#777B73] leading-relaxed">
+              <p className="text-xs text-[#52574E] leading-relaxed">
                 التحكم الشامل في الحركات الانتقالية، العدّ التصاعدي للنقاط، والجسيمات التفاعلية.
               </p>
             </div>
@@ -176,13 +177,13 @@ export const AdminVisualEffectsSection: React.FC<
             />
           </label>
 
-          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F3F5E9]/50 cursor-pointer hover:border-[#14543D]/40 transition-colors">
+          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] cursor-pointer hover:border-[#14543D]/40 transition-colors">
             <div className="space-y-1">
-              <div className="font-display text-sm font-bold text-[#252824] flex items-center gap-1.5">
+              <div className="font-display text-sm font-bold text-[#1B1F1C] flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <span>مؤثر الإجابة الصحيحة</span>
               </div>
-              <p className="text-xs text-[#777B73] leading-relaxed">
+              <p className="text-xs text-[#52574E] leading-relaxed">
                 إضاءة خضراء، علامة صح متحركة، جسيمات خضراء خفيفة، وإبراز صعود نقاط الفريق.
               </p>
             </div>
@@ -194,13 +195,13 @@ export const AdminVisualEffectsSection: React.FC<
             />
           </label>
 
-          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F3F5E9]/50 cursor-pointer hover:border-[#14543D]/40 transition-colors">
+          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] cursor-pointer hover:border-[#14543D]/40 transition-colors">
             <div className="space-y-1">
-              <div className="font-display text-sm font-bold text-[#252824] flex items-center gap-1.5">
+              <div className="font-display text-sm font-bold text-[#1B1F1C] flex items-center gap-1.5">
                 <XCircle className="w-4 h-4 text-rose-600" />
                 <span>مؤثر الإجابة الخاطئة</span>
               </div>
-              <p className="text-xs text-[#777B73] leading-relaxed">
+              <p className="text-xs text-[#52574E] leading-relaxed">
                 تنبيه أحمر خفيف، علامة X واضحة، واهتزاز لطيف للبطاقة دون إزعاج أو إخفاء للنص.
               </p>
             </div>
@@ -212,13 +213,13 @@ export const AdminVisualEffectsSection: React.FC<
             />
           </label>
 
-          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F3F5E9]/50 cursor-pointer hover:border-[#14543D]/40 transition-colors">
+          <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] cursor-pointer hover:border-[#14543D]/40 transition-colors">
             <div className="space-y-1">
-              <div className="font-display text-sm font-bold text-[#252824] flex items-center gap-1.5">
+              <div className="font-display text-sm font-bold text-[#1B1F1C] flex items-center gap-1.5">
                 <Trophy className="w-4 h-4 text-amber-500" />
                 <span>مؤثر إعلان الفائز والتعادل</span>
               </div>
-              <p className="text-xs text-[#777B73] leading-relaxed">
+              <p className="text-xs text-[#52574E] leading-relaxed">
                 خلفية احتفالية، كأس ذهبي متحرك، قصاصات Confetti، وتصميم ذهبي مميز عند التعادل.
               </p>
             </div>
@@ -236,10 +237,10 @@ export const AdminVisualEffectsSection: React.FC<
       <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-display text-base font-bold text-[#252824]">
+            <h3 className="font-display text-base font-bold text-[#1B1F1C]">
               معاينة حية للمؤثرات
             </h3>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               جرّب كل مؤثر بناءً على اختيارات التفعيل أعلاه قبل أو بعد الحفظ.
             </p>
           </div>
@@ -247,28 +248,28 @@ export const AdminVisualEffectsSection: React.FC<
             <button
               type="button"
               onClick={() => triggerPreview('correct')}
-              className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة الإجابة الصحيحة
             </button>
             <button
               type="button"
               onClick={() => triggerPreview('wrong')}
-              className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة الإجابة الخاطئة
             </button>
             <button
               type="button"
               onClick={() => triggerPreview('winner')}
-              className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold cursor-pointer"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة الفوز
             </button>
             <button
               type="button"
               onClick={() => triggerPreview('tie')}
-              className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة التعادل
             </button>
@@ -311,7 +312,7 @@ export const AdminVisualEffectsSection: React.FC<
         {previewMode === 'winner' && (
           <div
             key={`p-win-${previewNonce}`}
-            className="rounded-2xl border-2 border-[#14543D] bg-[#F3F5E9]/40 p-4"
+            className="rounded-2xl border-2 border-[#14543D] bg-[#F7F8F1] p-4"
           >
             <MatchCelebrationHeader
               outcome={PREVIEW_WINNER_OUTCOME}

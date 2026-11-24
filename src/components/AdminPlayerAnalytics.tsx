@@ -42,6 +42,7 @@ import {
   TimelineGranularity,
 } from '../services/adminAnalyticsService';
 import { SubcategoryItem } from '../types/game';
+import { AlertBanner } from './ui';
 
 interface AdminPlayerAnalyticsProps {
   isAdmin?: boolean;
@@ -294,12 +295,12 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
   // Security guard: Admin only
   if (!isAdmin) {
     return (
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-12 text-center space-y-3">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center space-y-3">
         <ShieldAlert className="w-8 h-8 text-[#DC2626] mx-auto" />
-        <h3 className="font-display text-lg font-bold text-[#252824]">
+        <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
           وصول مقيّد للمشرفين فقط
         </h3>
-        <p className="text-xs text-[#777B73]">
+        <p className="text-xs text-[#52574E]">
           بيانات وإحصائيات اللاعبين محمية بصلاحيات المشرف المعتمدة في Firebase.
         </p>
       </div>
@@ -309,19 +310,19 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
   // Loading Skeleton matching layout geometry
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-24 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl animate-pulse" />
+      <div className="space-y-6" aria-busy="true" aria-label="جاري تحميل تحليلات اللاعبين">
+        <div className="h-24 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="h-24 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl animate-pulse"
+              className="h-24 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl"
             />
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="h-72 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl animate-pulse" />
-          <div className="h-72 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl animate-pulse" />
+          <div className="h-72 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl" />
+          <div className="h-72 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl" />
         </div>
       </div>
     );
@@ -335,20 +336,20 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
   return (
     <div className="space-y-8">
       {/* 1. Header & Unified Filter Bar */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 md:p-6 space-y-4">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 md:p-6 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs text-[#777B73]">
+            <div className="flex items-center gap-2 text-xs text-[#52574E]">
               <span className="font-bold text-[#14543D]">إحصائيات المنصة</span>
               <span aria-hidden="true">·</span>
               <span>محلي وأونلاين موحّد</span>
               <span aria-hidden="true">·</span>
               <span>تحديث تلقائي مباشر</span>
             </div>
-            <h2 className="font-display text-xl md:text-2xl font-bold text-[#252824]">
+            <h2 className="font-display text-xl md:text-2xl font-bold text-[#1B1F1C]">
               إحصائيات اللاعبين والمباريات والفئات
             </h2>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               تحليل موحّد لجميع المباريات المسجلة في Firestore دون تكرار أو استثناء، شاملاً المباريات المحلية والأونلاين والمكتملة وغير المكتملة.
             </p>
           </div>
@@ -362,7 +363,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   setTimeFilter('all');
                   setPlayerPage(1);
                 }}
-                className="px-3 py-2 rounded-lg border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD]/60 text-xs font-bold text-[#252824] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
+                className="px-3 py-2 rounded-lg border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD]/60 text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-[#F07842]" />
                 <span>إعادة الضبط</span>
@@ -373,7 +374,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
               type="button"
               disabled={refreshing}
               onClick={loadData}
-              className="px-4 py-2 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-[#F3F5E9] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors disabled:opacity-50"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 text-[#14543D] ${
@@ -389,7 +390,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3 border-t border-[#E5E8DD]">
           {/* Mode Filter */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-[#777B73]">نوع اللعب:</span>
+            <span className="text-xs font-bold text-[#52574E]">نوع اللعب:</span>
             <div className="flex items-center bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
               {(
                 [
@@ -408,7 +409,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     modeFilter === opt.id
                       ? 'bg-[#14543D] text-white'
-                      : 'text-[#777B73] hover:text-[#252824]'
+                      : 'text-[#52574E] hover:text-[#1B1F1C]'
                   }`}
                 >
                   {opt.label}
@@ -419,7 +420,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
 
           {/* Time Window Filter */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-[#777B73]">الفترة الزمنية:</span>
+            <span className="text-xs font-bold text-[#52574E]">الفترة الزمنية:</span>
             <div className="flex items-center bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
               {(
                 [
@@ -438,8 +439,8 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   }}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     timeFilter === opt.id
-                      ? 'bg-[#252824] text-white'
-                      : 'text-[#777B73] hover:text-[#252824]'
+                      ? 'bg-[#1B1F1C] text-white'
+                      : 'text-[#52574E] hover:text-[#1B1F1C]'
                   }`}
                 >
                   {opt.label}
@@ -450,97 +451,97 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         </div>
 
         {loadError && (
-          <div className="p-3 rounded-lg border border-[#DC2626]/30 bg-rose-50 text-xs font-bold text-[#DC2626]">
+          <AlertBanner tone="error" onDismiss={() => setLoadError(null)}>
             {loadError}
-          </div>
+          </AlertBanner>
         )}
       </div>
 
       {/* 2. Local + Online Unified & Separated KPI Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">إجمالي جميع المباريات</span>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">إجمالي جميع المباريات</span>
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
             {analytics.kpis.totalMatches}
           </div>
-          <div className="text-[11px] text-[#777B73] font-mono tabular-nums">
+          <div className="text-[11px] text-[#52574E] font-mono tabular-nums">
             محلي {analytics.kpis.totalLocalMatches} · أونلاين{' '}
             {analytics.kpis.totalOnlineMatches}
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">المباريات المحلية</span>
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">المباريات المحلية</span>
           <div className="font-mono tabular-nums text-2xl font-bold text-[#14543D]">
             {analytics.kpis.totalLocalMatches}
           </div>
-          <div className="text-[11px] text-[#777B73]">
+          <div className="text-[11px] text-[#52574E]">
             لعب جماعي على نفس الجهاز
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">المباريات الأونلاين</span>
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">المباريات الأونلاين</span>
           <div className="font-mono tabular-nums text-2xl font-bold text-[#F07842]">
             {analytics.kpis.totalOnlineMatches}
           </div>
-          <div className="text-[11px] text-[#777B73]">
+          <div className="text-[11px] text-[#52574E]">
             غرف التحدي عن بُعد
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">المكتملة / غير المكتملة</span>
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">المكتملة / غير المكتملة</span>
           <div className="flex items-baseline gap-2 font-mono tabular-nums">
             <span className="text-2xl font-bold text-[#16A34A]">
               {analytics.kpis.completedMatches}
             </span>
-            <span className="text-xs text-[#777B73]">/</span>
+            <span className="text-xs text-[#52574E]">/</span>
             <span className="text-lg font-bold text-[#D97706]">
               {analytics.kpis.incompleteMatches}
             </span>
           </div>
-          <div className="text-[11px] text-[#777B73] font-mono tabular-nums">
+          <div className="text-[11px] text-[#52574E] font-mono tabular-nums">
             نسبة الإتمام {analytics.kpis.completionRate}%
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">اللاعبون المختلفون (الكل)</span>
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">اللاعبون المختلفون (الكل)</span>
           <div className="font-mono tabular-nums text-2xl font-bold text-[#14543D]">
             {analytics.kpis.totalUniquePlayers}
           </div>
-          <div className="text-[11px] text-[#777B73] font-mono tabular-nums">
+          <div className="text-[11px] text-[#52574E] font-mono tabular-nums">
             متوسط {analytics.kpis.avgMatchesPerPlayer} مباراة للاعب
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">مشاركو المباريات المحلية</span>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">مشاركو المباريات المحلية</span>
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
             {analytics.kpis.localPlayersCount}
           </div>
-          <div className="text-[11px] text-[#777B73]">
+          <div className="text-[11px] text-[#52574E]">
             حسابات فريدة في الوضع المحلي
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">مشاركو المباريات الأونلاين</span>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">مشاركو المباريات الأونلاين</span>
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
             {analytics.kpis.onlinePlayersCount}
           </div>
-          <div className="text-[11px] text-[#777B73]">
+          <div className="text-[11px] text-[#52574E]">
             حسابات فريدة في غرف الأونلاين
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
-          <span className="text-xs text-[#777B73] block">البيانات القديمة / غير المصنفة</span>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#777B73]">
+        <div className="p-4 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] space-y-1">
+          <span className="text-xs text-[#52574E] block">البيانات القديمة / غير المصنفة</span>
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#52574E]">
             {analytics.kpis.unclassifiedMatchesCount}
           </div>
-          <div className="text-[11px] text-[#777B73]">
+          <div className="text-[11px] text-[#52574E]">
             مباريات محفوظة بدون حساب أو تصنيف
           </div>
         </div>
@@ -549,11 +550,11 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
       {/* 3. Recharts Visual Analytics (6 Professional Charts) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Chart 1: Match Growth Trend (Daily / Weekly / Monthly) */}
-        <div className="lg:col-span-8 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 space-y-4">
+        <div className="lg:col-span-8 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-[#14543D]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 تطور عدد المباريات (المحلية والأونلاين)
               </h3>
             </div>
@@ -572,7 +573,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     timelineGranularity === g.id
                       ? 'bg-[#FFFFFF] text-[#14543D]'
-                      : 'text-[#777B73] hover:text-[#252824]'
+                      : 'text-[#52574E] hover:text-[#1B1F1C]'
                   }`}
                 >
                   {g.label}
@@ -582,7 +583,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
           </div>
 
           {activeMatchTimeline.length === 0 ? (
-            <div className="py-16 text-center text-xs text-[#777B73]">
+            <div className="py-16 text-center text-xs text-[#52574E]">
               لا توجد بيانات مباريات كافية لعرض التطور الزمني في هذه الفترة.
             </div>
           ) : (
@@ -603,16 +604,16 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E8DD" />
-                  <XAxis dataKey="dateLabel" tick={{ fontSize: 11, fill: '#777B73' }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#777B73' }} />
+                  <XAxis dataKey="dateLabel" tick={{ fontSize: 11, fill: '#52574E' }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#52574E' }} />
                   <Tooltip
                     content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null;
                       const row = payload[0].payload;
                       return (
                         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg p-3 text-right text-xs space-y-1">
-                          <p className="font-bold text-[#252824]">{label}</p>
-                          <p className="font-mono tabular-nums text-[#252824]">
+                          <p className="font-bold text-[#1B1F1C]">{label}</p>
+                          <p className="font-mono tabular-nums text-[#1B1F1C]">
                             الإجمالي: {row.totalCount}
                           </p>
                           <p className="font-mono tabular-nums text-[#14543D]">
@@ -649,21 +650,21 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         </div>
 
         {/* Chart 2: Completed vs Incomplete Ratio */}
-        <div className="lg:col-span-4 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 space-y-4 flex flex-col justify-between">
+        <div className="lg:col-span-4 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <PieIcon className="w-4 h-4 text-[#F07842]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 نسبة المكتملة وغير المكتملة
               </h3>
             </div>
-            <span className="font-mono tabular-nums text-xs text-[#777B73]">
+            <span className="font-mono tabular-nums text-xs text-[#52574E]">
               {analytics.kpis.totalMatches} مباراة
             </span>
           </div>
 
           {analytics.completionPieData.length === 0 ? (
-            <div className="py-16 text-center text-xs text-[#777B73]">
+            <div className="py-16 text-center text-xs text-[#52574E]">
               لا توجد مباريات بعد.
             </div>
           ) : (
@@ -676,7 +677,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                       const d = payload[0];
                       return (
                         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg p-2.5 text-right text-xs">
-                          <p className="font-bold text-[#252824]">{d.name}</p>
+                          <p className="font-bold text-[#1B1F1C]">{d.name}</p>
                           <p className="font-mono tabular-nums font-bold" style={{ color: d.payload.fill }}>
                             {d.value} مباراة
                           </p>
@@ -713,21 +714,21 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         </div>
 
         {/* Chart 3: Player Growth Over Time */}
-        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 space-y-4">
+        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-[#14543D]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 نمو عدد اللاعبين (التراكمي)
               </h3>
             </div>
-            <span className="font-mono tabular-nums text-xs text-[#777B73]">
+            <span className="font-mono tabular-nums text-xs text-[#52574E]">
               الإجمالي: {analytics.kpis.totalUniquePlayers}
             </span>
           </div>
 
           {analytics.playerGrowthTimeline.length === 0 ? (
-            <div className="py-14 text-center text-xs text-[#777B73]">
+            <div className="py-14 text-center text-xs text-[#52574E]">
               لا توجد بيانات تسجيل زمنية كافية للرسم البياني.
             </div>
           ) : (
@@ -744,19 +745,19 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E8DD" />
-                  <XAxis dataKey="dateLabel" tick={{ fontSize: 11, fill: '#777B73' }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#777B73' }} />
+                  <XAxis dataKey="dateLabel" tick={{ fontSize: 11, fill: '#52574E' }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#52574E' }} />
                   <Tooltip
                     content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null;
                       const row = payload[0].payload;
                       return (
                         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg p-3 text-right text-xs space-y-1">
-                          <p className="font-bold text-[#252824]">{label}</p>
+                          <p className="font-bold text-[#1B1F1C]">{label}</p>
                           <p className="font-mono tabular-nums text-[#14543D] font-bold">
                             إجمالي اللاعبين: {row.cumulativePlayers}
                           </p>
-                          <p className="font-mono tabular-nums text-[#777B73]">
+                          <p className="font-mono tabular-nums text-[#52574E]">
                             لاعبون جدد في هذا اليوم: +{row.newPlayers}
                           </p>
                         </div>
@@ -778,15 +779,15 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         </div>
 
         {/* Chart 4: Local vs Online Matches Comparison */}
-        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 space-y-4">
+        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-[#F07842]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 مقارنة المباريات المحلية مقابل الأونلاين
               </h3>
             </div>
-            <span className="text-xs text-[#777B73]">الوضعان معاً</span>
+            <span className="text-xs text-[#52574E]">الوضعان معاً</span>
           </div>
 
           <div className="h-60 w-full min-w-0" dir="ltr">
@@ -796,14 +797,14 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 margin={{ top: 10, right: 16, left: 0, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E8DD" />
-                <XAxis dataKey="metric" tick={{ fontSize: 11, fill: '#252824' }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#777B73' }} />
+                <XAxis dataKey="metric" tick={{ fontSize: 11, fill: '#1B1F1C' }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#52574E' }} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
                     return (
                       <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg p-3 text-right text-xs space-y-1">
-                        <p className="font-bold text-[#252824]">{label}</p>
+                        <p className="font-bold text-[#1B1F1C]">{label}</p>
                         {payload.map((p: any, i: number) => (
                           <p
                             key={i}
@@ -838,21 +839,21 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         </div>
 
         {/* Chart 5: Most Played Categories (Stacked Local + Online) */}
-        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 space-y-4">
+        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#14543D]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 أكثر 10 فئات لعباً (محلي + أونلاين)
               </h3>
             </div>
-            <span className="font-mono tabular-nums text-xs text-[#777B73]">
+            <span className="font-mono tabular-nums text-xs text-[#52574E]">
               {analytics.categoryStats.length} فئة
             </span>
           </div>
 
           {analytics.topCategoriesAll.length === 0 ? (
-            <div className="py-16 text-center text-xs text-[#777B73]">
+            <div className="py-16 text-center text-xs text-[#52574E]">
               لا توجد اختيارات فئات مسجلة في هذه الفترة.
             </div>
           ) : (
@@ -864,12 +865,12 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   margin={{ top: 6, right: 16, left: 20, bottom: 6 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E8DD" />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#777B73' }} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#52574E' }} />
                   <YAxis
                     dataKey="categoryName"
                     type="category"
                     width={120}
-                    tick={{ fontSize: 11, fill: '#252824', fontWeight: 600 }}
+                    tick={{ fontSize: 11, fill: '#1B1F1C', fontWeight: 600 }}
                   />
                   <Tooltip
                     content={({ active, payload }) => {
@@ -877,8 +878,8 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                       const d = payload[0].payload as AdminCategoryStat;
                       return (
                         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg p-3 text-right text-xs space-y-1">
-                          <p className="font-bold text-[#252824]">{d.categoryName}</p>
-                          <p className="font-mono tabular-nums text-[#252824] font-bold">
+                          <p className="font-bold text-[#1B1F1C]">{d.categoryName}</p>
+                          <p className="font-mono tabular-nums text-[#1B1F1C] font-bold">
                             الإجمالي: {d.selectionCount} ({d.selectionPercentage}%)
                           </p>
                           <p className="font-mono tabular-nums text-[#14543D]">
@@ -914,19 +915,19 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         </div>
 
         {/* Chart 6: Top Active Players Ranking */}
-        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 space-y-4">
+        <div className="lg:col-span-6 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Trophy className="w-4 h-4 text-[#F07842]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 ترتيب أكثر اللاعبين نشاطاً
               </h3>
             </div>
-            <span className="text-xs text-[#777B73]">أعلى 8 لاعبين</span>
+            <span className="text-xs text-[#52574E]">أعلى 8 لاعبين</span>
           </div>
 
           {analytics.topActivePlayersChartData.length === 0 ? (
-            <div className="py-16 text-center text-xs text-[#777B73]">
+            <div className="py-16 text-center text-xs text-[#52574E]">
               لا توجد مشاركات لاعبين في هذه الفترة.
             </div>
           ) : (
@@ -938,12 +939,12 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   margin={{ top: 6, right: 16, left: 20, bottom: 6 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E8DD" />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#777B73' }} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#52574E' }} />
                   <YAxis
                     dataKey="name"
                     type="category"
                     width={110}
-                    tick={{ fontSize: 11, fill: '#252824', fontWeight: 600 }}
+                    tick={{ fontSize: 11, fill: '#1B1F1C', fontWeight: 600 }}
                   />
                   <Tooltip
                     content={({ active, payload }) => {
@@ -951,8 +952,8 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                       const d = payload[0].payload;
                       return (
                         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg p-3 text-right text-xs space-y-1">
-                          <p className="font-bold text-[#252824]">{d.name}</p>
-                          <p className="font-mono tabular-nums font-bold text-[#252824]">
+                          <p className="font-bold text-[#1B1F1C]">{d.name}</p>
+                          <p className="font-mono tabular-nums font-bold text-[#1B1F1C]">
                             إجمالي المباريات: {d.totalMatches}
                           </p>
                           <p className="font-mono tabular-nums text-[#14543D]">
@@ -992,13 +993,13 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
       </div>
 
       {/* 4. Player Leaderboards Section (ترتيب اللاعبين) */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 md:p-6 space-y-5">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 md:p-6 space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-4">
           <div className="space-y-0.5">
-            <h3 className="font-display text-lg font-bold text-[#252824]">
+            <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
               ترتيب اللاعبين (قوائم المتصدرين)
             </h3>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               تصنيفات متعددة تقيس عدد المباريات، الانتصارات، نسب الفوز، والمشاركة حسب وضع اللعب والنشاط الحديث.
             </p>
           </div>
@@ -1021,7 +1022,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   leaderboardTab === tab.id
                     ? 'bg-[#14543D] text-white'
-                    : 'text-[#777B73] hover:text-[#252824]'
+                    : 'text-[#52574E] hover:text-[#1B1F1C]'
                 }`}
               >
                 {tab.label}
@@ -1031,14 +1032,14 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         </div>
 
         {activeLeaderboard.length === 0 ? (
-          <div className="py-10 text-center text-xs text-[#777B73]">
+          <div className="py-10 text-center text-xs text-[#52574E]">
             لا توجد بيانات كافية لهذا التصنيف في الفترة المحددة.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
               <thead>
-                <tr className="bg-[#F3F5E9] text-[#777B73] border-b border-[#E5E8DD]">
+                <tr className="bg-[#F3F5E9] text-[#52574E] border-b border-[#E5E8DD]">
                   <th className="py-2.5 px-4 font-bold w-14">الترتيب</th>
                   <th className="py-2.5 px-4 font-bold">اللاعب</th>
                   <th className="py-2.5 px-4 font-bold">إجمالي المباريات</th>
@@ -1058,17 +1059,17 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                       #{idx + 1}
                     </td>
                     <td className="py-2.5 px-4">
-                      <div className="font-bold text-[#252824]">{p.userName}</div>
-                      <div className="text-[11px] text-[#777B73]">
+                      <div className="font-bold text-[#1B1F1C]">{p.userName}</div>
+                      <div className="text-[11px] text-[#52574E]">
                         {p.mostPlayedCategory !== '—'
                           ? `الأكثر لعباً: ${p.mostPlayedCategory}`
                           : p.userEmail}
                       </div>
                     </td>
-                    <td className="py-2.5 px-4 font-mono tabular-nums font-bold text-[#252824]">
+                    <td className="py-2.5 px-4 font-mono tabular-nums font-bold text-[#1B1F1C]">
                       {p.totalMatches}
                     </td>
-                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#52574E]">
                       <span className="text-[#14543D] font-bold">
                         {p.localMatches} محلي
                       </span>
@@ -1082,12 +1083,12 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                       {' / '}
                       <span className="text-[#DC2626]">{p.lossesCount}</span>
                       {' / '}
-                      <span className="text-[#777B73]">{p.drawsCount}</span>
+                      <span className="text-[#52574E]">{p.drawsCount}</span>
                     </td>
                     <td className="py-2.5 px-4 font-mono tabular-nums font-bold text-[#14543D]">
                       {p.winRate}%
                     </td>
-                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#252824]">
+                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#1B1F1C]">
                       {p.matchesLast30d} مباراة
                     </td>
                   </tr>
@@ -1099,13 +1100,13 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
       </div>
 
       {/* 5. Category Popularity Analytics (إحصائيات الفئات) */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 md:p-6 space-y-5">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 md:p-6 space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-4">
           <div className="space-y-1">
-            <h3 className="font-display text-lg font-bold text-[#252824]">
+            <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
               إحصائيات الفئات (شعبية التصنيفات)
             </h3>
-            <div className="text-xs text-[#777B73] flex flex-wrap items-center gap-2">
+            <div className="text-xs text-[#52574E] flex flex-wrap items-center gap-2">
               <span>
                 الأكثر محلياً:{' '}
                 <strong className="text-[#14543D]">
@@ -1143,7 +1144,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     categoryModeView === m.id
                       ? 'bg-[#FFFFFF] text-[#14543D]'
-                      : 'text-[#777B73] hover:text-[#252824]'
+                      : 'text-[#52574E] hover:text-[#1B1F1C]'
                   }`}
                 >
                   {m.label}
@@ -1165,8 +1166,8 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   onClick={() => setCategoryListScope(s.id)}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     categoryListScope === s.id
-                      ? 'bg-[#252824] text-white'
-                      : 'text-[#777B73] hover:text-[#252824]'
+                      ? 'bg-[#1B1F1C] text-white'
+                      : 'text-[#52574E] hover:text-[#1B1F1C]'
                   }`}
                 >
                   {s.label}
@@ -1178,25 +1179,25 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
 
         {/* Category Search */}
         <div className="relative max-w-sm">
-          <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-[#52574E] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={categorySearchQuery}
             onChange={(e) => setCategorySearchQuery(e.target.value)}
             placeholder="ابحث عن فئة..."
-            className="w-full pl-3 pr-10 py-2 rounded-lg border border-[#E5E8DD] text-xs focus:outline-none focus:border-[#14543D]"
+            className="w-full min-h-[40px] pl-3 pr-10 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-hidden focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
           />
         </div>
 
         {displayedCategories.length === 0 ? (
-          <div className="py-12 text-center text-xs text-[#777B73]">
+          <div className="py-12 text-center text-xs text-[#52574E]">
             لا توجد فئات مطابقة لمعايير التصفية الحالية.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
               <thead>
-                <tr className="bg-[#F3F5E9] text-[#777B73] border-b border-[#E5E8DD]">
+                <tr className="bg-[#F3F5E9] text-[#52574E] border-b border-[#E5E8DD]">
                   <th className="py-2.5 px-4 font-bold w-12">#</th>
                   <th className="py-2.5 px-4 font-bold">اسم الفئة</th>
                   <th className="py-2.5 px-4 font-bold">مرات الاختيار</th>
@@ -1213,19 +1214,19 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                     key={cat.categoryName}
                     className="hover:bg-[#F3F5E9]/40 transition-colors h-10"
                   >
-                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#777B73] font-bold">
+                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#52574E] font-bold">
                       {idx + 1}
                     </td>
-                    <td className="py-2.5 px-4 font-bold text-[#252824]">
+                    <td className="py-2.5 px-4 font-bold text-[#1B1F1C]">
                       {cat.categoryName}
                     </td>
                     <td className="py-2.5 px-4 font-mono tabular-nums font-bold text-[#14543D]">
                       {cat.selectionCount}
                     </td>
-                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#252824]">
+                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#1B1F1C]">
                       {cat.matchesAppearedCount}
                     </td>
-                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-4 font-mono tabular-nums text-[#52574E]">
                       {cat.uniquePlayersCount}
                     </td>
                     <td className="py-2.5 px-4 font-mono tabular-nums font-bold text-[#F07842]">
@@ -1246,13 +1247,13 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
       </div>
 
       {/* 6. Comprehensive All Players Table (جدول جميع اللاعبين) */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-5 md:p-6 space-y-5">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 md:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
           <div className="space-y-0.5">
-            <h3 className="font-display text-lg font-bold text-[#252824]">
+            <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
               جدول جميع اللاعبين المشاركين
             </h3>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               جميع الحسابات التي شاركت في مباراة واحدة على الأقل (محلية أو أونلاين) مع سجل النتائج التفصيلي.
             </p>
           </div>
@@ -1267,8 +1268,8 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 }}
                 className={`px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
                   includeUnclassifiedGuests
-                    ? 'bg-[#252824] text-white border-[#252824]'
-                    : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:bg-[#E5E8DD]/60'
+                    ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
+                    : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#E5E8DD]/60'
                 }`}
               >
                 {includeUnclassifiedGuests
@@ -1285,7 +1286,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         {/* Search & Quick Sort Controls */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-[#52574E] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={playerSearchQuery}
@@ -1294,11 +1295,11 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 setPlayerPage(1);
               }}
               placeholder="ابحث باسم اللاعب أو البريد الإلكتروني..."
-              className="w-full pl-3 pr-10 py-2 rounded-lg border border-[#E5E8DD] text-xs focus:outline-none focus:border-[#14543D]"
+              className="w-full min-h-[40px] pl-3 pr-10 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-hidden focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#777B73]">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#52574E]">
             <span>ترتيب سريع:</span>
             {(
               [
@@ -1315,7 +1316,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 className={`px-3 py-1.5 rounded-lg font-bold border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   playerSortField === s.id
                     ? 'bg-[#14543D] text-white border-[#14543D]'
-                    : 'bg-[#FFFFFF] border-[#E5E8DD] text-[#252824] hover:bg-[#F3F5E9]'
+                    : 'bg-[#FFFFFF] border-[#E5E8DD] text-[#1B1F1C] hover:bg-[#F3F5E9]'
                 }`}
               >
                 {s.label}{' '}
@@ -1329,7 +1330,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         {/* 12-Column Dense High-Accuracy Table */}
         {paginatedPlayers.length === 0 ? (
           <div className="py-14 text-center space-y-3">
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               لا توجد حسابات مطابقة لمعايير البحث أو التصفية الحالية.
             </p>
             {(playerSearchQuery || modeFilter !== 'all' || timeFilter !== 'all') && (
@@ -1351,7 +1352,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs whitespace-nowrap">
               <thead>
-                <tr className="bg-[#F3F5E9] text-[#777B73] border-b border-[#E5E8DD]">
+                <tr className="bg-[#F3F5E9] text-[#52574E] border-b border-[#E5E8DD]">
                   <th className="py-2.5 px-3 font-bold">اسم اللاعب</th>
                   <th className="py-2.5 px-3 font-bold">البريد الإلكتروني</th>
                   <th
@@ -1445,22 +1446,22 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                     className="hover:bg-[#F3F5E9]/40 transition-colors h-11"
                   >
                     <td className="py-2.5 px-3">
-                      <div className="font-bold text-[#252824]">
+                      <div className="font-bold text-[#1B1F1C]">
                         {player.userName}
                       </div>
-                      <div className="font-mono text-[10px] text-[#777B73]">
+                      <div className="font-mono text-[10px] text-[#52574E]">
                         {player.isRegisteredAccount
                           ? player.userId.slice(0, 10)
                           : 'غير مصنف'}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-[#777B73]">
+                    <td className="py-2.5 px-3 font-mono text-[#52574E]">
                       {player.userEmail}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#52574E]">
                       {formatDate(player.registeredAt)}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#252824]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#1B1F1C]">
                       {player.totalMatches}
                     </td>
                     <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#14543D]">
@@ -1475,16 +1476,16 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                     <td className="py-2.5 px-3 font-mono tabular-nums text-[#DC2626]">
                       {player.lossesCount}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#52574E]">
                       {player.drawsCount}
                     </td>
                     <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#14543D]">
                       {player.winRate}%
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#52574E]">
                       {formatDateTime(player.lastPlayedAt)}
                     </td>
-                    <td className="py-2.5 px-3 font-bold text-[#252824]">
+                    <td className="py-2.5 px-3 font-bold text-[#1B1F1C]">
                       {player.mostPlayedCategory}
                     </td>
                   </tr>
@@ -1497,7 +1498,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
         {/* Pagination */}
         {totalPlayerPages > 1 && (
           <div className="flex items-center justify-between border-t border-[#E5E8DD] pt-4 text-xs">
-            <span className="font-mono tabular-nums text-[#777B73]">
+            <span className="font-mono tabular-nums text-[#52574E]">
               الصفحة {playerPage} من {totalPlayerPages} · إجمالي{' '}
               {filteredPlayers.length} لاعب
             </span>
@@ -1506,7 +1507,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 type="button"
                 disabled={playerPage <= 1}
                 onClick={() => setPlayerPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] font-bold text-[#252824] cursor-pointer disabled:opacity-40"
+                className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F7F8F1] font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-40 transition-colors"
               >
                 السابق
               </button>
@@ -1516,7 +1517,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 onClick={() =>
                   setPlayerPage((p) => Math.min(totalPlayerPages, p + 1))
                 }
-                className="px-3 py-1.5 rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] font-bold text-[#252824] cursor-pointer disabled:opacity-40"
+                className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F7F8F1] font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-40 transition-colors"
               >
                 التالي
               </button>

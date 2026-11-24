@@ -615,6 +615,8 @@ export async function fetchMainCategoriesFromFirestore(
       byId.set(def.id, { ...def, isDeleted: false });
     }
 
+    const canonicalLoadedIds = new Set<string>();
+
     snap.docs.forEach((d) => {
       const data = d.data();
       const docId = d.id;
@@ -639,6 +641,12 @@ export async function fetchMainCategoriesFromFirestore(
         Array.from(byId.values()).find((m) => m.name === docName);
 
       const targetId = existingDef ? existingDef.id : docId;
+      if (docId === targetId) {
+        canonicalLoadedIds.add(targetId);
+      } else if (canonicalLoadedIds.has(targetId)) {
+        // Do not let a legacy duplicate document overwrite the canonical Firestore document
+        return;
+      }
 
       const resolvedName =
         docName || (existingDef ? existingDef.name : 'فئة رئيسية');
@@ -662,15 +670,10 @@ export async function fetchMainCategoriesFromFirestore(
         typeof data.isActive === 'boolean'
           ? data.isActive
           : existingDef?.isActive ?? true;
-      const isWalaKalimaDoc =
-        docId === 'main-1793867682734-xevr' ||
-        docId === 'main-wala-kalima' ||
-        resolvedName === 'ولا كلمة';
-      const resolvedIsComingSoon = isWalaKalimaDoc
-        ? false
-        : typeof data.isComingSoon === 'boolean'
-        ? data.isComingSoon
-        : Boolean(existingDef?.isComingSoon);
+      const resolvedIsComingSoon =
+        typeof data.isComingSoon === 'boolean'
+          ? data.isComingSoon
+          : Boolean(existingDef?.isComingSoon);
 
       const validIcons: MainCategoryIconName[] = [
         'compass',

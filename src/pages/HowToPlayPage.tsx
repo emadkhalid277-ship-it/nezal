@@ -75,52 +75,52 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
         <button
           type="button"
           onClick={onBackToHome}
-          className="inline-flex items-center gap-2 min-h-[40px] text-sm font-bold text-[#14543D] hover:text-[#F07842] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 min-h-[44px] px-3 py-2 rounded-xl text-sm font-bold text-[#14543D] hover:text-[#F07842] hover:bg-[#FFFFFF] transition-colors cursor-pointer"
         >
           <ArrowRight className="w-4 h-4" />
           <span>العودة إلى الرئيسية</span>
         </button>
 
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-11 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-center">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-11 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-center shadow-xs">
           <div className="lg:col-span-8 space-y-3 sm:space-y-4 text-right">
             <div className="text-xs font-bold text-[#F07842] tracking-wide">
               دليل اللاعبين · قواعد اللعبة في نِزال
             </div>
-            <h1 className="font-display text-2xl sm:text-4xl md:text-5xl font-bold text-[#252824] leading-tight">
+            <h1 className="font-display text-2xl sm:text-4xl md:text-5xl font-bold text-[#1B1F1C] leading-tight">
               كيف تلعب وتفوز في نِزال؟
             </h1>
-            <p className="text-sm sm:text-base md:text-lg text-[#777B73] leading-relaxed max-w-[60ch]">
+            <p className="text-sm sm:text-base md:text-lg text-[#52574E] leading-relaxed max-w-[60ch]">
               كل ما تحتاج معرفته للانطلاق في المنافسة: من تكوين الفرق واختيار الفئات، حتى نظام
               النقاط والمؤقت وحسم الفوز لصالح فريقك.
             </p>
           </div>
 
-          <div className="lg:col-span-4 bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl p-5 space-y-3">
+          <div className="lg:col-span-4 bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-5 space-y-3">
             <div className="text-xs font-bold text-[#14543D]">ملخص سريع قبل البدء</div>
             <div className="grid grid-cols-2 gap-3 text-center">
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3">
                 <div className="font-mono tabular-nums text-2xl font-bold text-[#14543D]">
                   2–4
                 </div>
-                <div className="text-xs text-[#777B73] mt-0.5">فرق متنافسة</div>
+                <div className="text-xs text-[#52574E] mt-0.5">فرق متنافسة</div>
               </div>
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3">
                 <div className="font-mono tabular-nums text-2xl font-bold text-[#F07842]">
                   3
                 </div>
-                <div className="text-xs text-[#777B73] mt-0.5">فئات لكل فريق</div>
+                <div className="text-xs text-[#52574E] mt-0.5">فئات لكل فريق</div>
               </div>
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3">
-                <div className="font-mono tabular-nums text-xl font-bold text-[#252824]">
+                <div className="font-mono tabular-nums text-xl font-bold text-[#1B1F1C]">
                   100–500
                 </div>
-                <div className="text-xs text-[#777B73] mt-0.5">نقاط الأسئلة</div>
+                <div className="text-xs text-[#52574E] mt-0.5">نقاط الأسئلة</div>
               </div>
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3">
                 <div className="font-mono tabular-nums text-xl font-bold text-[#14543D]">
                   30–90ث
                 </div>
-                <div className="text-xs text-[#777B73] mt-0.5">مؤقت الإجابة</div>
+                <div className="text-xs text-[#52574E] mt-0.5">مؤقت الإجابة</div>
               </div>
             </div>
           </div>
@@ -131,10 +131,10 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
       <section className="space-y-7">
         <div className="space-y-1.5">
           <div className="text-xs font-bold text-[#F07842]">أولاً · نظام المباراة</div>
-          <h2 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+          <h2 className="font-display text-2xl md:text-3xl font-bold text-[#1B1F1C]">
             قواعد اللعبة الأساسية
           </h2>
-          <p className="text-sm md:text-base text-[#777B73]">
+          <p className="text-sm md:text-base text-[#52574E]">
             تسير كل جولة في نِزال وفق خطوات واضحة تضمن العدالة والحماس بين جميع الفرق:
           </p>
         </div>
@@ -145,7 +145,7 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
             return (
               <article
                 key={rule.num}
-                className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#14543D]/60 rounded-2xl p-6 flex flex-col justify-between space-y-5 transition-colors"
+                className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842]/60 rounded-2xl p-6 flex flex-col justify-between space-y-5 transition-colors shadow-xs"
               >
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -158,16 +158,16 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
                     >
                       <Icon className="w-5 h-5" />
                     </div>
-                    <span className="font-mono tabular-nums text-lg font-bold text-[#777B73]/60">
+                    <span className="font-mono tabular-nums text-lg font-bold text-[#666B62]/60">
                       {rule.num}
                     </span>
                   </div>
 
                   <div className="space-y-2">
-                    <h3 className="font-display text-lg font-bold text-[#252824]">
+                    <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
                       {rule.title}
                     </h3>
-                    <p className="text-sm text-[#777B73] leading-relaxed">
+                    <p className="text-sm text-[#52574E] leading-relaxed">
                       {rule.description}
                     </p>
                   </div>
@@ -178,13 +178,13 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
         </div>
 
         {/* Points Scale Strip */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-4">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-4 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h3 className="font-display text-lg font-bold text-[#252824]">
+              <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
                 سُلّم النقاط ومستويات الصعوبة
               </h3>
-              <p className="text-xs sm:text-sm text-[#777B73]">
+              <p className="text-xs sm:text-sm text-[#52574E]">
                 كل فئة تحتوي على 5 مستويات متدرجة — كلما ارتفعت النقاط زاد التحدي والربح.
               </p>
             </div>
@@ -206,7 +206,7 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
                 </div>
                 <div
                   className={`text-xs font-bold ${
-                    tier.pts === 500 ? 'text-[#F3F5E9]/90' : 'text-[#777B73]'
+                    tier.pts === 500 ? 'text-[#F3F5E9]/90' : 'text-[#52574E]'
                   }`}
                 >
                   {tier.level}
@@ -219,16 +219,16 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
 
       {/* Section 2: Local vs Online Modes + Start Playing CTAs */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between space-y-5 sm:space-y-6">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between space-y-5 sm:space-y-6 shadow-xs">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 text-xs font-bold text-[#F07842]">
               <Zap className="w-4 h-4" />
               <span>للمجالس والجمعات</span>
             </div>
-            <h3 className="font-display text-xl sm:text-2xl font-bold text-[#252824]">
+            <h3 className="font-display text-xl sm:text-2xl font-bold text-[#1B1F1C]">
               المباراة المحلية (على نفس الجهاز)
             </h3>
-            <p className="text-sm text-[#777B73] leading-relaxed">
+            <p className="text-sm text-[#52574E] leading-relaxed">
               مناسبة إذا كنتم مجتمعين في نفس المكان. كوّنوا من فريقين إلى أربعة فرق، اختاروا
               فئاتكم، وأديروا الأدوار والنتائج من شاشة واحدة بكل سلاسة.
             </p>
@@ -244,16 +244,16 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
           </button>
         </div>
 
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between space-y-5 sm:space-y-6">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-7 flex flex-col justify-between space-y-5 sm:space-y-6 shadow-xs">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 text-xs font-bold text-[#14543D]">
               <Radio className="w-4 h-4 text-[#F07842]" />
               <span>للتحدي عن بُعد</span>
             </div>
-            <h3 className="font-display text-xl sm:text-2xl font-bold text-[#252824]">
+            <h3 className="font-display text-xl sm:text-2xl font-bold text-[#1B1F1C]">
               اللعب عن بُعد (أونلاين)
             </h3>
-            <p className="text-sm text-[#777B73] leading-relaxed">
+            <p className="text-sm text-[#52574E] leading-relaxed">
               أنشئ غرفة خاصة برمز فريد أو ادعُ أصدقاءك مباشرة للعب أو المشاهدة. تتزامن الفئات،
               المؤقت، الإجابات، والنقاط لحظياً بين الجميع.
             </p>
@@ -262,7 +262,7 @@ export const HowToPlayPage: React.FC<HowToPlayPageProps> = ({
           <button
             type="button"
             onClick={onStartOnlineGame}
-            className="w-full sm:w-auto self-start min-h-[48px] px-7 py-3.5 rounded-2xl bg-[#14543D] hover:bg-[#0F4230] text-[#FFFFFF] font-bold text-sm sm:text-base transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full sm:w-auto self-start min-h-[48px] px-7 py-3.5 rounded-2xl bg-[#14543D] hover:bg-[#0E3F2D] text-[#FFFFFF] font-bold text-sm sm:text-base transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <span>العب عن بُعد الآن</span>
             <ArrowLeft className="w-4 h-4" />

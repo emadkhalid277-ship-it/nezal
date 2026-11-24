@@ -78,7 +78,7 @@ define(['./workbox-a454db71'], (function (workbox) { 'use strict';
 	 */
 	workbox.precacheAndRoute([{
 	  "url": "index.html",
-	  "revision": "0.83v1fih0ueg"
+	  "revision": "0.g92mjs0q7ng"
 	}], {});
 	workbox.cleanupOutdatedCaches();
 	workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
@@ -107,7 +107,7 @@ define(['./workbox-a454db71'], (function (workbox) { 'use strict';
 	}) => {
 	  if (request.method !== "GET") return false;
 	  if (url.hostname.includes("identitytoolkit.googleapis.com") || url.hostname.includes("securetoken.googleapis.com") || url.hostname.includes("firestore.googleapis.com") || url.hostname.includes("firebaseinstallations.googleapis.com")) return false;
-	  const isStorageMedia = url.hostname.includes("firebasestorage.googleapis.com") || url.hostname.includes("storage.googleapis.com");
+	  const isStorageMedia = url.hostname.includes("firebasestorage.googleapis.com") || url.hostname.includes("storage.googleapis.com") || url.hostname.includes("res.cloudinary.com");
 	  const isImageExt = /\.(png|jpg|jpeg|webp|gif|svg)(\?.*)?$/i.test(url.pathname);
 	  return isStorageMedia || url.origin !== self.location.origin && isImageExt;
 	}, new workbox.StaleWhileRevalidate({

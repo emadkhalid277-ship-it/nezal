@@ -19,6 +19,7 @@ import {
   VolumeX,
   ShieldAlert,
   RefreshCw,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   MainCategoryMeta,
@@ -169,6 +170,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     mainCategoryName: string;
     points: PointValue;
   } | null>(null);
+  const [showMobileBoardMenu, setShowMobileBoardMenu] = useState(false);
   // Pinned question IDs per tileKey for the current round so closing & reopening a tile keeps the same question
   const [pinnedTileQuestions, setPinnedTileQuestions] = useState<
     Record<string, string>
@@ -826,6 +828,22 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
     setPendingJudgmentChoice(null);
   };
 
+  useEffect(() => {
+    if (!zoomedImageUrl && !activeSelection) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (zoomedImageUrl) {
+        setZoomedImageUrl(null);
+        return;
+      }
+      if (activeSelection && !feedbackBanner && !isSubmittingRef.current) {
+        handleCloseModalWithoutScoring();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [zoomedImageUrl, activeSelection, feedbackBanner]);
+
   const timerRatio = Math.max(
     0,
     Math.min(100, (timeLeft / Math.max(1, timerDuration)) * 100)
@@ -840,113 +858,144 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
           className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-3.5 sm:p-5 lg:p-6 shadow-xs space-y-4"
         >
           {/* Top Utility & Turn Bar */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-3.5">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="text-xs font-bold text-[#52574E]">
-                الدور الحين على:
-              </span>
-              {activeTeam && (
-                <div
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold text-white shadow-xs"
-                  style={{ backgroundColor: activeTeam.color || '#14543D' }}
-                >
-                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                  <span>{activeTeam.name || `الفريق ${safeTeamIndex + 1}`}</span>
-                </div>
-              )}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3 border-b border-[#E5E8DD] pb-3 sm:pb-3.5">
+            <div className="flex flex-wrap items-center justify-between sm:justify-start gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-[#52574E]">
+                  الدور الحين على:
+                </span>
+                {activeTeam && (
+                  <div
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold text-white shadow-xs"
+                    style={{ backgroundColor: activeTeam.color || '#14543D' }}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white" />
+                    <span className="truncate max-w-[140px] sm:max-w-none">
+                      {activeTeam.name || `الفريق ${safeTeamIndex + 1}`}
+                    </span>
+                  </div>
+                )}
+              </div>
               <span className="text-xs text-[#52574E] font-mono tabular-nums bg-[#F7F8F1] border border-[#E5E8DD] px-2.5 py-1 rounded-lg">
                 المتبقي: {remainingPlayableTiles} /{' '}
                 {playableTilesCount > 0 ? playableTilesCount : totalTiles}
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <button
-                type="button"
-                onClick={() => soundFX.toggle()}
-                title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
-                className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer border ${
-                  soundEnabled
-                    ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
-                    : 'bg-[#F7F8F1] border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
+            <div className="flex flex-wrap items-center justify-between sm:justify-end gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => soundFX.toggle()}
+                  title={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
+                  aria-label={soundEnabled ? 'كتم المؤثرات الصوتية' : 'تفعيل المؤثرات الصوتية'}
+                  className={`min-h-[44px] sm:min-h-[40px] min-w-[44px] sm:min-w-0 px-3 py-1.5 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    soundEnabled
+                      ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D] hover:bg-[#DDECE4]'
+                      : 'bg-[#F7F8F1] border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
+                  }`}
+                >
+                  {soundEnabled ? (
+                    <>
+                      <Volume2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <span className="hidden sm:inline">الأصوات مفعّلة</span>
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX className="w-4 h-4 sm:w-3.5 sm:h-3.5 shrink-0" />
+                      <span className="hidden sm:inline">الأصوات مكتومة</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowMobileBoardMenu((prev) => !prev)}
+                  aria-expanded={showMobileBoardMenu}
+                  data-testid="mobile-board-options-toggle"
+                  className={`md:hidden min-h-[44px] px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    showMobileBoardMenu
+                      ? 'bg-[#14543D] border-[#14543D] text-white'
+                      : 'bg-[#F7F8F1] border-[#E5E8DD] text-[#1B1F1C]'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+                  <span>خيارات</span>
+                </button>
+              </div>
+
+              <div
+                className={`${
+                  showMobileBoardMenu
+                    ? 'order-last w-full grid grid-cols-3 gap-1.5 pt-1 md:order-none md:w-auto md:flex md:pt-0'
+                    : 'hidden md:flex items-center gap-2'
                 }`}
               >
-                {soundEnabled ? (
+                {isGameLocked ? (
                   <>
-                    <Volume2 className="w-3.5 h-3.5" />
-                    <span>الأصوات مفعّلة</span>
+                    <button
+                      type="button"
+                      onClick={onGoToCategories}
+                      title="عرض فئات الجولة الـ 6 المختارة (مقفلة للقراءة فقط)"
+                      className="min-h-[44px] md:min-h-[40px] px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-[#52574E] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
+                      <span className="truncate">الفئات</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={onGoToSetup}
+                      title="عرض بيانات الفرق (مقفلة للقراءة فقط)"
+                      className="min-h-[44px] md:min-h-[40px] px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-[#52574E] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-[#14543D] shrink-0" />
+                      <span className="truncate">الفرق</span>
+                    </button>
                   </>
                 ) : (
                   <>
-                    <VolumeX className="w-3.5 h-3.5" />
-                    <span>الأصوات مكتومة</span>
+                    <button
+                      type="button"
+                      onClick={onGoToCategories}
+                      className="min-h-[44px] md:min-h-[40px] px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-[#1B1F1C] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
+                      <span className="truncate">تغيير الفئات</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={onGoToSetup}
+                      className="min-h-[44px] md:min-h-[40px] px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-[#1B1F1C] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Users className="w-3.5 h-3.5 text-[#14543D] shrink-0" />
+                      <span className="truncate">تعديل الفرق</span>
+                    </button>
                   </>
                 )}
-              </button>
 
-              {isGameLocked ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={onGoToCategories}
-                    title="عرض فئات الجولة الـ 6 المختارة (مقفلة للقراءة فقط)"
-                    className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-[#52574E] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Lock className="w-3.5 h-3.5 text-[#F07842]" />
-                    <span>الفئات (مقفلة)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={onGoToSetup}
-                    title="عرض بيانات الفرق (مقفلة للقراءة فقط)"
-                    className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-[#52574E] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Lock className="w-3.5 h-3.5 text-[#14543D]" />
-                    <span>الفرق (مقفلة)</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={onGoToCategories}
-                    className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-[#1B1F1C] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-[#F07842]" />
-                    <span>تغيير الفئات</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={onGoToSetup}
-                    className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-[#1B1F1C] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Users className="w-3.5 h-3.5 text-[#14543D]" />
-                    <span>تعديل الفرق</span>
-                  </button>
-                </>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPinnedTileQuestions({});
-                  setActiveSelection(null);
-                  onResetBoard();
-                }}
-                className="min-h-[40px] px-3 py-1.5 text-xs font-semibold text-[#52574E] hover:text-[#1B1F1C] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>تصفير اللوحة</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinnedTileQuestions({});
+                    setActiveSelection(null);
+                    setShowMobileBoardMenu(false);
+                    onResetBoard();
+                  }}
+                  className="min-h-[44px] md:min-h-[40px] px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-[#52574E] hover:text-[#1B1F1C] bg-[#F7F8F1] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">تصفير اللوحة</span>
+                </button>
+              </div>
 
               <button
                 type="button"
                 onClick={onFinishGame}
-                className="min-h-[40px] px-4 py-1.5 text-xs font-bold text-white bg-[#1B1F1C] hover:bg-[#2F3530] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="min-h-[44px] sm:min-h-[40px] px-3.5 sm:px-4 py-1.5 text-xs font-bold text-white bg-[#1B1F1C] hover:bg-[#2F3530] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
               >
-                <Trophy className="w-3.5 h-3.5 text-[#F07842]" />
+                <Trophy className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
                 <span>إنهاء الجولة والنتائج</span>
               </button>
             </div>
@@ -954,7 +1003,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
           {/* Teams Score Cards */}
           <div
-            className={`grid grid-cols-2 ${
+            className={`grid grid-cols-1 sm:grid-cols-2 ${
               teams.length === 3
                 ? 'lg:grid-cols-3'
                 : teams.length >= 4
@@ -972,7 +1021,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                   onClick={() => onSelectTurn(idx)}
                   title="اضغط لتحديد الدور على هذا الفريق"
                   className={`relative overflow-hidden text-right p-3.5 sm:p-4 rounded-2xl border-2 transition-all flex items-center justify-between gap-2 sm:gap-3 cursor-pointer active:scale-[0.99] ${
-                    teams.length === 3 && idx === 2 ? 'col-span-2 lg:col-span-1' : ''
+                    teams.length === 3 && idx === 2 ? 'sm:col-span-2 lg:col-span-1' : ''
                   } ${
                     isCurrent
                       ? 'bg-[#FFFDF9] shadow-md'
@@ -1212,11 +1261,11 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                             }
                             className={`min-h-[46px] h-12 rounded-xl font-mono tabular-nums text-base font-extrabold border transition-all flex items-center justify-center gap-1.5 ${
                               isUsed
-                                ? 'bg-[#F3F5E9]/65 border-[#E5E8DD]/70 text-[#777B73]/45 cursor-not-allowed'
+                                ? 'bg-[#F3F5E9]/65 border-[#E5E8DD]/70 text-[#666B62]/50 cursor-not-allowed'
                                 : isActiveSelected
                                 ? 'bg-[#FEF2EC] border-[#F07842] text-[#D9602B] ring-2 ring-[#F07842]/30 shadow-sm cursor-pointer'
                                 : !availableQ
-                                ? 'bg-[#F7F8F1]/60 border-dashed border-[#E5E8DD] text-[#777B73]/70 cursor-not-allowed text-[11px] font-sans'
+                                ? 'bg-[#F7F8F1]/60 border-dashed border-[#E5E8DD] text-[#666B62]/75 cursor-not-allowed text-[11px] font-sans'
                                 : 'bg-[#F7F8F1] hover:bg-[#F07842] text-[#1B1F1C] hover:text-white border-[#E5E8DD] hover:border-[#F07842] shadow-2xs cursor-pointer active:scale-[0.98]'
                             }`}
                           >
@@ -1374,11 +1423,11 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                               }
                               className={`h-16 md:h-20 rounded-2xl font-mono tabular-nums text-xl md:text-2xl font-extrabold border transition-all duration-150 flex flex-col items-center justify-center ${
                                 isUsed
-                                  ? 'bg-[#F3F5E9]/65 border-[#E5E8DD]/70 text-[#777B73]/45 cursor-not-allowed'
+                                  ? 'bg-[#F3F5E9]/65 border-[#E5E8DD]/70 text-[#666B62]/50 cursor-not-allowed'
                                   : isActiveSelected
                                   ? 'bg-[#FEF2EC] border-[#F07842] text-[#D9602B] ring-2 ring-[#F07842]/30 shadow-sm cursor-pointer'
                                   : !availableQ
-                                  ? 'bg-[#F7F8F1]/60 border-dashed border-[#E5E8DD] text-[#777B73]/65 cursor-not-allowed text-xs font-sans'
+                                  ? 'bg-[#F7F8F1]/60 border-dashed border-[#E5E8DD] text-[#666B62]/75 cursor-not-allowed text-xs font-sans'
                                   : 'bg-[#F7F8F1] hover:bg-[#F07842] text-[#1B1F1C] hover:text-white border-[#E5E8DD] hover:border-[#F07842] hover:-translate-y-0.5 hover:shadow-md cursor-pointer active:translate-y-0 active:scale-[0.98]'
                               }`}
                             >
@@ -1439,33 +1488,33 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
               />
 
               {/* Dark Charcoal Arena Modal Header */}
-              <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2 sm:gap-3 shrink-0">
+              <div className="bg-[#1B1F1C] text-white px-3.5 sm:px-6 py-2.5 sm:py-4 flex flex-wrap items-center justify-between gap-2 sm:gap-3 shrink-0">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
-                  <span className="text-[11px] sm:text-xs text-white/65">
+                  <span className="hidden sm:inline text-xs text-white/65">
                     {activeSelection.mainCategoryName} /
                   </span>
-                  <span className="font-display text-sm sm:text-base font-bold text-white">
+                  <span className="font-display text-xs sm:text-base font-bold text-white truncate max-w-[160px] sm:max-w-none">
                     {activeSelection.subcategoryName}
                   </span>
                   <span className="text-white/40" aria-hidden="true">
                     ·
                   </span>
-                  <span className="font-mono tabular-nums text-xs sm:text-sm font-bold text-white bg-[#F07842] px-2.5 py-0.5 rounded-lg shadow-2xs">
+                  <span className="font-mono tabular-nums text-xs sm:text-sm font-bold text-white bg-[#F07842] px-2 sm:px-2.5 py-0.5 rounded-lg shadow-2xs">
                     {activeSelection.points} نقطة
                   </span>
                   <span className="text-[11px] sm:text-xs text-white/75 flex items-center gap-1">
                     {activeMediaType === 'audio' ? (
                       <>
                         <Volume2 className="w-3.5 h-3.5 text-[#F07842]" />
-                        <span>({activeSelection.question.difficulty} · سؤال صوتي)</span>
+                        <span>({activeSelection.question.difficulty} · صوتي)</span>
                       </>
                     ) : activeMediaType === 'image' ? (
                       <>
                         <ImageIcon className="w-3.5 h-3.5 text-[#F07842]" />
-                        <span>({activeSelection.question.difficulty} · سؤال صورة)</span>
+                        <span>({activeSelection.question.difficulty} · صورة)</span>
                       </>
                     ) : (
-                      <span>({activeSelection.question.difficulty} · سؤال مباشر)</span>
+                      <span>({activeSelection.question.difficulty})</span>
                     )}
                   </span>
                 </div>
@@ -1473,7 +1522,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                 {/* Countdown Timer Controls */}
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <div
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono tabular-nums text-xs sm:text-sm font-bold transition-colors ${
+                    className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-mono tabular-nums text-xs sm:text-sm font-bold transition-colors ${
                       timeLeft === 0
                         ? 'bg-rose-600 text-white'
                         : timeLeft <= 10
@@ -1483,14 +1532,14 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                   >
                     <Clock className="w-4 h-4" />
                     <span>
-                      {timeLeft === 0 ? 'انتهى الوقت (0 ث)' : `${timeLeft} ثانية`}
+                      {timeLeft === 0 ? 'انتهى (0ث)' : `${timeLeft}ث`}
                     </span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => setTimerPaused((p) => !p)}
-                    className="min-w-[40px] min-h-[40px] p-2 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
+                    className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] p-2 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
                     aria-label={timerPaused ? 'استئناف المؤقت' : 'إيقاف مؤقت'}
                     title={timerPaused ? 'استئناف المؤقت' : 'إيقاف مؤقت'}
                   >
@@ -1507,7 +1556,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                       setTimeLeft(timerDuration);
                       setTimerPaused(false);
                     }}
-                    className="min-w-[40px] min-h-[40px] p-2 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
+                    className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] p-2 flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer transition-colors"
                     aria-label="إعادة ضبط المؤقت"
                     title="إعادة ضبط المؤقت"
                   >
@@ -1534,8 +1583,8 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
               </div>
 
               {/* Active Team Banner */}
-              <div className="bg-[#F7F8F1] border-b border-[#E5E8DD] px-4 sm:px-6 py-2.5 flex items-center justify-between gap-2 text-xs shrink-0">
-                <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <div className="bg-[#F7F8F1] border-b border-[#E5E8DD] px-3.5 sm:px-6 py-2 flex items-center justify-between gap-2 text-xs shrink-0">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
                   <span className="text-[#52574E]">السؤال موجه إلى:</span>
                   <span
                     className="inline-flex items-center gap-1.5 font-bold truncate"
@@ -1559,24 +1608,24 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                   type="button"
                   disabled={!!feedbackBanner}
                   onClick={handleCloseModalWithoutScoring}
-                  className="min-h-[36px] px-2.5 text-[#52574E] hover:text-[#1B1F1C] disabled:opacity-40 font-semibold cursor-pointer shrink-0 transition-colors"
+                  className="min-h-[44px] sm:min-h-[36px] px-3 text-[#52574E] hover:text-[#1B1F1C] disabled:opacity-40 font-semibold cursor-pointer shrink-0 transition-colors"
                 >
                   إغلاق بدون احتساب
                 </button>
               </div>
 
               {/* Scrollable Question Body */}
-              <div className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
+              <div className="p-3.5 sm:p-6 md:p-8 space-y-3.5 sm:space-y-5 overflow-y-auto flex-1">
                 {activeSelection.isRepeatedFallback && (
                   <div className="bg-[#FEF2EC] border border-[#F07842]/30 rounded-xl px-4 py-2.5 text-xs font-semibold text-[#1B1F1C]">
                     خلصت الأسئلة الجديدة في هذي الفئة — تم عرض سؤال سابق تلقائياً حسب إعدادات المنصة.
                   </div>
                 )}
 
-                <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-5 sm:p-8 text-center">
+                <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-4 sm:p-8 text-center">
                   <h3
                     id="active-question-heading"
-                    className="font-display text-lg sm:text-xl md:text-2xl font-bold text-[#1B1F1C] leading-relaxed"
+                    className="font-display text-base sm:text-xl md:text-2xl font-bold text-[#1B1F1C] leading-relaxed"
                   >
                     {activeSelection.question.questionText}
                   </h3>
@@ -1585,7 +1634,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                 {/* Optional Question Image Display — Preserves aspect ratio & responsive across mobile, desktop, and TV */}
                 {activeMediaType === 'image' && activeSelection.question.imageUrl && (
                   imageLoadFailed ? (
-                    <div className="bg-[#F7F8F1] border border-rose-200 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="bg-[#F7F8F1] border border-rose-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3">
                       <div className="text-right space-y-1">
                         <div className="text-xs sm:text-sm font-bold text-rose-800">
                           تعذر تحميل صورة السؤال
@@ -1607,7 +1656,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-3 sm:p-4 flex flex-col items-center gap-2.5">
+                    <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-2.5 sm:p-4 flex flex-col items-center gap-2">
                       <div className="relative w-full flex items-center justify-center">
                         <img
                           key={`${activeSelection.question.imageUrl}_${imageRetryNonce}`}
@@ -1623,7 +1672,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                               activeSelection.question.imageUrl || null
                             )
                           }
-                          className="max-h-[210px] sm:max-h-[270px] md:max-h-[320px] xl:max-h-[360px] w-auto max-w-full object-contain rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] shadow-xs cursor-zoom-in"
+                          className="max-h-[175px] sm:max-h-[270px] md:max-h-[320px] xl:max-h-[360px] w-auto max-w-full object-contain rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] shadow-xs cursor-zoom-in"
                         />
                         <button
                           type="button"
@@ -1632,7 +1681,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                               activeSelection.question.imageUrl || null
                             )
                           }
-                          className="absolute bottom-2 left-2 px-2.5 py-1.5 rounded-lg bg-[#1B1F1C]/80 hover:bg-[#1B1F1C] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                          className="absolute bottom-2 left-2 min-h-[36px] px-3 py-1.5 rounded-lg bg-[#1B1F1C]/85 hover:bg-[#1B1F1C] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
                           title="تكبير الصورة"
                         >
                           <ZoomIn className="w-3.5 h-3.5" />
@@ -1663,14 +1712,14 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
                 {/* ANSWER & JUDGMENT CONTROLS */}
                 {!answerRevealed ? (
-                  <div className="pt-1 sm:pt-2 flex flex-col items-center gap-2.5 sm:gap-3">
+                  <div className="pt-1 sm:pt-2 flex flex-col items-center gap-2 sm:gap-3">
                     <button
                       type="button"
                       onClick={() => {
                         soundFX.playAnswerReveal();
                         setAnswerRevealed(true);
                       }}
-                      className="w-full sm:w-auto min-h-[50px] px-7 sm:px-9 py-3.5 text-sm sm:text-base font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-sm cursor-pointer"
+                      className="w-full sm:w-auto min-h-[52px] px-7 sm:px-9 py-3.5 text-sm sm:text-base font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl transition-colors flex items-center justify-center gap-2.5 shadow-sm cursor-pointer"
                     >
                       <Eye className="w-4 h-4 text-white" />
                       <span>إظهار الإجابة</span>

@@ -50,7 +50,7 @@ export const NizalLoadingScreen: React.FC<NizalLoadingScreenProps> = ({
         aria-label={activeMessage}
         className={
           isFullscreen
-            ? 'fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-[#F3F5E9] px-5 py-8 text-[#252824] select-none'
+            ? 'fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-[#F3F5E9] px-5 py-8 text-[#1B1F1C] select-none'
             : 'min-h-[52vh] w-full flex flex-col items-center justify-center overflow-hidden py-16 px-4 text-center select-none'
         }
       >
@@ -151,7 +151,7 @@ export const NizalLoadingScreen: React.FC<NizalLoadingScreenProps> = ({
             >
               {brandName}
             </h1>
-            <div className="flex items-center justify-center gap-2 text-xs font-semibold text-[#777B73]">
+            <div className="flex items-center justify-center gap-2 text-xs font-semibold text-[#52574E]">
               <span>تحدي</span>
               <span aria-hidden="true">·</span>
               <span>معرفة</span>
@@ -233,7 +233,7 @@ export const NizalLoadingScreen: React.FC<NizalLoadingScreenProps> = ({
           </div>
 
           {isFullscreen && subMessage && (
-            <p className="mt-1.5 text-xs text-[#777B73]">{subMessage}</p>
+            <p className="mt-1.5 text-xs text-[#52574E]">{subMessage}</p>
           )}
         </motion.div>
       </div>

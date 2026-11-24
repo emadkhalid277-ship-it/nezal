@@ -490,14 +490,14 @@ export function MatchCelebrationHeader<T extends MatchOutcomeTeamInput>({
           <div
             className={`relative flex h-18 w-18 sm:h-20 sm:w-20 items-center justify-center rounded-3xl border-2 shadow-lg ${
               outcome.isZeroScore
-                ? 'bg-[#F3F5E9] border-[#E5E8DD] text-[#777B73]'
+                ? 'bg-[#F3F5E9] border-[#E5E8DD] text-[#52574E]'
                 : 'bg-gradient-to-br from-amber-100 via-amber-50 to-white border-amber-400 text-amber-600'
             }`}
           >
             {outcome.isTie ? (
               <Scale className="h-9 w-9 sm:h-10 sm:w-10 text-amber-600" />
             ) : outcome.isZeroScore ? (
-              <Award className="h-9 w-9 sm:h-10 sm:w-10 text-[#777B73]" />
+              <Award className="h-9 w-9 sm:h-10 sm:w-10 text-[#52574E]" />
             ) : (
               <Trophy className="h-9 w-9 sm:h-11 sm:w-11 text-amber-500 drop-shadow-xs" />
             )}
@@ -515,7 +515,7 @@ export function MatchCelebrationHeader<T extends MatchOutcomeTeamInput>({
           </div>
 
           {outcome.isZeroScore ? (
-            <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#252824]">
+            <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold text-[#1B1F1C]">
               انتهت الجولة بدون نقاط مسجلة
             </h1>
           ) : outcome.isTie ? (
@@ -532,7 +532,7 @@ export function MatchCelebrationHeader<T extends MatchOutcomeTeamInput>({
               <div className="inline-block rounded-xl bg-amber-100 px-3.5 py-1 text-xs sm:text-sm font-extrabold text-amber-800 border border-amber-300">
                 مواجهة متكافئة ومثيرة!
               </div>
-              <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#252824]">
+              <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#1B1F1C]">
                 تعادل!
               </h1>
               <p className="font-display text-base sm:text-lg font-bold text-[#14543D]">
@@ -569,10 +569,10 @@ export function MatchCelebrationHeader<T extends MatchOutcomeTeamInput>({
               <div className="inline-block rounded-xl bg-amber-100 px-3.5 py-1 text-xs sm:text-sm font-extrabold text-amber-800 border border-amber-300">
                 مبروك الفوز! 🏆
               </div>
-              <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#252824] tracking-tight">
+              <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#1B1F1C] tracking-tight">
                 {outcome.singleWinner?.name?.trim() || 'الفريق الفائز'}
               </h1>
-              <p className="text-sm sm:text-base font-medium text-[#777B73]">
+              <p className="text-sm sm:text-base font-medium text-[#52574E]">
                 حسموا صدارة النزال برصيد{' '}
                 <AnimatedScoreCounter
                   value={outcome.topScore}

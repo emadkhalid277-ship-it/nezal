@@ -38,7 +38,7 @@ export const WhoAnsweredCorrectlyPanel: React.FC<WhoAnsweredCorrectlyPanelProps>
 
   return (
     <div
-      className="rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] p-4 sm:p-5 space-y-3.5"
+      className="rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] p-3.5 sm:p-5 space-y-3 sm:space-y-3.5"
       role="region"
       aria-label="مين جاوب صح؟"
       dir="rtl"
@@ -46,11 +46,11 @@ export const WhoAnsweredCorrectlyPanel: React.FC<WhoAnsweredCorrectlyPanelProps>
       <div className="text-center space-y-1">
         <div className="inline-flex items-center justify-center gap-2">
           <HelpCircle className="w-5 h-5 text-[#F07842] shrink-0" />
-          <h4 className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]">
+          <h4 className="font-display text-base sm:text-xl font-bold text-[#1B1F1C]">
             مين جاوب صح؟
           </h4>
         </div>
-        <p className="text-xs font-medium text-[#52574E]">
+        <p className="text-xs font-medium text-[#52574E] leading-relaxed">
           {subtitle ||
             `اختر الفريق الفائز لإضافة +${points} نقطة لرصيده فقط، أو اختر «ولا فريق» للانتقال بدون نقاط.`}
         </p>
@@ -71,7 +71,7 @@ export const WhoAnsweredCorrectlyPanel: React.FC<WhoAnsweredCorrectlyPanelProps>
               disabled={disabled}
               onClick={() => onSelectTeam(idx)}
               style={{ backgroundColor: team.color || '#14543D' }}
-              className="min-h-[54px] px-4 py-3 rounded-xl text-white font-bold text-sm sm:text-base flex items-center justify-between gap-2.5 shadow-sm hover:brightness-105 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+              className="min-h-[52px] px-4 py-3 rounded-xl text-white font-bold text-sm sm:text-base flex items-center justify-between gap-2.5 shadow-sm hover:brightness-105 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             >
               <span className="flex items-center gap-2 min-w-0">
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />

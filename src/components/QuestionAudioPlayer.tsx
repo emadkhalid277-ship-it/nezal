@@ -198,7 +198,7 @@ export const QuestionAudioPlayer: React.FC<QuestionAudioPlayerProps> = ({
 
   return (
     <div
-      className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 text-right"
+      className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 text-right"
       aria-label="مشغل المقطع الصوتي للسؤال"
     >
       <audio
@@ -262,7 +262,7 @@ export const QuestionAudioPlayer: React.FC<QuestionAudioPlayerProps> = ({
           <span>مقطع صوتي للسؤال</span>
         </div>
 
-        <div className="text-xs font-semibold text-[#777B73]">
+        <div className="text-xs font-semibold text-[#52574E]">
           {previewMode ? (
             <span>
               {normalizedMaxPlays !== null
@@ -321,7 +321,7 @@ export const QuestionAudioPlayer: React.FC<QuestionAudioPlayerProps> = ({
                 }
                 onClick={handleTogglePlayPause}
                 aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل الصوت'}
-                className="flex-1 sm:flex-initial min-h-[44px] min-w-[124px] px-4 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] disabled:bg-[#E5E8DD] disabled:text-[#777B73] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-initial min-h-[44px] min-w-[124px] px-4 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] disabled:bg-[#E5E8DD] disabled:text-[#666B62] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>
@@ -359,7 +359,7 @@ export const QuestionAudioPlayer: React.FC<QuestionAudioPlayerProps> = ({
                 onClick={handleRestart}
                 aria-label="إعادة تشغيل المقطع من البداية"
                 title="إعادة تشغيل المقطع من البداية"
-                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] disabled:opacity-45 text-[#252824] border border-[#E5E8DD] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD] disabled:opacity-45 text-[#1B1F1C] border border-[#E5E8DD] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
                 <RotateCcw className="w-4 h-4 text-[#F07842]" />
                 <span>إعادة</span>
@@ -368,7 +368,7 @@ export const QuestionAudioPlayer: React.FC<QuestionAudioPlayerProps> = ({
 
             {/* Scrubber & Time (LTR for consistent slider progress direction) */}
             <div className="flex-1 flex items-center gap-3 min-w-0" dir="ltr">
-              <span className="font-mono tabular-nums text-xs font-bold text-[#252824] w-11 text-center shrink-0">
+              <span className="font-mono tabular-nums text-xs font-bold text-[#1B1F1C] w-11 text-center shrink-0">
                 {formatAudioSeconds(currentTime)}
               </span>
 
@@ -392,7 +392,7 @@ export const QuestionAudioPlayer: React.FC<QuestionAudioPlayerProps> = ({
                 />
               </div>
 
-              <span className="font-mono tabular-nums text-xs font-semibold text-[#777B73] w-11 text-center shrink-0">
+              <span className="font-mono tabular-nums text-xs font-semibold text-[#666B62] w-11 text-center shrink-0">
                 {duration > 0 ? formatAudioSeconds(duration) : '--:--'}
               </span>
             </div>

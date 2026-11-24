@@ -9,6 +9,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { validateQuestionImageFile } from '../utils/questionMedia';
+import { AlertBanner } from './ui';
 
 interface ImageCropModalProps {
   isOpen: boolean;
@@ -88,6 +89,18 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
       setErrorMsg(null);
     }
   }, [isOpen, initialFile, loadFileIntoImage]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, saving, onClose]);
 
   // Draw the square cropped canvas whenever imageElement, zoom, or offset changes
   const renderCropCanvas = useCallback(() => {
@@ -202,18 +215,26 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-[#252824]/70 backdrop-blur-xs"
+      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
+      aria-label={`ضبط ومعاينة صورة الفئة: ${categoryLabel}`}
+      dir="rtl"
+      onClick={() => {
+        if (!saving) onClose();
+      }}
     >
-      <div className="w-full max-w-3xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-3xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+      >
         {/* Modal Header */}
-        <div className="bg-[#14543D] text-white px-6 py-4 flex items-center justify-between">
-          <div>
+        <div className="bg-[#14543D] text-white px-5 sm:px-6 py-4 flex items-center justify-between gap-3 shrink-0">
+          <div className="min-w-0">
             <div className="text-[11px] font-bold text-[#F07842]">
               {categoryTypeLabel}
             </div>
-            <h3 className="font-display text-lg font-bold">
+            <h3 className="font-display text-base sm:text-lg font-bold truncate">
               ضبط ومعاينة صورة الفئة: «{categoryLabel}»
             </h3>
           </div>
@@ -221,7 +242,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 cursor-pointer"
+            className="min-w-[40px] min-h-[40px] rounded-xl text-white/85 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors shrink-0"
             aria-label="إغلاق"
           >
             <X className="w-5 h-5" />
@@ -229,20 +250,13 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6">
-          {errorMsg && (
-            <div
-              role="alert"
-              className="p-3.5 rounded-xl bg-rose-50 border border-rose-300 text-xs font-bold text-rose-800"
-            >
-              {errorMsg}
-            </div>
-          )}
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-6">
+          {errorMsg && <AlertBanner tone="error">{errorMsg}</AlertBanner>}
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
             {/* Interactive Crop Canvas */}
             <div className="md:col-span-7 space-y-4">
-              <div className="flex items-center justify-between text-xs font-bold text-[#252824]">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-[#1B1F1C]">
                 <span className="flex items-center gap-1.5">
                   <Move className="w-4 h-4 text-[#14543D]" />
                   <span>اسحب الصورة لضبط مكانها داخل المربع</span>
@@ -262,14 +276,14 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 <button
                   type="button"
                   onClick={() => filePickerRef.current?.click()}
-                  className="px-3 py-1.5 rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>اختيار صورة أخرى</span>
                 </button>
               </div>
 
-              <div className="relative aspect-square w-full max-w-[340px] mx-auto rounded-2xl overflow-hidden border-2 border-[#14543D] bg-[#F3F5E9] shadow-inner">
+              <div className="relative aspect-square w-full max-w-[340px] mx-auto rounded-2xl overflow-hidden border-2 border-[#14543D] bg-[#F7F8F1] shadow-inner">
                 <canvas
                   ref={canvasRef}
                   onPointerDown={handlePointerDown}
@@ -292,8 +306,8 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
               </div>
 
               {/* Zoom & Reset Controls */}
-              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3.5 flex items-center gap-3">
-                <ZoomOut className="w-4 h-4 text-[#777B73] shrink-0" />
+              <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-3.5 flex items-center gap-3">
+                <ZoomOut className="w-4 h-4 text-[#52574E] shrink-0" />
                 <input
                   type="range"
                   min={1}
@@ -312,7 +326,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                     setOffset({ x: 0, y: 0 });
                   }}
                   title="إعادة ضبط التوسيط"
-                  className="px-2.5 py-1.5 rounded-lg bg-[#FFFFFF] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#252824] flex items-center gap-1 shrink-0 cursor-pointer"
+                  className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#FFFFFF] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>توسيط</span>
@@ -322,7 +336,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
             {/* Live Card Preview & Current Image Comparison */}
             <div className="md:col-span-5 space-y-4">
-              <div className="text-xs font-bold text-[#252824]">
+              <div className="text-xs font-bold text-[#1B1F1C]">
                 معاينة شكل البطاقة قبل الحفظ:
               </div>
 
@@ -348,15 +362,15 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
               </div>
 
               {currentImageUrl && (
-                <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3 flex items-center gap-3">
+                <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-3 flex items-center gap-3">
                   <img
                     src={currentImageUrl}
                     alt="الصورة الحالية"
                     className="w-12 h-12 rounded-lg object-cover border border-[#E5E8DD] shrink-0"
                   />
-                  <div className="text-xs space-y-0.5">
-                    <div className="font-bold text-[#252824]">الصورة الحالية</div>
-                    <div className="text-[#777B73]">
+                  <div className="text-xs space-y-0.5 min-w-0">
+                    <div className="font-bold text-[#1B1F1C]">الصورة الحالية</div>
+                    <div className="text-[#52574E]">
                       سيتم استبدالها بالصورة الجديدة عند الحفظ.
                     </div>
                   </div>
@@ -367,12 +381,12 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 bg-[#F3F5E9] border-t border-[#E5E8DD] flex items-center justify-end gap-3">
+        <div className="px-5 sm:px-6 py-4 bg-[#F7F8F1] border-t border-[#E5E8DD] flex items-center justify-end gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="px-5 py-2.5 rounded-xl bg-[#FFFFFF] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#252824] cursor-pointer"
+            className="min-h-[42px] px-5 py-2 rounded-xl bg-[#FFFFFF] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-50 transition-colors"
           >
             إلغاء
           </button>
@@ -380,7 +394,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             type="button"
             onClick={handleConfirm}
             disabled={saving || !imageElement}
-            className="px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer"
+            className="min-h-[42px] px-6 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Check className="w-4 h-4" />
             <span>

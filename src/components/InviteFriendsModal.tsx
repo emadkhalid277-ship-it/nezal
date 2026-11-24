@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
-  X,
   UserPlus,
   Play,
   Eye,
   Check,
-  AlertCircle,
   Search,
   Users,
   ShieldOff,
@@ -27,6 +25,7 @@ import {
   subscribeToFriendships,
   subscribeToGameInvites,
 } from '../services/socialService';
+import { AlertBanner, ModalShell, StatusBadge, UI_CLASSES } from './ui';
 
 interface InviteFriendsModalProps {
   isOpen: boolean;
@@ -136,186 +135,171 @@ export const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E8DD] bg-[#F3F5E9]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#14543D] text-white flex items-center justify-center">
-              <UserPlus className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-display text-base font-bold text-[#252824]">
-                دعوة الأصدقاء للغرفة
-              </h3>
-              <p className="text-[11px] text-[#777B73]">
-                رمز الغرفة: <span className="font-mono font-bold text-[#14543D]">{roomCode}</span>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="إغلاق"
-            className="p-2 rounded-xl text-[#777B73] hover:text-[#252824] hover:bg-[#E5E8DD]/50 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title="دعوة الأصدقاء للغرفة"
+      subtitle={
+        <span>
+          رمز الغرفة:{' '}
+          <span className="font-mono font-bold text-[#14543D]">{roomCode}</span>
+        </span>
+      }
+      icon={
+        <div className="w-8 h-8 rounded-xl bg-[#14543D] text-white flex items-center justify-center">
+          <UserPlus className="w-4 h-4" />
         </div>
+      }
+      headerTone="light"
+      maxWidth="lg"
+      bodyClassName="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1"
+    >
+      {errorMsg && (
+        <AlertBanner tone="error" onDismiss={() => setErrorMsg(null)}>
+          {errorMsg}
+        </AlertBanner>
+      )}
 
-        {/* Body */}
-        <div className="p-5 space-y-4">
-          {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
+      {/* Search Friends */}
+      <div className="relative">
+        <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-[#52574E] pointer-events-none" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="ابحث في قائمة أصدقائك..."
+          className={`${UI_CLASSES.input} pr-10 text-xs font-bold`}
+        />
+      </div>
 
-          {/* Search Friends */}
-          <div className="relative">
-            <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-[#777B73]" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ابحث في قائمة أصدقائك..."
-              className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-[#E5E8DD] focus:border-[#14543D] text-xs font-bold text-[#252824] outline-none"
-            />
+      {/* Friends List */}
+      <div className="max-h-[340px] overflow-y-auto space-y-2.5 pl-0.5">
+        {filteredFriends.length === 0 ? (
+          <div className="py-10 text-center space-y-2 text-[#52574E]">
+            <Users className="w-8 h-8 mx-auto opacity-40" />
+            <p className="text-xs font-bold">
+              {friendEntries.length === 0
+                ? 'لا يوجد لديك أصدقاء مضافون بعد. أضف أصدقاء من صفحة الأصدقاء!'
+                : 'لا توجد نتائج مطابقة لبحثك'}
+            </p>
           </div>
+        ) : (
+          filteredFriends.map((friend) => {
+            const isOnline = friend.status !== 'offline';
+            const playPending =
+              sentFeedback[`${friend.uid}_play`] ||
+              hasPendingInvite(friend.uid, 'play');
+            const spectatePending =
+              sentFeedback[`${friend.uid}_spectate`] ||
+              hasPendingInvite(friend.uid, 'spectate');
 
-          {/* Friends List */}
-          <div className="max-h-[340px] overflow-y-auto space-y-2.5 pr-1">
-            {filteredFriends.length === 0 ? (
-              <div className="py-10 text-center space-y-2 text-[#777B73]">
-                <Users className="w-8 h-8 mx-auto opacity-40" />
-                <p className="text-xs font-bold">
-                  {friendEntries.length === 0
-                    ? 'لا يوجد لديك أصدقاء مضافون بعد. أضف أصدقاء من صفحة الأصدقاء!'
-                    : 'لا توجد نتائج مطابقة لبحثك'}
-                </p>
-              </div>
-            ) : (
-              filteredFriends.map((friend) => {
-                const isOnline = friend.status !== 'offline';
-                const playPending =
-                  sentFeedback[`${friend.uid}_play`] ||
-                  hasPendingInvite(friend.uid, 'play');
-                const spectatePending =
-                  sentFeedback[`${friend.uid}_spectate`] ||
-                  hasPendingInvite(friend.uid, 'spectate');
-
-                return (
-                  <div
-                    key={friend.uid}
-                    className="p-3 rounded-2xl border border-[#E5E8DD] bg-[#F3F5E9]/45 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="relative shrink-0">
-                        {friend.photoURL ? (
-                          <img
-                            src={friend.photoURL}
-                            alt={friend.displayName}
-                            className="w-9 h-9 rounded-full object-cover border border-[#E5E8DD]"
-                          />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-[#14543D] text-white flex items-center justify-center text-xs font-bold">
-                            {friend.displayName[0]?.toUpperCase() || 'ن'}
-                          </div>
-                        )}
-                        <span
-                          className={`absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full border-2 border-white ${
-                            friend.status === 'online'
-                              ? 'bg-emerald-500'
-                              : friend.status === 'in_lobby'
-                              ? 'bg-sky-500'
-                              : friend.status === 'in_match'
-                              ? 'bg-[#F07842]'
-                              : 'bg-[#777B73]/50'
-                          }`}
-                        />
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-[#252824] truncate">
-                          {friend.displayName}
-                        </div>
-                        <div
-                          className={`text-[11px] font-medium ${
-                            isOnline ? 'text-[#14543D]' : 'text-[#777B73]'
-                          }`}
-                        >
-                          {formatPresenceLabel(friend.status)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {!friend.acceptsInvites ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#E5E8DD]/70 text-[11px] font-bold text-[#777B73] shrink-0">
-                        <ShieldOff className="w-3 h-3" />
-                        <span>أوقف الدعوات</span>
-                      </span>
+            return (
+              <div
+                key={friend.uid}
+                className="p-3 rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] flex flex-wrap sm:flex-nowrap items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative shrink-0">
+                    {friend.photoURL ? (
+                      <img
+                        src={friend.photoURL}
+                        alt={friend.displayName}
+                        className="w-10 h-10 rounded-xl object-cover border border-[#E5E8DD]"
+                      />
                     ) : (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {canInviteToPlay && (
-                          <button
-                            type="button"
-                            disabled={playPending || sendingKey === `${friend.uid}_play`}
-                            onClick={() => handleSendInvite(friend, 'play')}
-                            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
-                              playPending
-                                ? 'bg-emerald-100 text-emerald-800 cursor-default'
-                                : 'bg-[#14543D] text-white hover:bg-[#0E3D2C]'
-                            }`}
-                          >
-                            {playPending ? (
-                              <>
-                                <Check className="w-3 h-3" />
-                                <span>دُعي للعب</span>
-                              </>
-                            ) : (
-                              <>
-                                <Play className="w-3 h-3" />
-                                <span>للعب</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          disabled={spectatePending || sendingKey === `${friend.uid}_spectate`}
-                          onClick={() => handleSendInvite(friend, 'spectate')}
-                          className={`px-3 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
-                            spectatePending
-                              ? 'bg-emerald-100 text-emerald-800 cursor-default'
-                              : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824] hover:border-[#F07842] hover:text-[#F07842]'
-                          }`}
-                        >
-                          {spectatePending ? (
-                            <>
-                              <Check className="w-3 h-3" />
-                              <span>دُعي للمشاهدة</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="w-3 h-3" />
-                              <span>للمشاهدة</span>
-                            </>
-                          )}
-                        </button>
+                      <div className="w-10 h-10 rounded-xl bg-[#14543D] text-white flex items-center justify-center text-xs font-bold">
+                        {friend.displayName[0]?.toUpperCase() || 'ن'}
                       </div>
                     )}
+                    <span
+                      className={`absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                        friend.status === 'online'
+                          ? 'bg-emerald-500'
+                          : friend.status === 'in_lobby'
+                          ? 'bg-sky-500'
+                          : friend.status === 'in_match'
+                          ? 'bg-[#F07842]'
+                          : 'bg-[#666B62]/50'
+                      }`}
+                    />
                   </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-[#1B1F1C] truncate">
+                      {friend.displayName}
+                    </div>
+                    <div
+                      className={`text-[11px] font-medium ${
+                        isOnline ? 'text-[#14543D]' : 'text-[#52574E]'
+                      }`}
+                    >
+                      {formatPresenceLabel(friend.status)}
+                    </div>
+                  </div>
+                </div>
+
+                {!friend.acceptsInvites ? (
+                  <StatusBadge tone="neutral" className="shrink-0">
+                    <ShieldOff className="w-3 h-3" />
+                    <span>أوقف الدعوات</span>
+                  </StatusBadge>
+                ) : (
+                  <div className="flex items-center gap-1.5 shrink-0 mr-auto sm:mr-0">
+                    {canInviteToPlay && (
+                      <button
+                        type="button"
+                        disabled={playPending || sendingKey === `${friend.uid}_play`}
+                        onClick={() => handleSendInvite(friend, 'play')}
+                        className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                          playPending
+                            ? 'bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/20 cursor-default'
+                            : 'bg-[#14543D] text-white hover:bg-[#0E3F2D]'
+                        }`}
+                      >
+                        {playPending ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>دُعي للعب</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3.5 h-3.5" />
+                            <span>للعب</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={spectatePending || sendingKey === `${friend.uid}_spectate`}
+                      onClick={() => handleSendInvite(friend, 'spectate')}
+                      className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                        spectatePending
+                          ? 'bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/20 cursor-default'
+                          : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#1B1F1C] hover:border-[#F07842] hover:text-[#F07842]'
+                      }`}
+                    >
+                      {spectatePending ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>دُعي للمشاهدة</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>للمشاهدة</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
-    </div>
+    </ModalShell>
   );
 };

@@ -9,7 +9,6 @@ import {
   Layers,
   Users,
   CheckCircle2,
-  AlertCircle,
   Radio,
   Award,
   Search,
@@ -23,6 +22,14 @@ import {
   fetchAllMatchesForUser,
 } from '../services/matchService';
 import { UserMatchesStats } from '../components/UserMatchesStats';
+import {
+  AlertBanner,
+  ConfirmDialog,
+  EmptyState,
+  LoadingState,
+  StatusBadge,
+  UI_CLASSES,
+} from '../components/ui';
 
 interface MyMatchesPageProps {
   user: User | null;
@@ -46,6 +53,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,15 +73,15 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
       .finally(() => setLoading(false));
   }, [user]);
 
-  const handleDelete = async (matchId: string) => {
-    if (!user) return;
-    if (!window.confirm('هل أنت متأكد من رغبتك في حذف سجل هذه المباراة نهائياً؟')) return;
+  const confirmDeleteMatch = async () => {
+    if (!user || !confirmDeleteId) return;
 
-    setDeletingId(matchId);
+    setDeletingId(confirmDeleteId);
     setActionError(null);
     try {
-      await deleteMatchRecord(matchId, user.uid);
-      setMatches((prev) => prev.filter((m) => m.id !== matchId));
+      await deleteMatchRecord(confirmDeleteId, user.uid);
+      setMatches((prev) => prev.filter((m) => m.id !== confirmDeleteId));
+      setConfirmDeleteId(null);
     } catch (err) {
       console.error('Failed to delete match:', err);
       setActionError('حدث خطأ أثناء حذف المباراة. يرجى المحاولة لاحقاً.');
@@ -179,10 +187,10 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
           <Trophy className="w-8 h-8 text-[#F07842]" />
         </div>
         <div className="space-y-2">
-          <h1 className="font-display text-2xl font-bold text-[#252824]">
+          <h1 className="font-display text-2xl font-bold text-[#1B1F1C]">
             سجل مبارياتي
           </h1>
-          <p className="text-sm text-[#777B73] max-w-md mx-auto">
+          <p className="text-sm text-[#52574E] max-w-md mx-auto">
             سجّل دخولك لمشاهدة سجل جميع مبارياتك المحلية والأونلاين، ومتابعة المباريات غير المكتملة في أي وقت ومن أي جهاز.
           </p>
         </div>
@@ -190,7 +198,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="w-full sm:w-auto px-8 py-3.5 min-h-[48px] rounded-2xl bg-[#14543D] text-[#FFFFFF] text-sm font-bold hover:bg-[#0E3D2C] cursor-pointer shadow-sm transition-all"
+            className={`${UI_CLASSES.btnGreen} w-full sm:w-auto px-8 min-h-[48px] rounded-2xl shadow-sm`}
           >
             تسجيل الدخول / إنشاء حساب
           </button>
@@ -204,15 +212,15 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
         <div>
-          <div className="flex items-center gap-2 text-xs text-[#777B73]">
+          <div className="flex items-center gap-2 text-xs text-[#52574E]">
             <span>حساب اللاعب</span>
             <span>•</span>
             <span className="font-bold text-[#14543D]">{user.displayName || user.email}</span>
           </div>
-          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#1B1F1C]">
             سجل مبارياتي
           </h1>
-          <p className="text-xs sm:text-sm text-[#777B73] mt-1">
+          <p className="text-xs sm:text-sm text-[#52574E] mt-1">
             سجل شامل يجمع مبارياتك المحلية (على نفس الجهاز) والمباريات الأونلاين (عن بُعد) مع إمكانية استكمال أي مباراة في أي وقت.
           </p>
         </div>
@@ -220,7 +228,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
         <button
           type="button"
           onClick={onNavigateHome}
-          className="px-4 py-2 text-xs font-bold text-[#777B73] hover:text-[#252824] bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl hover:bg-[#F3F5E9] transition-colors cursor-pointer"
+          className="min-h-[40px] px-4 py-2 text-xs font-bold text-[#52574E] hover:text-[#1B1F1C] bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl hover:bg-[#F7F8F1] transition-colors cursor-pointer"
         >
           العودة للرئيسية
         </button>
@@ -228,19 +236,9 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
 
       {/* Error alert if any */}
       {actionError && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-bold flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{actionError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setActionError(null)}
-            className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer"
-          >
-            إغلاق
-          </button>
-        </div>
+        <AlertBanner tone="error" onDismiss={() => setActionError(null)}>
+          {actionError}
+        </AlertBanner>
       )}
 
       {/* Interactive Stats Dashboard with Recharts */}
@@ -249,10 +247,10 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
       {/* Multi-Filter Controls Section */}
       <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-[#252824]">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#1B1F1C]">
             <Filter className="w-4 h-4 text-[#14543D]" />
             <span>تصفية وبحث المباريات</span>
-            <span className="text-[11px] font-normal text-[#777B73]">
+            <span className="text-[11px] font-normal text-[#666B62]">
               (يتم تطبيق الفلاتر والبحث معاً)
             </span>
           </div>
@@ -261,7 +259,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
             <button
               type="button"
               onClick={handleResetFilters}
-              className="inline-flex items-center gap-1.5 text-xs text-[#F07842] hover:text-[#d45e2a] font-bold cursor-pointer self-start sm:self-center"
+              className="inline-flex items-center gap-1.5 min-h-[36px] text-xs text-[#F07842] hover:text-[#D9632E] font-bold cursor-pointer self-start sm:self-center"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>إعادة تعيين الفلاتر</span>
@@ -271,19 +269,21 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
 
         {/* Search Bar */}
         <div className="relative">
-          <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-4 h-4 text-[#666B62] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ابحث باسم الفريق، عنوان المباراة، الفئات المختارة، أو رمز الغرفة..."
-            className="w-full pr-10 pl-9 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9]/50 text-xs sm:text-sm text-[#252824] placeholder:text-[#777B73] focus:outline-none focus:border-[#14543D] focus:bg-[#FFFFFF] transition-colors"
+            aria-label="ابحث في سجل المباريات"
+            className="w-full min-h-[44px] pr-10 pl-11 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#F7F8F1] text-xs sm:text-sm text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15 focus:bg-[#FFFFFF] transition-colors"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#777B73] hover:text-[#252824] cursor-pointer"
+              aria-label="مسح البحث"
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#666B62] hover:text-[#1B1F1C] cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -294,17 +294,17 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
           {/* Axis 1: Mode Filter (نوع المباراة) */}
           <div className="space-y-1.5">
-            <span className="text-xs font-bold text-[#777B73] block">
+            <span className="text-xs font-bold text-[#52574E] block">
               نوع المباراة:
             </span>
-            <div className="grid grid-cols-3 gap-1 sm:gap-1.5 bg-[#F3F5E9] p-1 rounded-xl">
+            <div className="grid grid-cols-3 gap-1 sm:gap-1.5 bg-[#F7F8F1] border border-[#E5E8DD] p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setModeFilter('all')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   modeFilter === 'all'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
-                    : 'text-[#777B73] hover:text-[#252824]'
+                    : 'text-[#52574E] hover:text-[#1B1F1C]'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5 shrink-0 hidden sm:inline" />
@@ -314,10 +314,10 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setModeFilter('local')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   modeFilter === 'local'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
-                    : 'text-[#777B73] hover:text-[#252824]'
+                    : 'text-[#52574E] hover:text-[#1B1F1C]'
                 }`}
               >
                 <Users className="w-3.5 h-3.5 text-[#14543D] shrink-0 hidden sm:inline" />
@@ -327,10 +327,10 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setModeFilter('online')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   modeFilter === 'online'
                     ? 'bg-[#FFFFFF] text-[#F07842] shadow-xs'
-                    : 'text-[#777B73] hover:text-[#252824]'
+                    : 'text-[#52574E] hover:text-[#1B1F1C]'
                 }`}
               >
                 <Radio className="w-3.5 h-3.5 text-[#F07842] shrink-0 hidden sm:inline" />
@@ -341,17 +341,17 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
 
           {/* Axis 2: Status Filter (حالة المباراة) */}
           <div className="space-y-1.5">
-            <span className="text-xs font-bold text-[#777B73] block">
+            <span className="text-xs font-bold text-[#52574E] block">
               حالة المباراة:
             </span>
-            <div className="grid grid-cols-3 gap-1 sm:gap-1.5 bg-[#F3F5E9] p-1 rounded-xl">
+            <div className="grid grid-cols-3 gap-1 sm:gap-1.5 bg-[#F7F8F1] border border-[#E5E8DD] p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
                 className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   statusFilter === 'all'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
-                    : 'text-[#777B73] hover:text-[#252824]'
+                    : 'text-[#52574E] hover:text-[#1B1F1C]'
                 }`}
               >
                 <span>الكل</span>
@@ -360,10 +360,10 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter('completed')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   statusFilter === 'completed'
                     ? 'bg-[#FFFFFF] text-emerald-700 shadow-xs'
-                    : 'text-[#777B73] hover:text-[#252824]'
+                    : 'text-[#52574E] hover:text-[#1B1F1C]'
                 }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 hidden sm:inline" />
@@ -373,10 +373,10 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter('in_progress')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   statusFilter === 'in_progress'
                     ? 'bg-[#FFFFFF] text-amber-700 shadow-xs'
-                    : 'text-[#777B73] hover:text-[#252824]'
+                    : 'text-[#52574E] hover:text-[#1B1F1C]'
                 }`}
               >
                 <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0 hidden sm:inline" />
@@ -387,11 +387,11 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
         </div>
 
         {/* Active Results Summary */}
-        <div className="flex items-center justify-between text-xs text-[#777B73] pt-1">
-          <div>
+        <div className="flex items-center justify-between text-xs text-[#52574E] pt-1">
+          <div className="tabular-nums">
             يتم عرض{' '}
-            <span className="font-bold text-[#252824]">{filteredMatches.length}</span> من
-            أصل <span className="font-bold text-[#252824]">{matches.length}</span> مباراة
+            <span className="font-bold text-[#1B1F1C]">{filteredMatches.length}</span> من
+            أصل <span className="font-bold text-[#1B1F1C]">{matches.length}</span> مباراة
           </div>
           {hasActiveFilters && (
             <div className="text-[11px] text-[#14543D] font-bold">
@@ -406,43 +406,36 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
 
       {/* Loading state */}
       {loading ? (
-        <div className="py-20 text-center space-y-3">
-          <div className="w-10 h-10 border-3 border-[#14543D] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-bold text-[#777B73]">جاري تحميل سجل المباريات...</p>
-        </div>
+        <LoadingState message="جاري تحميل سجل المباريات..." />
       ) : filteredMatches.length === 0 ? (
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-12 text-center space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#F3F5E9] text-[#777B73] flex items-center justify-center mx-auto">
-            <Trophy className="w-6 h-6" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-display text-lg font-bold text-[#252824]">
-              لا توجد مباريات تطابق الفلاتر المحددة
-            </h3>
-            <p className="text-xs text-[#777B73] max-w-md mx-auto">
-              {hasActiveFilters
-                ? 'جرّب تغيير خيارات التصفية أو البحث للعثور على المباريات التي تبحث عنها.'
-                : 'ابدأ مباراة جديدة محلياً أو أونلاين وستظهر هنا تلقائياً.'}
-            </p>
-          </div>
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="px-6 py-2.5 rounded-xl bg-[#14543D] text-[#FFFFFF] text-xs font-bold hover:bg-[#0E3D2C] cursor-pointer"
-            >
-              عرض جميع المباريات
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onNavigateHome}
-              className="px-6 py-2.5 rounded-xl bg-[#14543D] text-[#FFFFFF] text-xs font-bold hover:bg-[#0E3D2C] cursor-pointer"
-            >
-              بدء مباراة جديدة
-            </button>
-          )}
-        </div>
+        <EmptyState
+          icon={<Trophy className="w-6 h-6 text-[#F07842]" />}
+          title="لا توجد مباريات تطابق الفلاتر المحددة"
+          description={
+            hasActiveFilters
+              ? 'جرّب تغيير خيارات التصفية أو البحث للعثور على المباريات التي تبحث عنها.'
+              : 'ابدأ مباراة جديدة محلياً أو أونلاين وستظهر هنا تلقائياً.'
+          }
+          action={
+            hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className={`${UI_CLASSES.btnGreen} text-xs`}
+              >
+                عرض جميع المباريات
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onNavigateHome}
+                className={`${UI_CLASSES.btnGreen} text-xs`}
+              >
+                بدء مباراة جديدة
+              </button>
+            )
+          }
+        />
       ) : (
         /* Matches List Grid */
         <div className="space-y-4">
@@ -508,46 +501,46 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                 {/* Match Card Top Row */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-3">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <h3 className="font-display font-bold text-base text-[#252824]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-display font-bold text-base text-[#1B1F1C]">
                         {matchTitle}
                       </h3>
-                      <span className="font-mono text-xs text-[#777B73] bg-[#F3F5E9] px-2 py-0.5 rounded-md font-bold">
+                      <span className="font-mono text-xs text-[#52574E] bg-[#F7F8F1] border border-[#E5E8DD] px-2 py-0.5 rounded-md font-bold">
                         {shortCode}
                       </span>
 
                       {/* Prominent Mode Badge */}
                       {isOnline ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-orange-50 text-[#F07842] border border-[#F07842]/30">
-                          <Radio className="w-3.5 h-3.5 text-[#F07842] animate-pulse" />
-                          <span>مباراة أونلاين (عن بُعد)</span>
-                        </span>
+                        <StatusBadge tone="orange">
+                          <Radio className="w-3.5 h-3.5" />
+                          <span>مباراة أونلاين</span>
+                        </StatusBadge>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/25">
-                          <Users className="w-3.5 h-3.5 text-[#14543D]" />
-                          <span>مباراة محلية (نفس الجهاز)</span>
-                        </span>
+                        <StatusBadge tone="green">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>مباراة محلية</span>
+                        </StatusBadge>
                       )}
 
                       {/* Status Badge */}
                       {isInProgress ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                        <StatusBadge tone="amber">
                           <Clock className="w-3.5 h-3.5" />
                           <span>غير مكتملة</span>
-                        </span>
+                        </StatusBadge>
                       ) : isCompleted ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <StatusBadge tone="green">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>مكتملة</span>
-                        </span>
+                        </StatusBadge>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-zinc-100 text-zinc-700">
+                        <StatusBadge tone="neutral">
                           <span>متوقفة</span>
-                        </span>
+                        </StatusBadge>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-[#777B73]">
+                    <div className="flex items-center gap-2 text-xs text-[#52574E]">
                       <Calendar className="w-3.5 h-3.5" />
                       <span>{dateLabel}</span>
                     </div>
@@ -556,9 +549,10 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                   <button
                     type="button"
                     disabled={deletingId === m.id}
-                    onClick={() => handleDelete(m.id)}
+                    onClick={() => setConfirmDeleteId(m.id)}
                     title="حذف من السجل"
-                    className="text-rose-500 hover:text-rose-700 p-2 rounded-xl hover:bg-rose-50 cursor-pointer transition-colors self-end sm:self-center"
+                    aria-label="حذف المباراة من السجل"
+                    className="min-w-[40px] min-h-[40px] text-rose-600 hover:text-rose-700 rounded-xl hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors self-end sm:self-center"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -575,7 +569,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                           className={`p-3 rounded-xl border flex items-center justify-between ${
                             isWinner
                               ? 'bg-[#EAF2EE] border-[#14543D]/30 shadow-xs ring-1 ring-[#14543D]/20'
-                              : 'bg-[#FFFFFF] border-[#E5E8DD]'
+                              : 'bg-[#F7F8F1] border-[#E5E8DD]'
                           }`}
                         >
                           <div className="flex items-center gap-2 truncate">
@@ -584,7 +578,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                               style={{ backgroundColor: t.color }}
                             />
                             <div className="truncate">
-                              <span className="text-xs font-bold text-[#252824] truncate block">
+                              <span className="text-xs font-bold text-[#1B1F1C] truncate block">
                                 {t.name}
                               </span>
                               {isWinner && (
@@ -595,7 +589,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                               )}
                             </div>
                           </div>
-                          <span className="font-mono text-base font-bold text-[#14543D] mr-2">
+                          <span className="font-mono text-base font-bold text-[#14543D] tabular-nums mr-2">
                             {t.score ?? 0}
                           </span>
                         </div>
@@ -607,7 +601,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                 {/* Selected Categories Tags */}
                 {categoriesList.length > 0 && (
                   <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center gap-1.5 text-xs text-[#777B73] font-medium">
+                    <div className="flex items-center gap-1.5 text-xs text-[#52574E] font-medium">
                       <Layers className="w-3.5 h-3.5 text-[#14543D]" />
                       <span>التصنيفات المختارة ({categoriesList.length}):</span>
                     </div>
@@ -615,7 +609,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                       {categoriesList.map((catName, idx) => (
                         <span
                           key={idx}
-                          className="px-2.5 py-1 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-[11px] font-bold text-[#252824]"
+                          className="px-2.5 py-1 rounded-lg bg-[#F7F8F1] border border-[#E5E8DD] text-[11px] font-bold text-[#1B1F1C]"
                         >
                           {catName}
                         </span>
@@ -626,7 +620,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
 
                 {/* Card Bottom Row: Winner / Questions info and Resume Button */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-[#E5E8DD]">
-                  <div className="text-xs text-[#777B73]">
+                  <div className="text-xs text-[#52574E]">
                     {isCompleted && m.winnerTeamName ? (
                       <span className="font-bold text-[#14543D] flex items-center gap-1.5">
                         <Trophy className="w-4 h-4 text-[#F07842]" />
@@ -645,9 +639,9 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                     <button
                       type="button"
                       onClick={() => handleResume(m)}
-                      className={`w-full sm:w-auto px-6 py-2.5 min-h-[44px] rounded-xl text-[#FFFFFF] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-transform active:scale-95 touch-manipulation ${
+                      className={`w-full sm:w-auto px-6 py-2.5 min-h-[44px] rounded-xl text-[#FFFFFF] text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors active:scale-[0.99] touch-manipulation ${
                         isOnline
-                          ? 'bg-[#F07842] hover:bg-[#d45e2a]'
+                          ? 'bg-[#F07842] hover:bg-[#D9632E]'
                           : 'bg-[#14543D] hover:bg-[#0E3D2C]'
                       }`}
                     >
@@ -670,6 +664,17 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={confirmDeleteMatch}
+        title="حذف سجل المباراة"
+        message="هل أنت متأكد من رغبتك في حذف سجل هذه المباراة نهائياً؟ لا يمكن التراجع عن هذا الإجراء."
+        confirmLabel="حذف المباراة"
+        tone="danger"
+        loading={deletingId !== null}
+      />
     </div>
   );
 };

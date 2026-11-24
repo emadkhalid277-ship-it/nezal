@@ -25,21 +25,20 @@ export const OfflineIndicator: React.FC = () => {
     <div
       role="status"
       aria-live="polite"
-      className="sticky top-[65px] z-30 w-full px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 border-b transition-colors"
-      style={{
-        backgroundColor: isOnline ? '#EAF2EE' : '#FEF2EC',
-        borderColor: isOnline ? 'rgba(20, 84, 61, 0.2)' : 'rgba(240, 120, 66, 0.35)',
-        color: isOnline ? '#14543D' : '#9A3412',
-      }}
+      className={`sticky top-[61px] sm:top-[69px] z-30 w-full px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 border-b transition-colors text-center ${
+        isOnline
+          ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D]'
+          : 'bg-[#FEF2EC] border-[#F07842]/35 text-[#9A3412]'
+      }`}
     >
       {isOnline ? (
         <>
-          <Wifi className="w-4 h-4 text-[#14543D]" />
+          <Wifi className="w-4 h-4 text-[#14543D] shrink-0" />
           <span>تمت استعادة الاتصال بالإنترنت — اللعب عن بُعد ومزامنة البيانات متاحان الآن</span>
         </>
       ) : (
         <>
-          <WifiOff className="w-4 h-4 text-[#F07842]" />
+          <WifiOff className="w-4 h-4 text-[#F07842] shrink-0" />
           <span>
             أنت غير متصل بالإنترنت — وضع «اللعب المحلي دون إنترنت» متاح، بينما يتطلب اللعب عن بُعد اتصالاً بالإنترنت
           </span>

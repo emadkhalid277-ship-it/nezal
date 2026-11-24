@@ -175,14 +175,14 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="space-y-14 sm:space-y-20 md:space-y-24 pb-10 md:pb-16">
+      <div className="space-y-10 sm:space-y-16 md:space-y-24 pb-8 md:pb-16">
         {/* SECTION 1: HERO SECTION */}
         <section
           aria-labelledby="hero-heading"
-          className="pt-4 sm:pt-7 md:pt-10"
+          className="pt-3 sm:pt-7 md:pt-10"
         >
           <div className="max-w-[1320px] mx-auto px-3 sm:px-6">
-            <div className="relative overflow-hidden bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-11 lg:p-14">
+            <div className="relative overflow-hidden bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-11 lg:p-14">
               {/* Subtle architectural grid & radial arena line art */}
               <svg
                 aria-hidden="true"
@@ -207,43 +207,43 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <rect width="100%" height="100%" fill="url(#nizal-hero-grid)" />
               </svg>
 
-              <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-10 lg:gap-12 items-center">
+              <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-10 lg:gap-12 items-center">
                 {/* Right Column (RTL): Brand Lockup, Headline, Value Prop & CTAs */}
-                <div className="lg:col-span-7 space-y-5 sm:space-y-6 text-right">
+                <div className="lg:col-span-7 space-y-4 sm:space-y-6 text-right">
                   {/* Clear NIZAL Logo + Bilingual Wordmark */}
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-16 h-11 sm:w-20 sm:h-[52px] rounded-xl bg-[#124833] border border-[#14543D]/25 overflow-hidden flex items-center justify-center shrink-0 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-9 sm:w-20 sm:h-[52px] rounded-xl bg-[#124833] border border-[#14543D]/25 overflow-hidden flex items-center justify-center shrink-0 shadow-xs">
                       <img
                         src="/assets/aistudio/Screenshot_2026-11-03_192625_a95ae528.png"
                         alt="شعار منصة نِزال NIZAL"
                         decoding="async"
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-contain p-1.5 select-none"
+                        className="w-full h-full object-contain p-1 sm:p-1.5 select-none"
                       />
                     </div>
-                    <div className="space-y-0.5">
-                      <div className="flex items-baseline gap-2.5">
-                        <span className="font-display text-xl sm:text-2xl font-bold text-[#1B1F1C]">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-display text-lg sm:text-2xl font-bold text-[#1B1F1C]">
                           نِزال
                         </span>
                         <span
                           dir="ltr"
-                          className="font-mono text-xs sm:text-sm font-bold tracking-[0.2em] text-[#F07842]"
+                          className="font-mono text-[11px] sm:text-sm font-bold tracking-[0.2em] text-[#F07842]"
                         >
                           NIZAL
                         </span>
                       </div>
-                      <p className="text-xs font-semibold text-[#666B62]">
+                      <p className="text-[11px] sm:text-xs font-semibold text-[#666B62] truncate">
                         منصة المسابقات والتحديات الجماعية
                       </p>
                     </div>
                   </div>
 
                   {/* Hero Headline */}
-                  <div className="space-y-3 sm:space-y-4">
+                  <div className="space-y-2.5 sm:space-y-4">
                     <h1
                       id="hero-heading"
-                      className="font-display text-[clamp(2rem,4.6vw,3.75rem)] font-bold text-[#1B1F1C] leading-[1.16] tracking-tight"
+                      className="font-display text-[1.95rem] sm:text-[clamp(2.25rem,4.6vw,3.75rem)] font-bold text-[#1B1F1C] leading-[1.15] tracking-tight"
                     >
                       التحدي يبدأ{' '}
                       <span className="text-[#F07842]">هنا</span>
@@ -257,7 +257,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
 
                   {/* Primary & Secondary CTAs */}
-                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 pt-1">
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 pt-0.5 sm:pt-1">
                     <motion.button
                       type="button"
                       onClick={handlePrimaryPlay}
@@ -266,7 +266,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                         shouldReduceMotion ? undefined : { scale: 0.98 }
                       }
                       transition={{ duration: 0.15, ease: EASE_OUT }}
-                      className="min-h-[52px] px-7 py-3.5 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] rounded-2xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer shadow-xs whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] focus-visible:ring-offset-2"
+                      data-testid="hero-play-cta"
+                      className="min-h-[50px] sm:min-h-[52px] px-6 sm:px-7 py-3 text-sm sm:text-base font-bold text-[#FFFFFF] bg-[#F07842] hover:bg-[#D9632E] rounded-2xl transition-colors flex items-center justify-center gap-2.5 cursor-pointer shadow-xs whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] focus-visible:ring-offset-2"
                     >
                       <Play className="w-4 h-4 fill-current shrink-0" />
                       <span>العب الآن</span>
@@ -276,7 +277,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <button
                       type="button"
                       onClick={() => onNavigate?.('how_to_play')}
-                      className="min-h-[52px] px-6 py-3.5 text-sm sm:text-base font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#D7DCCB] rounded-2xl transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14543D]"
+                      className="min-h-[46px] sm:min-h-[52px] px-5 sm:px-6 py-2.5 sm:py-3.5 text-sm sm:text-base font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#D7DCCB] rounded-2xl transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14543D]"
                     >
                       <BookOpen className="w-4 h-4 text-[#14543D] shrink-0" />
                       <span>كيف تلعب؟</span>
@@ -392,44 +393,91 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                       {/* Real Categories Interactive Board Matrix */}
                       {heroBoardCategories.length > 0 && (
-                        <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
-                          {heroBoardCategories.map((cat, colIndex) => (
-                            <div key={cat.id} className="space-y-2 min-w-0">
-                              <button
-                                type="button"
-                                onClick={() => handleCategoryCardClick(cat)}
-                                className="w-full min-h-[44px] px-1.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#19694C] border border-white/10 text-[11px] sm:text-xs font-bold text-white leading-tight flex items-center justify-center text-center transition-colors cursor-pointer"
+                        <>
+                          {/* Mobile: Readable Horizontal Strips (Category Name + 3 Point Tiles) */}
+                          <div className="space-y-2 sm:hidden">
+                            {heroBoardCategories.map((cat, colIndex) => (
+                              <div
+                                key={`mob_prev_${cat.id}`}
+                                className="flex items-stretch gap-2"
                               >
-                                <span className="line-clamp-2">{cat.name}</span>
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCategoryCardClick(cat)}
+                                  className="flex-1 min-h-[44px] px-3 py-2 rounded-xl bg-[#14543D] hover:bg-[#19694C] border border-white/10 text-xs font-bold text-white text-right flex items-center transition-colors cursor-pointer min-w-0"
+                                >
+                                  <span className="truncate">{cat.name}</span>
+                                </button>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {tierPoints.map((pts) => {
+                                    const isActiveTile =
+                                      selectedBoardTile.colIndex === colIndex &&
+                                      selectedBoardTile.points === pts;
+                                    return (
+                                      <button
+                                        key={`mob_prev_${cat.id}_${pts}`}
+                                        type="button"
+                                        onClick={() =>
+                                          setSelectedBoardTile({
+                                            colIndex,
+                                            points: pts,
+                                          })
+                                        }
+                                        className={`min-w-[44px] min-h-[44px] px-2 rounded-xl font-mono tabular-nums text-xs font-bold transition-colors cursor-pointer border ${
+                                          isActiveTile
+                                            ? 'bg-[#F07842] border-[#F07842] text-white'
+                                            : 'bg-[#272B27] hover:bg-[#313631] border-white/10 text-[#F3F5E9]'
+                                        }`}
+                                      >
+                                        {pts}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
 
-                              {tierPoints.map((pts) => {
-                                const isActiveTile =
-                                  selectedBoardTile.colIndex === colIndex &&
-                                  selectedBoardTile.points === pts;
-                                return (
-                                  <button
-                                    key={pts}
-                                    type="button"
-                                    onClick={() =>
-                                      setSelectedBoardTile({
-                                        colIndex,
-                                        points: pts,
-                                      })
-                                    }
-                                    className={`w-full min-h-[44px] rounded-xl font-mono tabular-nums text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
-                                      isActiveTile
-                                        ? 'bg-[#F07842] border-[#F07842] text-white -translate-y-0.5'
-                                        : 'bg-[#252824] hover:bg-[#2F332E] border-white/10 text-[#F3F5E9]'
-                                    }`}
-                                  >
-                                    {pts}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ))}
-                        </div>
+                          {/* Tablet & Desktop: Classic 3-Column Interactive Matrix */}
+                          <div className="hidden sm:grid sm:grid-cols-3 gap-2.5">
+                            {heroBoardCategories.map((cat, colIndex) => (
+                              <div key={cat.id} className="space-y-2 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCategoryCardClick(cat)}
+                                  className="w-full min-h-[44px] px-1.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#19694C] border border-white/10 text-xs font-bold text-white leading-tight flex items-center justify-center text-center transition-colors cursor-pointer"
+                                >
+                                  <span className="line-clamp-2">{cat.name}</span>
+                                </button>
+
+                                {tierPoints.map((pts) => {
+                                  const isActiveTile =
+                                    selectedBoardTile.colIndex === colIndex &&
+                                    selectedBoardTile.points === pts;
+                                  return (
+                                    <button
+                                      key={pts}
+                                      type="button"
+                                      onClick={() =>
+                                        setSelectedBoardTile({
+                                          colIndex,
+                                          points: pts,
+                                        })
+                                      }
+                                      className={`w-full min-h-[44px] rounded-xl font-mono tabular-nums text-sm font-bold transition-all cursor-pointer border ${
+                                        isActiveTile
+                                          ? 'bg-[#F07842] border-[#F07842] text-white -translate-y-0.5'
+                                          : 'bg-[#272B27] hover:bg-[#313631] border-white/10 text-[#F3F5E9]'
+                                      }`}
+                                    >
+                                      {pts}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                        </>
                       )}
 
                       {/* Active Board Selection Prompt Footer */}
@@ -506,16 +554,16 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <motion.div
                     key={step.num}
                     initial={
-                      shouldReduceMotion ? false : { opacity: 0, y: 16 }
+                      shouldReduceMotion ? false : { opacity: 0, y: 10 }
                     }
                     whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.15 }}
+                    viewport={{ once: true, amount: 0.08 }}
                     transition={{
-                      duration: 0.35,
-                      delay: shouldReduceMotion ? 0 : index * 0.06,
+                      duration: 0.22,
+                      delay: shouldReduceMotion ? 0 : index * 0.03,
                       ease: EASE_OUT,
                     }}
-                    className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842]/60 rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 transition-colors"
+                    className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842]/60 rounded-2xl p-4 sm:p-6 flex flex-col justify-between space-y-4 sm:space-y-5 transition-colors"
                   >
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
@@ -627,15 +675,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                         aria-disabled="true"
                         onClick={() => handleCategoryCardClick(mainCat)}
                         initial={
-                          shouldReduceMotion ? false : { opacity: 0, y: 14 }
+                          shouldReduceMotion ? false : { opacity: 0, y: 10 }
                         }
                         whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, amount: 0.1 }}
+                        viewport={{ once: true, amount: 0.05 }}
                         transition={{
-                          duration: 0.3,
+                          duration: 0.2,
                           delay: shouldReduceMotion
                             ? 0
-                            : Math.min(index, 7) * 0.04,
+                            : Math.min(index, 5) * 0.02,
                           ease: EASE_OUT,
                         }}
                         aria-label={`${mainCat.name} - قريباً، هذه الفئة غير متاحة حالياً`}
@@ -662,7 +710,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
                         <div className="flex-1 w-full p-3.5 sm:p-5 flex flex-col justify-between text-right gap-2 bg-[#F7F8F1]">
                           <div className="space-y-1">
-                            <h3 className="font-display text-base sm:text-xl font-bold text-[#252824] leading-snug">
+                            <h3 className="font-display text-base sm:text-xl font-bold text-[#1B1F1C] leading-snug">
                               {mainCat.name}
                             </h3>
                             <p className="text-xs font-semibold text-[#D9602B] leading-relaxed">
@@ -683,17 +731,17 @@ export const HomePage: React.FC<HomePageProps> = ({
                         shouldReduceMotion ? undefined : categoryCardVariants
                       }
                       initial={
-                        shouldReduceMotion ? 'rest' : { opacity: 0, y: 14 }
+                        shouldReduceMotion ? 'rest' : { opacity: 0, y: 10 }
                       }
                       whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true, amount: 0.1 }}
+                      viewport={{ once: true, amount: 0.05 }}
                       whileHover={shouldReduceMotion ? undefined : 'hover'}
                       whileTap={shouldReduceMotion ? undefined : 'tap'}
                       transition={{
-                        duration: 0.3,
+                        duration: 0.2,
                         delay: shouldReduceMotion
                           ? 0
-                          : Math.min(index, 7) * 0.04,
+                          : Math.min(index, 5) * 0.02,
                         ease: EASE_OUT,
                       }}
                       aria-label={`استعراض فئة ${mainCat.name}`}

@@ -31,13 +31,23 @@ import {
   Clock,
   Volume2,
   QrCode,
+  Home,
+  Menu,
+  X,
+  ChevronLeft,
+  Database,
 } from 'lucide-react';
 import { AdminPlayerAnalytics } from '../components/AdminPlayerAnalytics';
 import { AdminSeenQuestionsSection } from '../components/AdminSeenQuestionsSection';
 import { AdminVisualEffectsSection } from '../components/AdminVisualEffectsSection';
 import { AdminWalaKalimaSection } from '../components/AdminWalaKalimaSection';
 import { QuestionAudioPlayer } from '../components/QuestionAudioPlayer';
-import { WalaKalimaSettings } from '../types/walaKalima';
+import {
+  isWalaKalimaCategory,
+  WALA_KALIMA_MAIN_CATEGORY_ID,
+  WalaKalimaSettings,
+} from '../types/walaKalima';
+import { MAIN_CATEGORIES } from '../data/categoriesAndSeed';
 import {
   ApprovalStatus,
   ContactSettings,
@@ -68,6 +78,7 @@ import {
 import { CategoryIcon } from '../components/CategoryIcon';
 import { CategoryCardArtwork } from '../components/CategoryCardArtwork';
 import { ImageCropModal } from '../components/ImageCropModal';
+import { AlertBanner } from '../components/ui';
 import { uploadCategoryImageToCloudinarySigned } from '../services/cloudinaryService';
 import {
   bulkDeleteFromFirestore,
@@ -123,6 +134,7 @@ interface AdminDashboardPageProps {
 }
 
 type AdminTab =
+  | 'overview'
   | 'main_categories'
   | 'subcategories'
   | 'images'
@@ -187,8 +199,8 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
     onDelete,
   }) => (
     <div
-      className={`py-3 flex items-center justify-between gap-3 [content-visibility:auto] [contain-intrinsic-size:auto_68px] ${
-        !sub.isActive ? 'opacity-50' : ''
+      className={`py-3.5 px-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 [content-visibility:auto] [contain-intrinsic-size:auto_76px] ${
+        !sub.isActive ? 'opacity-60' : ''
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -198,40 +210,45 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
             alt={sub.name}
             loading="lazy"
             decoding="async"
-            className="w-10 h-10 rounded-lg object-cover border border-[#E5E8DD] shrink-0"
+            className="w-11 h-11 rounded-xl object-cover border border-[#E5E8DD] bg-[#F3F5E9] shrink-0"
           />
         ) : (
-          <div className="w-10 h-10 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] flex items-center justify-center text-[#777B73] shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] flex items-center justify-center text-[#52574E] shrink-0">
             <ImageIcon className="w-4 h-4" />
           </div>
         )}
-        <div className="space-y-0.5 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-[#777B73] bg-[#F3F5E9] px-1.5 py-0.5 rounded">
+        <div className="space-y-1 min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono tabular-nums text-[11px] font-bold text-[#52574E]">
               #{sub.sortOrder}
             </span>
-            <span className="font-display text-sm font-bold text-[#252824] truncate">
+            <span className="font-display text-sm font-bold text-[#1B1F1C] truncate">
               {sub.name}
             </span>
             {sub.isComingSoon && (
-              <span className="text-[10px] font-bold text-white bg-[#F07842] px-2 py-0.5 rounded">
-                قريباً
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#D9602B] bg-[#FEF2EC] border border-[#F07842]/30 px-2 py-0.5 rounded-md">
+                <Clock className="w-3 h-3" />
+                <span>قريباً</span>
               </span>
             )}
             {!sub.isActive && (
-              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
-                مخفية
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                <EyeOff className="w-3 h-3" />
+                <span>مخفية</span>
               </span>
             )}
           </div>
-          <div className="text-[11px] text-[#777B73] truncate">
-            {sub.description || 'بدون وصف'} ·{' '}
-            <strong className="text-[#14543D]">{qCount} سؤال</strong>
+          <div className="text-xs text-[#52574E] flex flex-wrap items-center gap-1.5 truncate">
+            <span className="truncate">{sub.description || 'بدون وصف'}</span>
+            <span aria-hidden="true" className="text-[#E5E8DD]">·</span>
+            <span className="font-mono tabular-nums font-bold text-[#14543D] shrink-0">
+              {qCount} سؤال
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex flex-wrap items-center gap-1.5 shrink-0 sm:justify-end">
         <button
           type="button"
           disabled={actionLoading}
@@ -241,10 +258,10 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
               ? 'تفعيل الفئة وإزالة شارة قريباً'
               : 'تعطيل مؤقت بشارة قريباً'
           }
-          className={`p-1.5 rounded-lg cursor-pointer ${
+          className={`min-h-[36px] sm:min-h-[34px] px-2 rounded-lg border cursor-pointer transition-colors flex items-center gap-1 ${
             sub.isComingSoon
-              ? 'bg-[#FEF2EC] text-[#F07842] hover:bg-[#FDE4D7]'
-              : 'text-[#777B73] hover:text-[#F07842] hover:bg-[#FEF2EC]'
+              ? 'bg-[#FEF2EC] border-[#F07842]/35 text-[#F07842] hover:bg-[#FDE4D7]'
+              : 'bg-[#FFFFFF] border-[#E5E8DD] text-[#52574E] hover:text-[#F07842] hover:border-[#F07842]/40'
           }`}
         >
           <Clock className="w-3.5 h-3.5" />
@@ -258,19 +275,17 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
               ? 'تغيير صورة الفئة الفرعية من الجهاز'
               : 'اختيار صورة للفئة الفرعية من الجهاز'
           }
-          className="px-2 py-1.5 text-[11px] font-bold text-[#F07842] bg-[#FEF2EC] hover:bg-[#FDE4D7] border border-[#F07842]/25 rounded-lg flex items-center gap-1 cursor-pointer"
+          className="min-h-[36px] sm:min-h-[34px] px-2.5 py-1 text-[11px] font-bold text-[#F07842] bg-[#FEF2EC] hover:bg-[#FDE4D7] border border-[#F07842]/25 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
         >
           <ImageIcon className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline">
-            {sub.imageUrl ? 'تغيير الصورة' : 'إضافة صورة'}
-          </span>
+          <span>{sub.imageUrl ? 'تغيير الصورة' : 'إضافة صورة'}</span>
         </button>
         <button
           type="button"
           disabled={actionLoading}
           onClick={() => onMoveOrder(sub, 'up')}
           title="تقديم الترتيب"
-          className="p-1.5 text-[#777B73] hover:text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
+          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#52574E] hover:text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
         >
           <ArrowUp className="w-3.5 h-3.5" />
         </button>
@@ -279,7 +294,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           disabled={actionLoading}
           onClick={() => onMoveOrder(sub, 'down')}
           title="تأخير الترتيب"
-          className="p-1.5 text-[#777B73] hover:text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
+          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#52574E] hover:text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
         >
           <ArrowDown className="w-3.5 h-3.5" />
         </button>
@@ -290,7 +305,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           title={
             sub.isActive ? 'إخفاء الفئة الفرعية' : 'إظهار الفئة الفرعية'
           }
-          className="p-1.5 text-[#14543D] hover:bg-[#EAF2EE] rounded-lg cursor-pointer"
+          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#14543D] bg-[#EAF2EE]/70 hover:bg-[#EAF2EE] rounded-lg cursor-pointer transition-colors"
         >
           {sub.isActive ? (
             <Eye className="w-3.5 h-3.5" />
@@ -302,7 +317,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           type="button"
           onClick={() => onEdit(sub)}
           title="تعديل أو إعادة تسمية أو نقل الفئة"
-          className="p-1.5 text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
+          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
         >
           <Edit3 className="w-3.5 h-3.5" />
         </button>
@@ -311,7 +326,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           disabled={actionLoading}
           onClick={() => onDelete(sub)}
           title="حذف الفئة الفرعية"
-          className="p-1.5 text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer"
+          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -344,7 +359,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   onSeedFoundationalPack,
   seeding,
 }) => {
-  const [adminTab, setAdminTab] = useState<AdminTab>('main_categories');
+  const [adminTab, setAdminTab] = useState<AdminTab>('overview');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Filter & Search States for Questions
   const [searchQuery, setSearchQuery] = useState('');
@@ -370,10 +386,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     searchQuery,
   ]);
 
-  // Bulk Selection & Delete Confirmation State
+  // Bulk Selection, Preview & Confirmation State
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const [previewQuestion, setPreviewQuestion] = useState<TriviaQuestion | null>(null);
+  const [bulkStatusConfirmModal, setBulkStatusConfirmModal] = useState<{
+    status: ApprovalStatus;
+    ids: string[];
+  } | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
     mode: 'single' | 'bulk';
     ids: string[];
@@ -814,10 +835,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         const inText = q.questionText.toLowerCase().includes(term);
         const inAns = q.correctAnswer.toLowerCase().includes(term);
         const inCat = q.category.toLowerCase().includes(term);
+        const inMainCat = (subcategoryToMainMap.get(q.category) || '')
+          .toLowerCase()
+          .includes(term);
         const inImgDesc = (q.imageDescription || '')
           .toLowerCase()
           .includes(term);
-        if (!inText && !inAns && !inCat && !inImgDesc) return false;
+        if (!inText && !inAns && !inCat && !inMainCat && !inImgDesc) return false;
       }
       return true;
     });
@@ -887,6 +911,29 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       duplicates: duplicateIdsSet.size,
     };
   }, [questions, duplicateIdsSet]);
+
+  const overviewStats = useMemo(() => {
+    const activeMain = mainCategories.filter((m) => m.isActive && !m.isComingSoon).length;
+    const comingSoonMain = mainCategories.filter((m) => m.isComingSoon).length;
+    const hiddenMain = mainCategories.filter((m) => !m.isActive).length;
+    const activeSub = subcategories.filter((s) => s.isActive && !s.isComingSoon).length;
+    const comingSoonSub = subcategories.filter((s) => s.isComingSoon).length;
+    const emptySub = subcategories.filter(
+      (s) => (questionCountBySubIdMap.get(s.id) ?? 0) === 0
+    ).length;
+    const missingImgSub = subcategories.filter(
+      (s) => !s.imageUrl || s.imageUrl.trim().length === 0
+    ).length;
+    return {
+      activeMain,
+      comingSoonMain,
+      hiddenMain,
+      activeSub,
+      comingSoonSub,
+      emptySub,
+      missingImgSub,
+    };
+  }, [mainCategories, subcategories, questionCountBySubIdMap]);
 
   // Trigger device file picker for a specific Main Category, Subcategory, or Form Draft
   const triggerSelectCategoryImage = useCallback(
@@ -1166,8 +1213,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     }
   };
 
-  const handleToggleMainCategoryComingSoon = async (mainCat: MainCategoryMeta) => {
-    if (!user) return;
+  const handleToggleMainCategoryComingSoon = async (
+    mainCat: MainCategoryMeta
+  ): Promise<{ ok: boolean; message: string }> => {
+    if (!user || !isAdmin) {
+      const msg = 'تعذر تحديث حالة «قريباً»: هذا الإجراء متاح للمشرفين المصرح لهم فقط.';
+      setStatusBanner(msg);
+      return { ok: false, message: msg };
+    }
     const nextComingSoon = !mainCat.isComingSoon;
     setActionLoading(true);
     setStatusBanner(null);
@@ -1191,19 +1244,30 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         mainCat
       );
       await onRefreshMainCategories();
-      setStatusBanner(
-        nextComingSoon
-          ? `تم تحويل الفئة «${mainCat.name}» إلى وضع «قريباً» مع الاحتفاظ بكافة بياناتها وأسئلتها.`
-          : `تم تفعيل الفئة «${mainCat.name}» وإتاحتها للعب في الموقع بنجاح!`
-      );
+      const successMsg = nextComingSoon
+        ? `تم تحويل الفئة «${mainCat.name}» إلى وضع «قريباً» مع الاحتفاظ بكافة بياناتها وأسئلتها.`
+        : `تم تفعيل الفئة «${mainCat.name}» وإتاحتها للعب في الموقع بنجاح!`;
+      setStatusBanner(successMsg);
+      return { ok: true, message: successMsg };
     } catch (err) {
-      setStatusBanner(
-        `تعذر تحديث حالة «قريباً» للفئة: ${err instanceof Error ? err.message : 'خطأ غير معروف'}`
-      );
+      const errorMsg = `تعذر تحديث حالة «قريباً» للفئة: ${
+        err instanceof Error ? err.message : 'خطأ غير معروف'
+      }`;
+      setStatusBanner(errorMsg);
+      return { ok: false, message: errorMsg };
     } finally {
       setActionLoading(false);
     }
   };
+
+  const walaKalimaMainCategory = useMemo(
+    () =>
+      mainCategories.find((m) =>
+        isWalaKalimaCategory({ mainCategoryId: m.id, mainCategoryName: m.name })
+      ) ||
+      MAIN_CATEGORIES.find((m) => m.id === WALA_KALIMA_MAIN_CATEGORY_ID),
+    [mainCategories]
+  );
 
   const handleMoveMainCategoryOrder = async (
     mainCat: MainCategoryMeta,
@@ -2036,14 +2100,28 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     });
   };
 
-  const handleBulkStatus = async (status: ApprovalStatus) => {
+  const requestBulkStatus = (status: ApprovalStatus) => {
     if (selectedIds.length === 0) return;
-    const count = selectedIds.length;
+    setBulkStatusConfirmModal({
+      status,
+      ids: [...selectedIds],
+    });
+  };
+
+  const executeConfirmedBulkStatus = async () => {
+    if (!bulkStatusConfirmModal || bulkStatusConfirmModal.ids.length === 0) return;
+    const { status, ids } = bulkStatusConfirmModal;
+    const count = ids.length;
     setActionLoading(true);
     setStatusBanner(null);
     try {
-      await bulkUpdateStatusInFirestore(selectedIds, status);
-      setStatusBanner(`تم تحديث حالة ${count} سؤال بنجاح.`);
+      await bulkUpdateStatusInFirestore(ids, status);
+      setBulkStatusConfirmModal(null);
+      setStatusBanner(
+        status === 'approved'
+          ? `تم اعتماد ${count} سؤال بنجاح.`
+          : `تم تحديث حالة ${count} سؤال إلى مرفوض بنجاح.`
+      );
       setSelectedIds([]);
       await onRefreshQuestions();
     } catch (err) {
@@ -2297,28 +2375,120 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     });
   }, [subcategories, imgMainFilter, imgSearchQuery]);
 
+  // Dismiss topmost open admin modal or mobile drawer with Escape
+  useEffect(() => {
+    const hasOpenOverlay = Boolean(
+      !cropTarget &&
+        (deleteConfirmModal ||
+          bulkStatusConfirmModal ||
+          previewQuestion ||
+          previewContribution ||
+          rejectModalContribution ||
+          modalOpen ||
+          deletingSubcategory ||
+          subModalOpen ||
+          deletingMainCategory ||
+          previewMainCategory ||
+          mainModalOpen ||
+          mobileSidebarOpen)
+    );
+    if (!hasOpenOverlay) return;
+
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (deleteConfirmModal) {
+        if (!actionLoading) {
+          setDeleteConfirmModal(null);
+          setDeleteModalError(null);
+        }
+        return;
+      }
+      if (bulkStatusConfirmModal) {
+        if (!actionLoading) setBulkStatusConfirmModal(null);
+        return;
+      }
+      if (previewQuestion) {
+        setPreviewQuestion(null);
+        return;
+      }
+      if (previewContribution) {
+        setPreviewContribution(null);
+        return;
+      }
+      if (rejectModalContribution) {
+        if (!actionLoading) setRejectModalContribution(null);
+        return;
+      }
+      if (modalOpen) {
+        if (!actionLoading) handleCloseQuestionModal();
+        return;
+      }
+      if (deletingSubcategory) {
+        if (!actionLoading) setDeletingSubcategory(null);
+        return;
+      }
+      if (subModalOpen) {
+        if (!actionLoading) setSubModalOpen(false);
+        return;
+      }
+      if (deletingMainCategory) {
+        if (!actionLoading) setDeletingMainCategory(null);
+        return;
+      }
+      if (previewMainCategory) {
+        setPreviewMainCategory(null);
+        return;
+      }
+      if (mainModalOpen) {
+        if (!actionLoading) setMainModalOpen(false);
+        return;
+      }
+      if (mobileSidebarOpen) {
+        setMobileSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => window.removeEventListener('keydown', handleEscapeKey);
+  }, [
+    cropTarget,
+    deleteConfirmModal,
+    bulkStatusConfirmModal,
+    previewQuestion,
+    previewContribution,
+    rejectModalContribution,
+    modalOpen,
+    deletingSubcategory,
+    subModalOpen,
+    deletingMainCategory,
+    previewMainCategory,
+    mainModalOpen,
+    mobileSidebarOpen,
+    actionLoading,
+  ]);
+
   // 1. Not Logged In View
   if (!user) {
     return (
-      <div className="max-w-[680px] mx-auto px-3 sm:px-6 py-8 md:py-16">
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-8 md:p-10 text-center space-y-6">
-          <div className="w-14 h-14 rounded-2xl bg-[#F3F5E9] border border-[#E5E8DD] flex items-center justify-center mx-auto">
-            <ShieldCheck className="w-7 h-7 text-[#14543D]" />
+      <div className="min-h-[75dvh] bg-[#F3F5E9] flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-[540px] bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 sm:p-10 text-center space-y-6">
+          <div className="w-14 h-14 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/25 flex items-center justify-center mx-auto">
+            <ShieldCheck className="w-7 h-7 text-[#F07842]" />
           </div>
 
           <div className="space-y-2">
             <div className="text-xs font-bold text-[#F07842]">
-              منطقة مخصصة للمشرفين · نِزال
+              منطقة المشرفين · منصة نِزال
             </div>
-            <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
-              لوحة تحكم نِزال الشاملة
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#1B1F1C]">
+              لوحة تحكم نِزال
             </h1>
-            <p className="text-sm text-[#777B73] leading-relaxed">
-              تتطلب إدارة الفئات الرئيسية، الفئات الفرعية، الصور، الأسئلة، وبيانات التواصل تسجيل الدخول بحساب المشرف المعتمد.
+            <p className="text-sm text-[#52574E] leading-relaxed">
+              تتطلب إدارة الفئات الرئيسية، الفئات الفرعية، الصور، بنك الأسئلة، وإعدادات المنصة تسجيل الدخول بحساب المشرف المعتمد.
             </p>
           </div>
 
-          <div className="pt-2 flex justify-center">
+          <div className="pt-1 flex justify-center">
             <button
               type="button"
               disabled={authLoading}
@@ -2329,7 +2499,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   onLoginGoogle();
                 }
               }}
-              className="px-7 py-3.5 text-sm font-bold text-white bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl transition-colors flex items-center gap-2.5 cursor-pointer"
+              className="min-h-[46px] px-7 py-3 text-sm font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl transition-colors flex items-center gap-2.5 cursor-pointer"
             >
               <LogIn className="w-4 h-4" />
               <span>
@@ -2345,14 +2515,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   // 2. Logged In But Not Authorized Admin
   if (!isAdmin) {
     return (
-      <div className="max-w-[680px] mx-auto px-3 sm:px-6 py-8 md:py-16">
-        <div className="bg-[#FFFFFF] border-2 border-[#F07842] rounded-2xl p-5 sm:p-8 md:p-10 text-center space-y-6">
-          <AlertTriangle className="w-12 h-12 text-[#F07842] mx-auto" />
+      <div className="min-h-[75dvh] bg-[#F3F5E9] flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-[560px] bg-[#FFFFFF] border border-[#F07842]/50 rounded-2xl p-6 sm:p-10 text-center space-y-6">
+          <div className="w-14 h-14 rounded-2xl bg-[#FEF2EC] border border-[#F07842]/25 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-7 h-7 text-[#F07842]" />
+          </div>
           <div className="space-y-2">
-            <h1 className="font-display text-2xl font-bold text-[#252824]">
+            <h1 className="font-display text-2xl font-bold text-[#1B1F1C]">
               هذا الحساب لا يملك صلاحية الإدارة
             </h1>
-            <p className="text-sm text-[#777B73] leading-relaxed">
+            <p className="text-sm text-[#52574E] leading-relaxed">
               أنت مسجل الدخول حالياً بالحساب ({user.email})، ولكن صلاحية تعديل الفئات وبنك الأسئلة محصورة للمشرفين المعتمدين فقط لحماية قاعدة البيانات.
             </p>
           </div>
@@ -2360,7 +2532,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             <button
               type="button"
               onClick={onLogout}
-              className="px-6 py-2.5 text-xs font-bold text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center gap-2 cursor-pointer"
+              className="min-h-[44px] px-6 py-2.5 text-xs font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center gap-2 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>تسجيل الخروج وتبديل الحساب</span>
@@ -2389,9 +2561,249 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     ? getQuestionsForSubcategory(deletingSubcategory)
     : [];
 
+  const navGroups: {
+    groupLabel: string;
+    items: {
+      id: AdminTab;
+      label: string;
+      icon: React.ReactNode;
+      count?: number;
+      alertCount?: number;
+    }[];
+  }[] = [
+    {
+      groupLabel: 'الرئيسية',
+      items: [
+        {
+          id: 'overview',
+          label: 'نظرة عامة',
+          icon: <Home className="w-4 h-4 shrink-0" />,
+        },
+      ],
+    },
+    {
+      groupLabel: 'المحتوى والأقسام',
+      items: [
+        {
+          id: 'main_categories',
+          label: 'الفئات الرئيسية',
+          icon: <LayoutGrid className="w-4 h-4 shrink-0" />,
+          count: sortedMainCategories.length,
+        },
+        {
+          id: 'subcategories',
+          label: 'الفئات الفرعية',
+          icon: <FolderTree className="w-4 h-4 shrink-0" />,
+          count: subcategories.length,
+        },
+        {
+          id: 'images',
+          label: 'صور الفئات',
+          icon: <ImageIcon className="w-4 h-4 shrink-0" />,
+          count: mainImagesCount + subImagesCount,
+        },
+        {
+          id: 'questions',
+          label: 'بنك الأسئلة',
+          icon: <FileQuestion className="w-4 h-4 shrink-0" />,
+          count: questions.length,
+        },
+        {
+          id: 'wala_kalima',
+          label: 'كلمات ولا كلمة (QR)',
+          icon: <QrCode className="w-4 h-4 shrink-0" />,
+        },
+      ],
+    },
+    {
+      groupLabel: 'المجتمع والتواصل',
+      items: [
+        {
+          id: 'contributions',
+          label: 'مساهمات المستخدمين',
+          icon: <Inbox className="w-4 h-4 shrink-0" />,
+          count: contributions.length,
+          alertCount: pendingContributionsCount,
+        },
+        {
+          id: 'contact',
+          label: 'صفحة تواصل معنا',
+          icon: <MessageCircle className="w-4 h-4 shrink-0" />,
+        },
+      ],
+    },
+    {
+      groupLabel: 'التحليلات وإعدادات اللعب',
+      items: [
+        {
+          id: 'player_analytics',
+          label: 'إحصائيات اللاعبين',
+          icon: <BarChart3 className="w-4 h-4 shrink-0" />,
+        },
+        {
+          id: 'question_dedup',
+          label: 'منع تكرار الأسئلة',
+          icon: <ShieldCheck className="w-4 h-4 shrink-0" />,
+        },
+        {
+          id: 'visual_effects',
+          label: 'المؤثرات البصرية',
+          icon: <Sparkles className="w-4 h-4 shrink-0" />,
+        },
+      ],
+    },
+  ];
+
+  const tabMetaMap: Record<AdminTab, { title: string; subtitle: string }> = {
+    overview: {
+      title: 'نظرة عامة على المنصة',
+      subtitle: 'ملخص الأرقام الفعلية والوصول السريع لمهام الإدارة اليومية',
+    },
+    main_categories: {
+      title: 'إدارة الفئات الرئيسية',
+      subtitle: 'تنظيم الأقسام الرئيسية، الترتيب، الصور، وحالات الظهور أو قريباً',
+    },
+    subcategories: {
+      title: 'إدارة الفئات الفرعية',
+      subtitle: 'تنظيم الفئات الفرعية، ربطها بالأقسام، وإدارة صورها ومحتواها',
+    },
+    images: {
+      title: 'إدارة صور الفئات',
+      subtitle: 'رفع وقص ومعاينة صور الفئات الرئيسية والفرعية عبر Cloudinary',
+    },
+    questions: {
+      title: 'إدارة بنك الأسئلة',
+      subtitle: 'بحث وتصفية ومعاينة الأسئلة النصية والمصوّرة والصوتية وإدارتها',
+    },
+    wala_kalima: {
+      title: 'إدارة فئة «ولا كلمة» (QR)',
+      subtitle: 'إدارة بطاقات التمثيل الصامت وإعدادات الجولة وأنواع المحتوى',
+    },
+    contributions: {
+      title: 'مراجعة مساهمات المستخدمين',
+      subtitle: 'تدقيق الأسئلة المقترحة من اللاعبين واعتمادها أو رفضها مع السبب',
+    },
+    contact: {
+      title: 'إعدادات صفحة تواصل معنا',
+      subtitle: 'تحديث بيانات الدعم الفني والواتساب وحسابات التواصل الاجتماعي',
+    },
+    player_analytics: {
+      title: 'إحصائيات اللاعبين والمباريات',
+      subtitle: 'تحليل النشاط في اللعب المحلي والأونلاين وشعبية الفئات',
+    },
+    question_dedup: {
+      title: 'منع تكرار الأسئلة',
+      subtitle: 'ضبط قواعد عدم تكرار الأسئلة ومتابعة سجل المشاهدات لكل لاعب',
+    },
+    visual_effects: {
+      title: 'إعدادات المؤثرات البصرية',
+      subtitle: 'التحكم بمؤثرات الإجابات والاحتفالات ومعاينتها مباشرة',
+    },
+  };
+
+  const handleSelectAdminTab = (tab: AdminTab) => {
+    setAdminTab(tab);
+    setMobileSidebarOpen(false);
+    if (tab === 'contributions') {
+      void loadContributions();
+    }
+  };
+
+  const renderSidebarNavigation = () => (
+    <div className="flex flex-col h-full">
+      {/* Sidebar Brand Header */}
+      <div className="px-5 py-4 border-b border-[#E5E8DD] flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-[#F07842] text-white flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-display text-base font-bold text-[#1B1F1C] leading-tight">
+              إدارة نِزال
+            </div>
+            <div className="text-[11px] text-[#52574E] truncate" dir="ltr">
+              {user.email}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-label="إغلاق القائمة الجانبية"
+          className="lg:hidden min-w-[44px] min-h-[44px] rounded-xl bg-[#F3F5E9] text-[#1B1F1C] flex items-center justify-center cursor-pointer"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Navigation Groups */}
+      <nav aria-label="أقسام لوحة المشرف" className="flex-1 overflow-y-auto p-3.5 space-y-5">
+        {navGroups.map((group) => (
+          <div key={group.groupLabel} className="space-y-1">
+            <div className="px-3 pb-1 text-[11px] font-bold text-[#52574E]">
+              {group.groupLabel}
+            </div>
+            <div className="space-y-1">
+              {group.items.map((item) => {
+                const isActive = adminTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectAdminTab(item.id)}
+                    className={`w-full min-h-[42px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-[#FEF2EC] text-[#1B1F1C] border border-[#F07842]/35'
+                        : 'text-[#52574E] hover:bg-[#F3F5E9]/80 hover:text-[#1B1F1C] border border-transparent'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      <span className={isActive ? 'text-[#F07842]' : 'text-[#52574E]'}>
+                        {item.icon}
+                      </span>
+                      <span className="truncate">{item.label}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 shrink-0">
+                      {typeof item.alertCount === 'number' && item.alertCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-[#F07842] text-white font-mono tabular-nums text-[10px] font-bold">
+                          {item.alertCount}
+                        </span>
+                      )}
+                      {typeof item.count === 'number' && (
+                        <span
+                          className={`font-mono tabular-nums text-[11px] ${
+                            isActive ? 'text-[#F07842] font-bold' : 'text-[#52574E]'
+                          }`}
+                        >
+                          {item.count}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Sidebar Footer */}
+      <div className="p-3.5 border-t border-[#E5E8DD]">
+        <button
+          type="button"
+          onClick={onLogout}
+          className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center justify-center gap-2 transition-colors cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 text-[#52574E]" />
+          <span>تسجيل الخروج</span>
+        </button>
+      </div>
+    </div>
+  );
+
   // 3. Authorized Admin Dashboard
   return (
-    <div className="max-w-[1360px] mx-auto px-3 sm:px-6 py-5 md:py-10 space-y-6 md:space-y-8">
+    <div className="min-h-[calc(100dvh-64px)] bg-[#F3F5E9] text-[#1B1F1C]">
       {/* Hidden File Input for Category Image Upload (JPG, JPEG, PNG, WEBP) */}
       <input
         ref={imageUploadInputRef}
@@ -2433,1242 +2845,1522 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         onConfirmSave={handleConfirmSaveCroppedImage}
       />
 
-      {/* Top Admin Header */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
-        <div className="space-y-1">
-          <div className="text-xs font-bold text-[#14543D] flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4" />
-            <span>لوحة المشرف المعتمدة · نِزال · {user.email}</span>
-          </div>
-          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
-            إدارة منصة نِزال الشاملة
-          </h1>
-          <p className="text-xs text-[#777B73]">
-            تحكم كامل في الفئات الرئيسية، الفئات الفرعية، الصور، بنك الأسئلة، وبيانات التواصل المرتبطة بـ Firebase.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={openAddMainCategoryModal}
-            className="px-4 py-2.5 text-xs font-bold text-white bg-[#14543D] hover:bg-[#0E3F2D] rounded-xl flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ إضافة فئة رئيسية</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openAddSubcategoryModal()}
-            className="px-4 py-2.5 text-xs font-bold text-[#14543D] bg-[#EAF2EE] hover:bg-[#D7E6DF] border border-[#14543D]/25 rounded-xl flex items-center gap-1.5 cursor-pointer"
-          >
-            <FolderTree className="w-4 h-4" />
-            <span>+ إضافة فئة فرعية</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="px-4 py-2.5 text-xs font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>إضافة سؤال جديد</span>
-          </button>
-
-          <button
-            type="button"
-            disabled={seeding}
-            onClick={onSeedFoundationalPack}
-            className="px-3.5 py-2.5 text-xs font-bold text-[#14543D] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#14543D]/25 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
-            title="حفظ وتزامن 1,975 سؤالاً مباشراً لجميع الفئات الـ 79 في Firestore بدفعات منظمة"
-          >
-            <Sparkles className="w-4 h-4 text-[#F07842] animate-pulse" />
-            <span>
-              {seeding ? 'جارٍ الحفظ والتزامن بدفعات...' : 'تزامن بنك الأسئلة الشامل (1,975 سؤال)'}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={async () => {
-              await Promise.all([
-                onRefreshMainCategories(),
-                onRefreshSubcategories(),
-                onRefreshQuestions(),
-                onRefreshContactSettings(),
-              ]);
-            }}
-            className="p-2.5 text-[#252824] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl cursor-pointer"
-            title="تحديث البيانات من Firebase"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${loadingQuestions ? 'animate-spin' : ''}`}
-            />
-          </button>
-
-          <button
-            type="button"
-            onClick={onLogout}
-            className="px-3.5 py-2.5 text-xs font-semibold text-[#777B73] hover:text-[#252824] bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl flex items-center gap-1.5 cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>خروج</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Mode Switcher Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-3 sm:flex-wrap sm:overflow-visible scrollbar-none border-b border-[#E5E8DD]">
-        <button
-          type="button"
-          onClick={() => setAdminTab('main_categories')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'main_categories'
-              ? 'bg-[#14543D] text-white'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <LayoutGrid className="w-4 h-4" />
-          <span>إدارة الفئات الرئيسية ({sortedMainCategories.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('subcategories')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'subcategories'
-              ? 'bg-[#14543D] text-white'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <FolderTree className="w-4 h-4" />
-          <span>إدارة الفئات الفرعية ({subcategories.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('images')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'images'
-              ? 'bg-[#14543D] text-white'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <ImageIcon className="w-4 h-4" />
-          <span>
-            إدارة صور الفئات ({mainImagesCount + subImagesCount} صورة مرفوعة)
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('questions')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'questions'
-              ? 'bg-[#14543D] text-white'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <FileQuestion className="w-4 h-4" />
-          <span>إدارة الأسئلة ({questions.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('contact')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'contact'
-              ? 'bg-[#14543D] text-white'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <MessageCircle className="w-4 h-4" />
-          <span>إدارة صفحة «تواصل معنا»</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setAdminTab('contributions');
-            loadContributions();
-          }}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'contributions'
-              ? 'bg-[#14543D] text-white'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <Inbox className="w-4 h-4" />
-          <span>مساهمات المستخدمين ({contributions.length})</span>
-          {pendingContributionsCount > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F07842] text-white">
-              {pendingContributionsCount} جديدة
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('question_dedup')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'question_dedup'
-              ? 'bg-[#14543D] text-white shadow-xs'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4 text-[#F07842]" />
-          <span>منع تكرار الأسئلة</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('visual_effects')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'visual_effects'
-              ? 'bg-[#14543D] text-white shadow-xs'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-[#F07842]" />
-          <span>المؤثرات البصرية</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('wala_kalima')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'wala_kalima'
-              ? 'bg-[#14543D] text-white shadow-xs'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <QrCode className="w-4 h-4 text-[#F07842]" />
-          <span>كلمات ولا كلمة (QR)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setAdminTab('player_analytics')}
-          className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 ${
-            adminTab === 'player_analytics'
-              ? 'bg-[#14543D] text-white shadow-xs'
-              : 'bg-[#FFFFFF] text-[#252824] border border-[#E5E8DD] hover:bg-[#F3F5E9]'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4 text-[#F07842]" />
-          <span>إحصائيات اللاعبين</span>
-        </button>
-      </div>
-
-      {statusBanner && (
+      {/* Mobile Slide-Over Sidebar Drawer */}
+      {mobileSidebarOpen && (
         <div
-          role={
-            statusBanner.startsWith('تعذر') ||
-            statusBanner.startsWith('صيغة') ||
-            statusBanner.startsWith('حجم') ||
-            statusBanner.startsWith('يرجى') ||
-            statusBanner.startsWith('حدث') ||
-            statusBanner.startsWith('الملف') ||
-            statusBanner.includes('غير صالحة')
-              ? 'alert'
-              : 'status'
-          }
-          className={`rounded-xl px-5 py-3.5 flex items-center justify-between gap-3 text-xs font-semibold border-2 ${
-            statusBanner.startsWith('تعذر') ||
-            statusBanner.startsWith('صيغة') ||
-            statusBanner.startsWith('حجم') ||
-            statusBanner.startsWith('يرجى') ||
-            statusBanner.startsWith('حدث') ||
-            statusBanner.startsWith('الملف') ||
-            statusBanner.includes('غير صالحة')
-              ? 'bg-rose-50 border-rose-500 text-rose-900'
-              : 'bg-[#FFFFFF] border-[#14543D] text-[#252824]'
-          }`}
+          className="fixed inset-0 z-50 lg:hidden flex"
+          role="dialog"
+          aria-modal="true"
+          aria-label="قائمة لوحة المشرف"
         >
-          <span>{statusBanner}</span>
-          <button
-            type="button"
-            onClick={() => setStatusBanner(null)}
-            className="text-[#777B73] hover:text-[#252824] cursor-pointer shrink-0"
-          >
-            إغلاق
-          </button>
+          <div
+            className="fixed inset-0 bg-[#1B1F1C]/50 backdrop-blur-xs"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+          <aside className="relative z-10 w-72 max-w-[85vw] h-full bg-[#FFFFFF] border-l border-[#E5E8DD] shadow-2xl">
+            {renderSidebarNavigation()}
+          </aside>
         </div>
       )}
 
-      {/* TAB 1: FULL MAIN CATEGORY MANAGEMENT (إدارة الفئات الرئيسية) */}
-      {adminTab === 'main_categories' && (
-        <div className="space-y-6">
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="text-xs font-bold text-[#F07842]">
-                المستوى الأول · تحكم كامل في الأقسام الرئيسية
-              </div>
-              <h2 className="font-display text-xl font-bold text-[#252824]">
-                إدارة الفئات الرئيسية ({sortedMainCategories.length})
-              </h2>
-              <p className="text-xs text-[#777B73]">
-                أضف فئة رئيسية جديدة، عدّل الاسم والوصف والصورة وترتيب الظهور، أو أخفِ وأظهر أي فئة في الموقع مع معاينة فورية.
-              </p>
-            </div>
+      {/* Workspace Container */}
+      <div className="max-w-[1440px] mx-auto px-3 sm:px-5 lg:px-6 py-4 lg:py-6 flex flex-col lg:flex-row items-start gap-5 lg:gap-6">
+        {/* Persistent Desktop Sidebar */}
+        <aside className="hidden lg:block w-64 xl:w-72 shrink-0 sticky top-20 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden max-h-[calc(100dvh-100px)]">
+          {renderSidebarNavigation()}
+        </aside>
 
-            <button
-              type="button"
-              onClick={openAddMainCategoryModal}
-              className="px-5 py-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shrink-0 self-start sm:self-center cursor-pointer shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ إضافة فئة رئيسية</span>
-            </button>
-          </div>
-
-          {sortedMainCategories.length === 0 ? (
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl py-16 text-center space-y-4">
-              <p className="font-display text-base font-bold text-[#252824]">
-                لا توجد فئات رئيسية حالياً
-              </p>
+        {/* Main Workspace Column */}
+        <div className="flex-1 min-w-0 w-full space-y-5">
+          {/* Top Bar */}
+          <header className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
-                onClick={openAddMainCategoryModal}
-                className="px-5 py-2.5 rounded-xl bg-[#14543D] text-white text-xs font-bold cursor-pointer"
+                onClick={() => setMobileSidebarOpen(true)}
+                aria-label="فتح قائمة لوحة المشرف"
+                className="lg:hidden min-w-[44px] min-h-[44px] rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-[#1B1F1C] flex items-center justify-center cursor-pointer shrink-0"
               >
-                + إضافة فئة رئيسية
+                <Menu className="w-5 h-5" />
               </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {sortedMainCategories.map((mainCat, index) => {
-                const subsInMain = getSubcategoriesForMain(mainCat);
-                const qsInMainCount =
-                  questionCountByMainIdMap.get(mainCat.id) ?? 0;
-                const hasImg = Boolean(
-                  mainCat.imageUrl && mainCat.imageUrl.trim().length > 0
-                );
 
-                return (
-                  <div
-                    key={mainCat.id}
-                    className={`bg-[#FFFFFF] border-2 rounded-2xl p-4 flex flex-col justify-between space-y-4 transition-all ${
-                      mainCat.isComingSoon
-                        ? 'border-[#F07842]/60 bg-[#FEF2EC]/25'
-                        : mainCat.isActive
-                        ? 'border-[#E5E8DD]'
-                        : 'border-dashed border-rose-300 bg-[#FFFFFF]/80 opacity-80'
-                    }`}
-                  >
-                    <div className="space-y-3.5">
-                      {/* Top Status & Order Bar */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-md bg-[#F3F5E9] border border-[#E5E8DD] font-mono text-xs font-bold text-[#252824]">
-                            ترتيب #{mainCat.sortOrder}
-                          </span>
-                          <span
-                            className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
-                              mainCat.isActive
-                                ? 'bg-[#EAF2EE] text-[#14543D]'
-                                : 'bg-rose-50 text-rose-700'
-                            }`}
-                          >
-                            {mainCat.isActive ? 'ظاهرة' : 'مخفية'}
-                          </span>
-                          {mainCat.isComingSoon && (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#F07842] text-white inline-flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              <span>قريباً</span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={actionLoading || index === 0}
-                            onClick={() =>
-                              handleMoveMainCategoryOrder(mainCat, 'up')
-                            }
-                            title="تقديم ترتيب الظهور"
-                            className="p-1.5 rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] disabled:opacity-35 cursor-pointer"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={
-                              actionLoading ||
-                              index === sortedMainCategories.length - 1
-                            }
-                            onClick={() =>
-                              handleMoveMainCategoryOrder(mainCat, 'down')
-                            }
-                            title="تأخير ترتيب الظهور"
-                            className="p-1.5 rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] disabled:opacity-35 cursor-pointer"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewMainCategory(mainCat)}
-                            title="معاينة شكل الفئة في الموقع"
-                            className="px-2 py-1 rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[11px] font-bold text-[#14543D] cursor-pointer"
-                          >
-                            معاينة
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Live Website Card Preview (1:1 Square) */}
-                      <div
-                        onClick={() => setPreviewMainCategory(mainCat)}
-                        title="اضغط لمعاينة شكل البطاقة في الموقع"
-                        className="group relative aspect-square w-full rounded-2xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] flex flex-col justify-end cursor-pointer"
-                      >
-                        <div className="absolute inset-0">
-                          <CategoryCardArtwork
-                            name={mainCat.name}
-                            mainCategory={mainCat.name}
-                            imageUrl={mainCat.imageUrl}
-                            isMainCategory
-                            className={mainCat.isComingSoon ? 'grayscale-[45%] brightness-75' : ''}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/30 to-transparent" />
-                        </div>
-
-                        <div className="absolute top-3 inset-x-3 flex items-center justify-between z-10">
-                          {mainCat.isComingSoon ? (
-                            <span className="px-2.5 py-1 rounded-lg bg-[#F07842] text-white text-[11px] font-bold inline-flex items-center gap-1 shadow-md">
-                              <Clock className="w-3 h-3" />
-                              <span>قريباً</span>
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 rounded-lg bg-[#252824]/75 backdrop-blur-xs text-white font-mono text-[11px] font-bold">
-                              {subsInMain.length} فئات فرعية
-                            </span>
-                          )}
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                              hasImg
-                                ? 'bg-[#F07842] text-white'
-                                : 'bg-[#252824]/70 text-[#F3F5E9]'
-                            }`}
-                          >
-                            {hasImg ? 'صورة مرفوعة ✓' : 'بدون صورة'}
-                          </span>
-                        </div>
-
-                        <div className="relative z-10 p-4 text-right space-y-1">
-                          <h3 className="font-display text-xl font-bold text-white">
-                            {mainCat.name}
-                          </h3>
-                          <p className="text-xs text-[#F3F5E9]/85 line-clamp-1">
-                            {mainCat.description ||
-                              mainCat.tagline ||
-                              'بدون وصف مضاف'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Category Metadata Summary */}
-                      <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-[#252824]">
-                            {mainCat.name}
-                          </span>
-                          <span className="font-mono text-[11px] text-[#14543D] font-bold">
-                            {subsInMain.length} فئة فرعية · {qsInMainCount} سؤال
-                          </span>
-                        </div>
-                        <p className="text-[#777B73] line-clamp-2 leading-relaxed">
-                          {mainCat.description ||
-                            mainCat.tagline ||
-                            'لا يوجد وصف مضاف لهذه الفئة حالياً.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Action Controls */}
-                    <div className="space-y-2 pt-1">
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditMainCategoryModal(mainCat)}
-                          className="py-2.5 px-3 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>تعديل</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() =>
-                            triggerSelectCategoryImage({
-                              kind: 'main',
-                              mainCat,
-                            })
-                          }
-                          className="py-2.5 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Crop className="w-3.5 h-3.5" />
-                          <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={() => handleToggleMainCategoryComingSoon(mainCat)}
-                        className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border ${
-                          mainCat.isComingSoon
-                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
-                            : 'bg-[#FEF2EC] hover:bg-[#FDE4D7] text-[#D9602B] border-[#F07842]/30'
-                        }`}
-                      >
-                        {mainCat.isComingSoon ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                            <span>تفعيل الفئة وإتاحتها للعب الآن</span>
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-3.5 h-3.5 text-[#F07842]" />
-                            <span>تعطيل مؤقت بشارة «قريباً»</span>
-                          </>
-                        )}
-                      </button>
-
-                      <div className="flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() => handleToggleMainCategoryActive(mainCat)}
-                          className="flex-1 py-2 px-3 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-[#252824] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          {mainCat.isActive ? (
-                            <>
-                              <EyeOff className="w-3.5 h-3.5 text-[#777B73]" />
-                              <span>إخفاء الفئة</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="w-3.5 h-3.5 text-[#14543D]" />
-                              <span>إظهار الفئة</span>
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() => openDeleteMainCategoryDialog(mainCat)}
-                          title="حذف الفئة الرئيسية"
-                          className="py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>حذف</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 2: SUBCATEGORIES MANAGEMENT (إدارة الفئات الفرعية) */}
-      {adminTab === 'subcategories' && (
-        <div className="space-y-6">
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="font-display text-base font-bold text-[#252824]">
-                  إدارة الفئات الفرعية وتنظيمها ضمن الأقسام الرئيسية
-                </h2>
-                <p className="text-xs text-[#777B73]">
-                  أضف فئات فرعية جديدة، عدّل أسماءها وصورها، انقلها بين الفئات الرئيسية، أو أخفها واحذفها بأمان.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => openAddSubcategoryModal()}
-                className="px-4 py-2.5 text-xs font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl flex items-center gap-1.5 self-start cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ إضافة فئة فرعية</span>
-              </button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between pt-1">
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={subSearchQuery}
-                  onChange={(e) => setSubSearchQuery(e.target.value)}
-                  placeholder="ابحث في الفئات الفرعية بالاسم أو الوصف..."
-                  className="w-full pr-10 pl-3.5 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none focus:border-[#14543D]"
-                />
-              </div>
-              <div className="text-xs text-[#777B73] font-semibold">
-                إجمالي النتائج:{' '}
-                <strong className="font-mono text-[#14543D]">
-                  {filteredSubcategoriesCount}
-                </strong>{' '}
-                فئة فرعية
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setSubMainFilter('الكل')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-                  subMainFilter === 'الكل'
-                    ? 'bg-[#14543D] text-white border-[#14543D]'
-                    : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD]'
-                }`}
-              >
-                كل الأقسام الرئيسية ({sortedMainCategories.length})
-              </button>
-              {sortedMainCategories.map((mainCat) => {
-                const subCount = getSubcategoriesForMain(mainCat).length;
-                return (
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#52574E]">
                   <button
-                    key={mainCat.id}
                     type="button"
-                    onClick={() => setSubMainFilter(mainCat.id)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                      subMainFilter === mainCat.id ||
-                      subMainFilter === mainCat.name
-                        ? 'bg-[#14543D] text-white border-[#14543D]'
-                        : 'bg-[#FFFFFF] text-[#252824] border-[#E5E8DD] hover:bg-[#F3F5E9]'
-                    }`}
+                    onClick={() => handleSelectAdminTab('overview')}
+                    className="hover:text-[#F07842] cursor-pointer transition-colors"
                   >
-                    <span>{mainCat.name}</span>
-                    <span className="font-mono text-[11px] opacity-80">
-                      ({subCount})
-                    </span>
+                    لوحة المشرف
                   </button>
-                );
-              })}
+                  <ChevronLeft className="w-3.5 h-3.5 text-[#52574E]/60" />
+                  <span className="text-[#F07842] truncate">
+                    {tabMetaMap[adminTab].title}
+                  </span>
+                </div>
+                <h1 className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C] truncate">
+                  {tabMetaMap[adminTab].title}
+                </h1>
+              </div>
             </div>
-          </div>
 
-          {singlePageSubcategoryGroups.length === 0 ? (
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl py-12 text-center text-xs text-[#777B73]">
-              لا توجد فئات فرعية مطابقة لمعايير البحث الحالية.
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="min-h-[44px] sm:min-h-[42px] px-4 py-2 text-xs font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span>إضافة سؤال</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await Promise.all([
+                    onRefreshMainCategories(),
+                    onRefreshSubcategories(),
+                    onRefreshQuestions(),
+                    onRefreshContactSettings(),
+                  ]);
+                }}
+                className="min-h-[44px] min-w-[44px] sm:min-h-[42px] sm:min-w-[42px] px-3 text-xs font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+                title="تحديث البيانات من Firebase"
+              >
+                <RefreshCw
+                  className={`w-4 h-4 text-[#52574E] ${loadingQuestions ? 'animate-spin' : ''}`}
+                />
+                <span className="hidden sm:inline">تحديث</span>
+              </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {singlePageSubcategoryGroups.map(({ mainCat, subs: groupSubs, totalInMain }) => {
-                return (
-                  <div
-                    key={mainCat.id}
-                    className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 flex flex-col justify-between space-y-4 [content-visibility:auto] [contain-intrinsic-size:auto_380px]"
+          </header>
+
+          {/* Global Status Feedback Banner */}
+          {statusBanner && (
+            <AlertBanner
+              tone={
+                statusBanner.startsWith('تعذر') ||
+                statusBanner.startsWith('صيغة') ||
+                statusBanner.startsWith('حجم') ||
+                statusBanner.startsWith('يرجى') ||
+                statusBanner.startsWith('حدث') ||
+                statusBanner.startsWith('الملف') ||
+                statusBanner.includes('غير صالحة')
+                  ? 'error'
+                  : 'success'
+              }
+              onDismiss={() => setStatusBanner(null)}
+            >
+              {statusBanner}
+            </AlertBanner>
+          )}
+
+          {/* TAB 0: ADMIN HOME / OVERVIEW */}
+          {adminTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Welcome Banner */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-7 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                <div className="space-y-1.5">
+                  <div className="text-xs font-bold text-[#F07842] flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>مرحباً بك في لوحة إدارة نِزال</span>
+                  </div>
+                  <h2 className="font-display text-xl sm:text-2xl font-bold text-[#1B1F1C]">
+                    نظرة شاملة على المحتوى والجاهزية
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#52574E] max-w-2xl leading-relaxed">
+                    تحكم مركزي في الفئات الرئيسية والفرعية، الصور المرفوعة، وبنك الأسئلة المعتمد من بيانات المنصة الفعلية المحمّلة حالياً.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={openAddMainCategoryModal}
+                    className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-10 h-10 rounded-xl flex items-center justify-center border border-[#E5E8DD]"
-                            style={{
-                              backgroundColor: mainCat.bgTint,
-                              color: mainCat.accentColor,
-                            }}
-                          >
-                            <CategoryIcon
-                              iconName={mainCat.iconName}
-                              className="w-5 h-5"
-                            />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-display text-base font-bold text-[#252824]">
+                    <LayoutGrid className="w-4 h-4 text-[#F07842]" />
+                    <span>إضافة فئة رئيسية</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openAddSubcategoryModal()}
+                    className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3531] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <FolderTree className="w-4 h-4 text-[#F07842]" />
+                    <span>إضافة فئة فرعية</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Real Stat Cards (Derived from loaded props — zero redundant queries) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#52574E]">الفئات الرئيسية</span>
+                    <LayoutGrid className="w-4 h-4 text-[#F07842]" />
+                  </div>
+                  <div className="font-mono tabular-nums text-3xl font-bold text-[#1B1F1C]">
+                    {sortedMainCategories.length}
+                  </div>
+                  <div className="text-xs text-[#52574E] font-mono tabular-nums">
+                    متاحة {overviewStats.activeMain} · قريباً {overviewStats.comingSoonMain} · مخفية {overviewStats.hiddenMain}
+                  </div>
+                </div>
+
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#52574E]">الفئات الفرعية</span>
+                    <FolderTree className="w-4 h-4 text-[#F07842]" />
+                  </div>
+                  <div className="font-mono tabular-nums text-3xl font-bold text-[#1B1F1C]">
+                    {subcategories.length}
+                  </div>
+                  <div className="text-xs text-[#52574E] font-mono tabular-nums">
+                    مفعّلة {overviewStats.activeSub} · مرفوعة الصور {subImagesCount}
+                  </div>
+                </div>
+
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#52574E]">إجمالي بنك الأسئلة</span>
+                    <FileQuestion className="w-4 h-4 text-[#F07842]" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono tabular-nums text-3xl font-bold text-[#1B1F1C]">
+                      {counts.total}
+                    </span>
+                    <span className="font-mono tabular-nums text-xs text-[#52574E]">
+                      / {TARGET_TOTAL_QUESTIONS}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#52574E] font-mono tabular-nums">
+                    نصي {counts.textOnly} · صورة {counts.illustrated} · صوت {counts.audioOnly}
+                  </div>
+                </div>
+
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#52574E]">الأسئلة المعتمدة</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#14543D]" />
+                  </div>
+                  <div className="font-mono tabular-nums text-3xl font-bold text-[#14543D]">
+                    {counts.approved}
+                  </div>
+                  <div className="text-xs text-[#52574E] font-mono tabular-nums">
+                    مراجعة {counts.pending} · مرفوض {counts.rejected}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-base font-bold text-[#1B1F1C]">
+                      إجراءات سريعة
+                    </h3>
+                    <p className="text-xs text-[#52574E]">
+                      انتقل مباشرة إلى المهام الإدارية الأكثر استخداماً
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={openAddModal}
+                    className="min-h-[60px] p-4 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9]/50 hover:bg-[#FEF2EC] hover:border-[#F07842]/45 text-right flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#F07842] text-white flex items-center justify-center shrink-0">
+                        <Plus className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display text-sm font-bold text-[#1B1F1C]">
+                          إضافة سؤال جديد
+                        </div>
+                        <div className="text-[11px] text-[#52574E] truncate">
+                          نصي أو مصوّر أو صوتي
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-[#52574E] shrink-0" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAdminTab('questions')}
+                    className="min-h-[60px] p-4 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9]/50 hover:bg-[#FEF2EC] hover:border-[#F07842]/45 text-right flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#F07842] flex items-center justify-center shrink-0">
+                        <FileQuestion className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display text-sm font-bold text-[#1B1F1C]">
+                          مراجعة بنك الأسئلة
+                        </div>
+                        <div className="text-[11px] text-[#52574E] font-mono tabular-nums truncate">
+                          {counts.total} سؤال مسجل
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-[#52574E] shrink-0" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAdminTab('images')}
+                    className="min-h-[60px] p-4 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9]/50 hover:bg-[#FEF2EC] hover:border-[#F07842]/45 text-right flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#F07842] flex items-center justify-center shrink-0">
+                        <ImageIcon className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display text-sm font-bold text-[#1B1F1C]">
+                          إدارة صور الفئات
+                        </div>
+                        <div className="text-[11px] text-[#52574E] font-mono tabular-nums truncate">
+                          {mainImagesCount + subImagesCount} صورة مرفوعة
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-[#52574E] shrink-0" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAdminTab('contributions')}
+                    className="min-h-[60px] p-4 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9]/50 hover:bg-[#FEF2EC] hover:border-[#F07842]/45 text-right flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#F07842] flex items-center justify-center shrink-0">
+                        <Inbox className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display text-sm font-bold text-[#1B1F1C]">
+                          مساهمات المستخدمين
+                        </div>
+                        <div className="text-[11px] text-[#52574E] font-mono tabular-nums truncate">
+                          {pendingContributionsCount > 0
+                            ? `${pendingContributionsCount} مساهمة بانتظار المراجعة`
+                            : `${contributions.length} إجمالي المساهمات`}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-[#52574E] shrink-0" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAdminTab('player_analytics')}
+                    className="min-h-[60px] p-4 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9]/50 hover:bg-[#FEF2EC] hover:border-[#F07842]/45 text-right flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#14543D] flex items-center justify-center shrink-0">
+                        <BarChart3 className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display text-sm font-bold text-[#1B1F1C]">
+                          إحصائيات اللاعبين
+                        </div>
+                        <div className="text-[11px] text-[#52574E] truncate">
+                          المباريات المحلية والأونلاين والفئات
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-[#52574E] shrink-0" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAdminTab('wala_kalima')}
+                    className="min-h-[60px] p-4 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9]/50 hover:bg-[#FEF2EC] hover:border-[#F07842]/45 text-right flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#F07842] flex items-center justify-center shrink-0">
+                        <QrCode className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display text-sm font-bold text-[#1B1F1C]">
+                          كلمات «ولا كلمة» (QR)
+                        </div>
+                        <div className="text-[11px] text-[#52574E] truncate">
+                          إدارة البطاقات وإعدادات التمثيل الصامت
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-[#52574E] shrink-0" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Two-Column Distribution & Real System Status */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+                {/* Category Distribution (7 cols) */}
+                <div className="xl:col-span-7 bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
+                  <div className="flex items-center justify-between gap-2 border-b border-[#E5E8DD] pb-3.5">
+                    <div>
+                      <h3 className="font-display text-base font-bold text-[#1B1F1C]">
+                        توزيع الأسئلة حسب الفئات الرئيسية
+                      </h3>
+                      <p className="text-xs text-[#52574E]">
+                        اضغط على أي فئة للانتقال مباشرة إلى أسئلتها
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAdminTab('main_categories')}
+                      className="text-xs font-bold text-[#F07842] hover:underline cursor-pointer shrink-0"
+                    >
+                      عرض الفئات
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {sortedMainCategories.map((mainCat) => {
+                      const qCount = questionCountByMainIdMap.get(mainCat.id) ?? 0;
+                      const subCount = getSubcategoriesForMain(mainCat).length;
+                      const pct = Math.min(
+                        100,
+                        Math.round((qCount / Math.max(1, TARGET_QUESTIONS_PER_CATEGORY)) * 100)
+                      );
+                      return (
+                        <button
+                          key={mainCat.id}
+                          type="button"
+                          onClick={() => {
+                            setMainCategoryFilter(mainCat.name);
+                            setCategoryFilter('الكل');
+                            setAdminTab('questions');
+                          }}
+                          className="w-full text-right p-3 rounded-xl border border-[#E5E8DD] hover:border-[#F07842]/50 bg-[#F3F5E9]/40 hover:bg-[#FEF2EC]/40 transition-colors space-y-2 cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-display font-bold text-[#1B1F1C] truncate">
                                 {mainCat.name}
-                              </h3>
+                              </span>
                               {mainCat.isComingSoon && (
-                                <span className="text-[10px] font-bold text-white bg-[#F07842] px-2 py-0.5 rounded">
+                                <span className="text-[10px] font-bold text-[#D9602B] bg-[#FEF2EC] px-1.5 py-0.5 rounded">
                                   قريباً
                                 </span>
                               )}
                               {!mainCat.isActive && (
-                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">
-                                  قسم مخفي
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded">
+                                  مخفية
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-[#777B73]">
-                              {totalInMain} فئة فرعية مسجلة
+                            <div className="font-mono tabular-nums text-[11px] text-[#52574E] shrink-0">
+                              <strong className="text-[#1B1F1C]">{qCount}</strong> سؤال · {subCount} فرعية
+                            </div>
+                          </div>
+                          <div className="h-2 rounded-full bg-[#E5E8DD] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-[#F07842] transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Real Content Status & Maintenance Tools (5 cols) */}
+                <div className="xl:col-span-5 space-y-5">
+                  <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
+                    <div className="border-b border-[#E5E8DD] pb-3.5">
+                      <h3 className="font-display text-base font-bold text-[#1B1F1C]">
+                        حالة النظام والمحتوى الفعلي
+                      </h3>
+                      <p className="text-xs text-[#52574E]">
+                        مؤشرات حقيقية محسوبة من البيانات المحمّلة حالياً
+                      </p>
+                    </div>
+
+                    <div className="divide-y divide-[#E5E8DD] text-xs">
+                      <div className="py-3 flex items-center justify-between gap-3">
+                        <span className="text-[#52574E]">تغطية صور الفئات الرئيسية</span>
+                        <span className="font-mono tabular-nums font-bold text-[#1B1F1C]">
+                          {mainImagesCount} / {sortedMainCategories.length}
+                        </span>
+                      </div>
+
+                      <div className="py-3 flex items-center justify-between gap-3">
+                        <span className="text-[#52574E]">تغطية صور الفئات الفرعية</span>
+                        <span className="font-mono tabular-nums font-bold text-[#1B1F1C]">
+                          {subImagesCount} / {subcategories.length}
+                        </span>
+                      </div>
+
+                      <div className="py-3 flex items-center justify-between gap-3">
+                        <span className="text-[#52574E]">فئات فرعية بدون صور مخصصة</span>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAdminTab('images')}
+                          className="font-mono tabular-nums font-bold text-[#F07842] hover:underline cursor-pointer"
+                        >
+                          {overviewStats.missingImgSub} فئة
+                        </button>
+                      </div>
+
+                      <div className="py-3 flex items-center justify-between gap-3">
+                        <span className="text-[#52574E]">فئات فرعية بدون أسئلة حالياً</span>
+                        <span className="font-mono tabular-nums font-bold text-[#1B1F1C]">
+                          {overviewStats.emptySub} فئة
+                        </span>
+                      </div>
+
+                      <div className="py-3 flex items-center justify-between gap-3">
+                        <span className="text-[#52574E]">أسئلة مكررة محتملة</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDuplicatesOnly(true);
+                            setAdminTab('questions');
+                          }}
+                          className="font-mono tabular-nums font-bold text-[#F07842] hover:underline cursor-pointer"
+                        >
+                          {counts.duplicates} سؤال
+                        </button>
+                      </div>
+
+                      <div className="py-3 flex items-center justify-between gap-3">
+                        <span className="text-[#52574E]">مساهمات بانتظار المراجعة</span>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectAdminTab('contributions')}
+                          className="font-mono tabular-nums font-bold text-[#14543D] hover:underline cursor-pointer"
+                        >
+                          {pendingContributionsCount} مساهمة
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Foundational Pack Sync Card */}
+                  <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-[#1B1F1C]">
+                      <Database className="w-4 h-4 text-[#F07842]" />
+                      <span>أداة مزامنة بنك الأسئلة التأسيسي</span>
+                    </div>
+                    <p className="text-xs text-[#52574E] leading-relaxed">
+                      مزامنة وتحديث حزمة الأسئلة التأسيسية ({TARGET_TOTAL_QUESTIONS.toLocaleString('en-US')} سؤال) على دفعات منظمة مع احترام قائمة المحذوفات المعتمدة.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={seeding}
+                      onClick={onSeedFoundationalPack}
+                      className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
+                      title="حفظ وتزامن الأسئلة التأسيسية في Firestore بدفعات منظمة"
+                    >
+                      <RefreshCw className={`w-4 h-4 text-[#F07842] ${seeding ? 'animate-spin' : ''}`} />
+                      <span>
+                        {seeding ? 'جارٍ الحفظ والتزامن بدفعات...' : 'تزامن بنك الأسئلة الشامل (1,975 سؤال)'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 1: FULL MAIN CATEGORY MANAGEMENT (إدارة الفئات الرئيسية) */}
+          {adminTab === 'main_categories' && (
+            <div className="space-y-6">
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-[#F07842]">
+                    المستوى الأول · الأقسام الرئيسية
+                  </div>
+                  <h2 className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]">
+                    الفئات الرئيسية ({sortedMainCategories.length})
+                  </h2>
+                  <p className="text-xs text-[#52574E]">
+                    أضف فئة رئيسية جديدة، عدّل الاسم والوصف والصورة وترتيب الظهور، أو أخفِ وأظهر أي فئة مع معاينة فورية.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openAddMainCategoryModal}
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shrink-0 self-start sm:self-center cursor-pointer transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إضافة فئة رئيسية</span>
+                </button>
+              </div>
+
+              {sortedMainCategories.length === 0 ? (
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl py-16 text-center space-y-4">
+                  <p className="font-display text-base font-bold text-[#1B1F1C]">
+                    لا توجد فئات رئيسية حالياً
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openAddMainCategoryModal}
+                    className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#F07842] text-white text-xs font-bold cursor-pointer"
+                  >
+                    إضافة أول فئة رئيسية
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {sortedMainCategories.map((mainCat, index) => {
+                    const subsInMain = getSubcategoriesForMain(mainCat);
+                    const qsInMainCount =
+                      questionCountByMainIdMap.get(mainCat.id) ?? 0;
+                    const hasImg = Boolean(
+                      mainCat.imageUrl && mainCat.imageUrl.trim().length > 0
+                    );
+
+                    return (
+                      <div
+                        key={mainCat.id}
+                        className={`bg-[#FFFFFF] border rounded-2xl p-4 flex flex-col justify-between space-y-4 transition-colors ${
+                          mainCat.isComingSoon
+                            ? 'border-[#F07842]/50'
+                            : mainCat.isActive
+                            ? 'border-[#E5E8DD]'
+                            : 'border-dashed border-rose-300 opacity-85'
+                        }`}
+                      >
+                        <div className="space-y-3.5">
+                          {/* Top Status & Order Bar */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap text-xs">
+                              <span className="font-mono tabular-nums font-bold text-[#52574E]">
+                                #{mainCat.sortOrder}
+                              </span>
+                              <span aria-hidden="true" className="text-[#E5E8DD]">·</span>
+                              <span
+                                className={`inline-flex items-center gap-1 font-bold ${
+                                  mainCat.isActive
+                                    ? 'text-[#14543D]'
+                                    : 'text-rose-700'
+                                }`}
+                              >
+                                {mainCat.isActive ? (
+                                  <Eye className="w-3.5 h-3.5" />
+                                ) : (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                )}
+                                <span>{mainCat.isActive ? 'ظاهرة' : 'مخفية'}</span>
+                              </span>
+                              {mainCat.isComingSoon && (
+                                <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#FEF2EC] text-[#D9602B] border border-[#F07842]/30 inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>قريباً</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={actionLoading || index === 0}
+                                onClick={() =>
+                                  handleMoveMainCategoryOrder(mainCat, 'up')
+                                }
+                                title="تقديم ترتيب الظهور"
+                                className="min-w-[34px] min-h-[34px] rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  actionLoading ||
+                                  index === sortedMainCategories.length - 1
+                                }
+                                onClick={() =>
+                                  handleMoveMainCategoryOrder(mainCat, 'down')
+                                }
+                                title="تأخير ترتيب الظهور"
+                                className="min-w-[34px] min-h-[34px] rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewMainCategory(mainCat)}
+                                title="معاينة شكل الفئة في الموقع"
+                                className="min-h-[34px] px-2.5 rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[11px] font-bold text-[#1B1F1C] cursor-pointer"
+                              >
+                                معاينة
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Website Card Preview */}
+                          <div
+                            onClick={() => setPreviewMainCategory(mainCat)}
+                            title="اضغط لمعاينة شكل البطاقة في الموقع"
+                            className="group relative aspect-[16/10] w-full rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] flex flex-col justify-end cursor-pointer"
+                          >
+                            <div className="absolute inset-0">
+                              <CategoryCardArtwork
+                                name={mainCat.name}
+                                mainCategory={mainCat.name}
+                                imageUrl={mainCat.imageUrl}
+                                isMainCategory
+                                className={mainCat.isComingSoon ? 'grayscale-[45%] brightness-75' : ''}
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/30 to-transparent" />
+                            </div>
+
+                            <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
+                              {mainCat.isComingSoon ? (
+                                <span className="px-2.5 py-0.5 rounded-md bg-[#F07842] text-white text-[11px] font-bold inline-flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>قريباً</span>
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md bg-[#1B1F1C]/75 text-white font-mono tabular-nums text-[11px] font-bold">
+                                  {subsInMain.length} فرعية
+                                </span>
+                              )}
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                  hasImg
+                                    ? 'bg-[#14543D] text-white'
+                                    : 'bg-[#1B1F1C]/75 text-[#F3F5E9]'
+                                }`}
+                              >
+                                {hasImg ? 'صورة مرفوعة' : 'بدون صورة'}
+                              </span>
+                            </div>
+
+                            <div className="relative z-10 p-3.5 text-right space-y-0.5">
+                              <h3 className="font-display text-lg font-bold text-white">
+                                {mainCat.name}
+                              </h3>
+                              <p className="text-[11px] text-[#F3F5E9]/85 line-clamp-1">
+                                {mainCat.description ||
+                                  mainCat.tagline ||
+                                  'بدون وصف مضاف'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Category Metadata Summary */}
+                          <div className="pt-1 space-y-1 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-display font-bold text-[#1B1F1C] truncate">
+                                {mainCat.name}
+                              </span>
+                              <span className="font-mono tabular-nums text-[11px] text-[#14543D] font-bold shrink-0">
+                                {subsInMain.length} فرعية · {qsInMainCount} سؤال
+                              </span>
+                            </div>
+                            <p className="text-[#52574E] line-clamp-2 leading-relaxed">
+                              {mainCat.description ||
+                                mainCat.tagline ||
+                                'لا يوجد وصف مضاف لهذه الفئة حالياً.'}
                             </p>
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => openAddSubcategoryModal(mainCat)}
-                          className="px-3 py-1.5 text-xs font-bold text-[#14543D] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center gap-1 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>إضافة هنا</span>
-                        </button>
-                      </div>
+                        {/* Action Controls */}
+                        <div className="space-y-2 pt-2 border-t border-[#E5E8DD]">
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openEditMainCategoryModal(mainCat)}
+                              className="min-h-[40px] py-2 px-3 rounded-xl bg-[#1B1F1C] hover:bg-[#2E3430] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>تعديل</span>
+                            </button>
 
-                      {groupSubs.length === 0 ? (
-                        <div className="py-8 text-center text-xs text-[#777B73]">
-                          لا توجد فئات فرعية في هذا القسم حالياً.
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-[#E5E8DD]">
-                          {groupSubs.map((sub) => (
-                            <SubcategoryAdminRow
-                              key={sub.id}
-                              sub={sub}
-                              qCount={questionCountBySubIdMap.get(sub.id) ?? 0}
-                              actionLoading={actionLoading}
-                              onToggleComingSoon={handleToggleSubcategoryComingSoon}
-                              onSelectImage={triggerSubcategoryImagePicker}
-                              onMoveOrder={handleMoveSubcategoryOrder}
-                              onToggleActive={handleToggleSubcategoryActive}
-                              onEdit={openEditSubcategoryModal}
-                              onDelete={openDeleteSubcategoryDialog}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() =>
+                                triggerSelectCategoryImage({
+                                  kind: 'main',
+                                  mainCat,
+                                })
+                              }
+                              className="min-h-[40px] py-2 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Crop className="w-3.5 h-3.5" />
+                              <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
+                            </button>
+                          </div>
 
-      {/* TAB 3: CATEGORY IMAGE MANAGEMENT (إدارة صور الفئات) */}
-      {adminTab === 'images' && (
-        <div className="space-y-10">
-          {/* PART A: MAIN CATEGORIES IMAGES */}
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
-              <div className="space-y-1">
-                <div className="text-xs font-bold text-[#F07842]">
-                  المستوى الأول · الفئات الرئيسية
-                </div>
-                <h2 className="font-display text-xl font-bold text-[#252824]">
-                  صور الفئات الرئيسية ({mainImagesCount} /{' '}
-                  {sortedMainCategories.length})
-                </h2>
-                <p className="text-xs text-[#777B73]">
-                  ارفع أو استبدل أو احذف صورة كل قسم رئيسي بشكل مستقل. الصيغ المدعومة: JPG, JPEG, PNG, WEBP مع قص وتوسيط الصورة قبل الحفظ.
-                </p>
-              </div>
-            </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => handleToggleMainCategoryComingSoon(mainCat)}
+                              className={`min-h-[38px] py-1.5 px-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer border ${
+                                mainCat.isComingSoon
+                                  ? 'bg-[#EAF2EE] hover:bg-[#D7E6DF] text-[#14543D] border-[#14543D]/25'
+                                  : 'bg-[#FEF2EC] hover:bg-[#FDE4D7] text-[#D9602B] border-[#F07842]/25'
+                              }`}
+                            >
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                              <span>{mainCat.isComingSoon ? 'تفعيل' : 'قريباً'}</span>
+                            </button>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-              {sortedMainCategories.map((mainCat) => {
-                const hasImg = Boolean(
-                  mainCat.imageUrl && mainCat.imageUrl.trim().length > 0
-                );
-                return (
-                  <div
-                    key={mainCat.id}
-                    className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl p-4 flex flex-col justify-between space-y-4"
-                  >
-                    <div className="group relative aspect-square w-full rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] flex flex-col justify-end">
-                      <div className="absolute inset-0">
-                        <CategoryCardArtwork
-                          name={mainCat.name}
-                          mainCategory={mainCat.name}
-                          imageUrl={mainCat.imageUrl}
-                          isMainCategory
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/25 to-transparent" />
-                      </div>
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => handleToggleMainCategoryActive(mainCat)}
+                              className="min-h-[38px] py-1.5 px-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-[#1B1F1C] text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                            >
+                              {mainCat.isActive ? (
+                                <>
+                                  <EyeOff className="w-3.5 h-3.5 text-[#52574E] shrink-0" />
+                                  <span>إخفاء</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Eye className="w-3.5 h-3.5 text-[#14543D] shrink-0" />
+                                  <span>إظهار</span>
+                                </>
+                              )}
+                            </button>
 
-                      <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                            hasImg
-                              ? 'bg-[#14543D] text-white'
-                              : 'bg-[#252824]/75 text-[#F3F5E9]'
-                          }`}
-                        >
-                          {hasImg ? 'صورة مخصصة ✓' : 'بدون صورة'}
-                        </span>
-                      </div>
-
-                      <div className="relative z-10 p-3.5 text-right">
-                        <div className="font-display text-lg font-bold text-white">
-                          {mainCat.name}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={() =>
-                          triggerSelectCategoryImage({
-                            kind: 'main',
-                            mainCat,
-                          })
-                        }
-                        className="flex-1 py-2.5 px-3 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <Crop className="w-3.5 h-3.5" />
-                        <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
-                      </button>
-
-                      {hasImg && (
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() => handleRemoveMainCategoryImage(mainCat)}
-                          title="حذف الصورة الحالية"
-                          className="p-2.5 rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* PART B: SUBCATEGORIES IMAGES */}
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-6">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-5">
-              <div className="space-y-1">
-                <div className="text-xs font-bold text-[#14543D]">
-                  المستوى الثاني · الفئات الفرعية المستقلة
-                </div>
-                <h2 className="font-display text-xl font-bold text-[#252824]">
-                  صور الفئات الفرعية ({subImagesCount} / {subcategories.length})
-                </h2>
-                <p className="text-xs text-[#777B73]">
-                  لكل فئة فرعية صورتها المستقلة تماماً في بطاقتها المربعة. اختر القسم الرئيسي أو ابحث بالاسم لرفع أو تعديل صورة أي فئة فرعية.
-                </p>
-              </div>
-
-              <div className="relative w-full lg:w-72">
-                <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={imgSearchQuery}
-                  onChange={(e) => setImgSearchQuery(e.target.value)}
-                  placeholder="ابحث عن فئة فرعية..."
-                  className="w-full pr-10 pl-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none focus:border-[#14543D]"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setImgMainFilter('الكل')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-                  imgMainFilter === 'الكل'
-                    ? 'bg-[#14543D] text-white border-[#14543D]'
-                    : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD]'
-                }`}
-              >
-                كل الفئات الفرعية ({subcategories.length})
-              </button>
-              {sortedMainCategories.map((mc) => {
-                const countInMc = getSubcategoriesForMain(mc).length;
-                return (
-                  <button
-                    key={mc.id}
-                    type="button"
-                    onClick={() => setImgMainFilter(mc.id)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-                      imgMainFilter === mc.id || imgMainFilter === mc.name
-                        ? 'bg-[#14543D] text-white border-[#14543D]'
-                        : 'bg-[#FFFFFF] text-[#252824] border-[#E5E8DD] hover:bg-[#F3F5E9]'
-                    }`}
-                  >
-                    {mc.name} ({countInMc})
-                  </button>
-                );
-              })}
-            </div>
-
-            {filteredImageSubcategories.length === 0 ? (
-              <div className="py-12 text-center text-xs text-[#777B73]">
-                لا توجد فئات فرعية مطابقة للبحث الحالي.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {filteredImageSubcategories.map((sub) => {
-                  const hasImg = Boolean(
-                    sub.imageUrl && sub.imageUrl.trim().length > 0
-                  );
-                  return (
-                    <div
-                      key={sub.id}
-                      className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl p-3.5 flex flex-col justify-between space-y-3.5"
-                    >
-                      <div className="group relative aspect-square w-full rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] flex flex-col justify-end">
-                        <div className="absolute inset-0">
-                          <CategoryCardArtwork
-                            name={sub.name}
-                            mainCategory={sub.mainCategory}
-                            imageUrl={sub.imageUrl}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/25 to-transparent" />
-                        </div>
-
-                        <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
-                          <span className="px-2 py-0.5 rounded-md bg-[#252824]/75 text-white text-[10px] font-bold">
-                            {sub.mainCategory}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                              hasImg
-                                ? 'bg-[#F07842] text-white'
-                                : 'bg-[#252824]/60 text-[#F3F5E9]/80'
-                            }`}
-                          >
-                            {hasImg ? 'مرفوعة ✓' : 'بدون صورة'}
-                          </span>
-                        </div>
-
-                        <div className="relative z-10 p-3 text-right">
-                          <div className="font-display text-base font-bold text-white leading-snug line-clamp-2">
-                            {sub.name}
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => openDeleteMainCategoryDialog(mainCat)}
+                              title="حذف الفئة الرئيسية"
+                              className="min-h-[38px] py-1.5 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>حذف</span>
+                            </button>
                           </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() =>
-                            triggerSelectCategoryImage({
-                              kind: 'sub',
-                              subCat: sub,
-                            })
-                          }
-                          className="flex-1 py-2 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
-                        </button>
-
-                        {hasImg && (
-                          <button
-                            type="button"
-                            disabled={actionLoading}
-                            onClick={() => handleRemoveSubcategoryImage(sub)}
-                            title="حذف صورة الفئة الفرعية"
-                            className="p-2 rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: QUESTIONS MANAGEMENT (إدارة الأسئلة) */}
-      {adminTab === 'questions' && (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
-              <div className="text-xs text-[#777B73]">الإجمالي الفعلي</div>
-              <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
-                {counts.total}{' '}
-                <span className="text-xs font-normal text-[#777B73]">
-                  / {TARGET_TOTAL_QUESTIONS}
-                </span>
-              </div>
-            </div>
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
-              <div className="text-xs text-[#777B73]">معتمد (Approved)</div>
-              <div className="font-mono tabular-nums text-2xl font-bold text-[#14543D]">
-                {counts.approved}
-              </div>
-            </div>
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
-              <div className="text-xs text-[#777B73]">بانتظار المراجعة</div>
-              <div className="font-mono tabular-nums text-2xl font-bold text-[#F07842]">
-                {counts.pending}
-              </div>
-            </div>
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
-              <div className="text-xs text-[#777B73]">مرفوض</div>
-              <div className="font-mono tabular-nums text-2xl font-bold text-rose-700">
-                {counts.rejected}
-              </div>
-            </div>
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
-              <div className="text-xs text-[#777B73]">أنواع الأسئلة</div>
-              <div className="font-mono tabular-nums text-xs sm:text-sm font-bold text-[#14543D]">
-                {counts.textOnly} نصي · {counts.illustrated} صورة · {counts.audioOnly} صوت
-              </div>
-            </div>
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
-              <div className="text-xs text-[#777B73]">تكرارات مكتشفة</div>
-              <div className="font-mono tabular-nums text-2xl font-bold text-[#F07842]">
-                {counts.duplicates}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-sm font-bold text-[#252824]">
-                توزيع الأسئلة حسب الفئات الرئيسية (اضغط لتصفية الفئة الرئيسية)
-              </h2>
-              {mainCategoryFilter !== 'الكل' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMainCategoryFilter('الكل');
-                    setCategoryFilter('الكل');
-                  }}
-                  className="text-xs font-bold text-[#F07842] cursor-pointer"
-                >
-                  إلغاء التصفية
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-              {sortedMainCategories.map((mainCat) => {
-                const catCount = questionCountByMainIdMap.get(mainCat.id) ?? 0;
-
-                return (
-                  <button
-                    key={mainCat.id}
-                    type="button"
-                    onClick={() => {
-                      const next =
-                        mainCategoryFilter === mainCat.name
-                          ? 'الكل'
-                          : mainCat.name;
-                      setMainCategoryFilter(next);
-                      setCategoryFilter('الكل');
-                    }}
-                    className={`p-3 rounded-xl border text-right transition-colors cursor-pointer ${
-                      mainCategoryFilter === mainCat.name
-                        ? 'bg-[#F3F5E9] border-[#14543D]'
-                        : 'bg-[#FFFFFF] border-[#E5E8DD] hover:bg-[#F3F5E9]/50'
-                    }`}
-                  >
-                    <div className="font-display text-xs font-bold text-[#252824] truncate">
-                      {mainCat.name}
-                    </div>
-                    <div className="font-mono tabular-nums text-sm font-bold text-[#14543D] mt-1">
-                      {catCount}{' '}
-                      <span className="text-[11px] font-normal text-[#777B73]">
-                        / {TARGET_QUESTIONS_PER_CATEGORY}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              <div className="md:col-span-4 relative">
-                <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ابحث في نص السؤال أو الإجابة أو وصف الصورة..."
-                  className="w-full pr-10 pl-3.5 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none focus:border-[#14543D]"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  aria-label="تصفية حسب الفئة الفرعية"
-                  className="w-full px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none"
-                >
-                  <option value="الكل">
-                    كل الفئات الفرعية ({allSubcategoryNames.length})
-                  </option>
-                  {sortedMainCategories.map((mainCat) => {
-                    const subs = getSubcategoriesForMain(mainCat);
-                    if (subs.length === 0) return null;
-                    return (
-                      <optgroup key={mainCat.id} label={mainCat.name}>
-                        {subs.map((sub) => (
-                          <option key={sub.id} value={sub.name}>
-                            {sub.name}
-                          </option>
-                        ))}
-                      </optgroup>
                     );
                   })}
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  aria-label="تصفية حسب نوع السؤال"
-                  className="w-full px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none"
-                >
-                  <option value="الكل">كل الأنواع</option>
-                  <option value="text">سؤال نصي ({counts.textOnly})</option>
-                  <option value="image">سؤال صورة ({counts.illustrated})</option>
-                  <option value="audio">سؤال صوتي ({counts.audioOnly})</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <select
-                  value={difficultyFilter}
-                  onChange={(e) => setDifficultyFilter(e.target.value)}
-                  aria-label="تصفية حسب الصعوبة"
-                  className="w-full px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none"
-                >
-                  <option value="الكل">كل الصعوبات</option>
-                  {DIFFICULTIES_LIST.map((diff) => (
-                    <option key={diff} value={diff}>
-                      {diff} ({DIFFICULTY_TO_POINTS[diff]})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  aria-label="تصفية حسب الحالة"
-                  className="w-full px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] focus:outline-none"
-                >
-                  <option value="الكل">كل الحالات</option>
-                  <option value="approved">معتمد (Approved)</option>
-                  <option value="pending">قيد المراجعة (Pending)</option>
-                  <option value="rejected">مرفوض (Rejected)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDuplicatesOnly((prev) => !prev)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                    showDuplicatesOnly
-                      ? 'bg-[#F07842] text-white border-[#F07842]'
-                      : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD]'
-                  }`}
-                >
-                  كشف الأسئلة المكررة ({counts.duplicates})
-                </button>
-
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={handleConvertExistingToDirect}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#EAF2EE] hover:bg-[#D5E6DD] text-[#14543D] border border-[#C5DDD1] flex items-center gap-1.5 cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>توحيد جميع الأسئلة إلى مباشرة</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleExportJSON}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>تصدير JSON</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleExportCSV}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>تصدير CSV</span>
-                </button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json,.csv"
-                  onChange={handleImportFile}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={actionLoading}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#14543D] hover:bg-[#0E3F2D] text-white flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>استيراد JSON / CSV</span>
-                </button>
-              </div>
-
-              {selectedIds.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 bg-[#F3F5E9] px-3 py-1.5 rounded-xl border border-[#E5E8DD]">
-                  <span className="text-xs font-bold text-[#252824]">
-                    المحدد: {selectedIds.length}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => handleBulkStatus('approved')}
-                    className="px-2.5 py-1 text-xs font-bold bg-[#14543D] text-white rounded-md cursor-pointer"
-                  >
-                    اعتماد الكل
-                  </button>
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={() => handleBulkStatus('rejected')}
-                    className="px-2.5 py-1 text-xs font-bold bg-[#F07842] text-white rounded-md cursor-pointer"
-                  >
-                    رفض الكل
-                  </button>
-                  <button
-                    type="button"
-                    disabled={actionLoading}
-                    onClick={requestBulkDelete}
-                    className="px-2.5 py-1 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-md cursor-pointer"
-                  >
-                    حذف الكل ({selectedIds.length})
-                  </button>
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#F3F5E9] border-b border-[#E5E8DD] text-[#777B73]">
-                    <th className="py-3.5 px-4 w-10">
+          {/* TAB 2: SUBCATEGORIES MANAGEMENT (إدارة الفئات الفرعية) */}
+          {adminTab === 'subcategories' && (
+            <div className="space-y-6">
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <h2 className="font-display text-lg font-bold text-[#1B1F1C]">
+                      الفئات الفرعية وتنظيمها ({subcategories.length})
+                    </h2>
+                    <p className="text-xs text-[#52574E]">
+                      أضف فئات فرعية جديدة، عدّل أسماءها وصورها، انقلها بين الفئات الرئيسية، أو أخفها واحذفها بأمان.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openAddSubcategoryModal()}
+                    className="min-h-[44px] px-4 py-2.5 text-xs font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl flex items-center gap-1.5 self-start cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة فئة فرعية</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between pt-1">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 text-[#52574E] absolute right-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={subSearchQuery}
+                      onChange={(e) => setSubSearchQuery(e.target.value)}
+                      placeholder="ابحث في الفئات الفرعية بالاسم أو الوصف..."
+                      className="w-full min-h-[42px] pr-10 pl-3.5 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842] focus:bg-[#FFFFFF]"
+                    />
+                  </div>
+                  <div className="text-xs text-[#52574E] font-semibold">
+                    النتائج:{' '}
+                    <strong className="font-mono tabular-nums text-[#1B1F1C]">
+                      {filteredSubcategoriesCount}
+                    </strong>{' '}
+                    فئة فرعية
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSubMainFilter('الكل')}
+                    className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                      subMainFilter === 'الكل'
+                        ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
+                        : 'bg-[#F3F5E9] text-[#52574E] border-[#E5E8DD] hover:text-[#1B1F1C]'
+                    }`}
+                  >
+                    كل الأقسام ({sortedMainCategories.length})
+                  </button>
+                  {sortedMainCategories.map((mainCat) => {
+                    const subCount = getSubcategoriesForMain(mainCat).length;
+                    const activeFilter =
+                      subMainFilter === mainCat.id ||
+                      subMainFilter === mainCat.name;
+                    return (
+                      <button
+                        key={mainCat.id}
+                        type="button"
+                        onClick={() => setSubMainFilter(mainCat.id)}
+                        className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                          activeFilter
+                            ? 'bg-[#F07842] text-white border-[#F07842]'
+                            : 'bg-[#FFFFFF] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#F3F5E9]'
+                        }`}
+                      >
+                        <span>{mainCat.name}</span>
+                        <span className="font-mono tabular-nums text-[11px] opacity-85">
+                          ({subCount})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {singlePageSubcategoryGroups.length === 0 ? (
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl py-12 text-center text-xs text-[#52574E]">
+                  لا توجد فئات فرعية مطابقة لمعايير البحث الحالية.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                  {singlePageSubcategoryGroups.map(({ mainCat, subs: groupSubs, totalInMain }) => {
+                    return (
+                      <div
+                        key={mainCat.id}
+                        className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 flex flex-col justify-between space-y-4 [content-visibility:auto] [contain-intrinsic-size:auto_380px]"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#E5E8DD]">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div
+                                className="w-10 h-10 rounded-xl flex items-center justify-center border border-[#E5E8DD] shrink-0"
+                                style={{
+                                  backgroundColor: mainCat.bgTint,
+                                  color: mainCat.accentColor,
+                                }}
+                              >
+                                <CategoryIcon
+                                  iconName={mainCat.iconName}
+                                  className="w-5 h-5"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h3 className="font-display text-base font-bold text-[#1B1F1C] truncate">
+                                    {mainCat.name}
+                                  </h3>
+                                  {mainCat.isComingSoon && (
+                                    <span className="text-[10px] font-bold text-[#D9602B] bg-[#FEF2EC] border border-[#F07842]/30 px-2 py-0.5 rounded-md">
+                                      قريباً
+                                    </span>
+                                  )}
+                                  {!mainCat.isActive && (
+                                    <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
+                                      قسم مخفي
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-[#52574E] font-mono tabular-nums">
+                                  {totalInMain} فئة فرعية مسجلة
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => openAddSubcategoryModal(mainCat)}
+                              className="min-h-[36px] px-3 py-1.5 text-xs font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5 text-[#F07842]" />
+                              <span>إضافة هنا</span>
+                            </button>
+                          </div>
+
+                          {groupSubs.length === 0 ? (
+                            <div className="py-8 text-center text-xs text-[#52574E]">
+                              لا توجد فئات فرعية في هذا القسم حالياً.
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-[#E5E8DD]">
+                              {groupSubs.map((sub) => (
+                                <SubcategoryAdminRow
+                                  key={sub.id}
+                                  sub={sub}
+                                  qCount={questionCountBySubIdMap.get(sub.id) ?? 0}
+                                  actionLoading={actionLoading}
+                                  onToggleComingSoon={handleToggleSubcategoryComingSoon}
+                                  onSelectImage={triggerSubcategoryImagePicker}
+                                  onMoveOrder={handleMoveSubcategoryOrder}
+                                  onToggleActive={handleToggleSubcategoryActive}
+                                  onEdit={openEditSubcategoryModal}
+                                  onDelete={openDeleteSubcategoryDialog}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: CATEGORY IMAGE MANAGEMENT (إدارة صور الفئات) */}
+          {adminTab === 'images' && (
+            <div className="space-y-8">
+              {/* PART A: MAIN CATEGORIES IMAGES */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-[#F07842]">
+                      المستوى الأول · الفئات الرئيسية
+                    </div>
+                    <h2 className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]">
+                      صور الفئات الرئيسية ({mainImagesCount} / {sortedMainCategories.length})
+                    </h2>
+                    <p className="text-xs text-[#52574E]">
+                      ارفع أو استبدل أو احذف صورة كل قسم رئيسي بشكل مستقل. الصيغ المدعومة: JPG, JPEG, PNG, WEBP مع القص والتوسيط قبل الحفظ.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {sortedMainCategories.map((mainCat) => {
+                    const hasImg = Boolean(
+                      mainCat.imageUrl && mainCat.imageUrl.trim().length > 0
+                    );
+                    return (
+                      <div
+                        key={mainCat.id}
+                        className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-3.5 flex flex-col justify-between space-y-3.5"
+                      >
+                        <div className="group relative aspect-square w-full rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] flex flex-col justify-end">
+                          <div className="absolute inset-0">
+                            <CategoryCardArtwork
+                              name={mainCat.name}
+                              mainCategory={mainCat.name}
+                              imageUrl={mainCat.imageUrl}
+                              isMainCategory
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/25 to-transparent" />
+                          </div>
+
+                          <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                hasImg
+                                  ? 'bg-[#14543D] text-white'
+                                  : 'bg-[#1B1F1C]/75 text-[#F3F5E9]'
+                              }`}
+                            >
+                              {hasImg ? 'صورة مخصصة' : 'بدون صورة'}
+                            </span>
+                          </div>
+
+                          <div className="relative z-10 p-3.5 text-right">
+                            <div className="font-display text-base font-bold text-white">
+                              {mainCat.name}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={actionLoading}
+                            onClick={() =>
+                              triggerSelectCategoryImage({
+                                kind: 'main',
+                                mainCat,
+                              })
+                            }
+                            className="flex-1 min-h-[40px] py-2 px-3 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3531] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Crop className="w-3.5 h-3.5" />
+                            <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
+                          </button>
+
+                          {hasImg && (
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => handleRemoveMainCategoryImage(mainCat)}
+                              title="حذف الصورة الحالية"
+                              className="min-w-[40px] min-h-[40px] rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* PART B: SUBCATEGORIES IMAGES */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E5E8DD] pb-4">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-[#14543D]">
+                      المستوى الثاني · الفئات الفرعية
+                    </div>
+                    <h2 className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]">
+                      صور الفئات الفرعية ({subImagesCount} / {subcategories.length})
+                    </h2>
+                    <p className="text-xs text-[#52574E]">
+                      لكل فئة فرعية صورتها المستقلة في بطاقتها المربعة. اختر القسم الرئيسي أو ابحث بالاسم لرفع أو تعديل صورة أي فئة فرعية.
+                    </p>
+                  </div>
+
+                  <div className="relative w-full lg:w-72">
+                    <Search className="w-4 h-4 text-[#52574E] absolute right-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={imgSearchQuery}
+                      onChange={(e) => setImgSearchQuery(e.target.value)}
+                      placeholder="ابحث عن فئة فرعية..."
+                      className="w-full min-h-[42px] pr-10 pl-3.5 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842] focus:bg-[#FFFFFF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setImgMainFilter('الكل')}
+                    className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                      imgMainFilter === 'الكل'
+                        ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
+                        : 'bg-[#F3F5E9] text-[#52574E] border-[#E5E8DD]'
+                    }`}
+                  >
+                    كل الفئات ({subcategories.length})
+                  </button>
+                  {sortedMainCategories.map((mc) => {
+                    const countInMc = getSubcategoriesForMain(mc).length;
+                    const activeImgMain =
+                      imgMainFilter === mc.id || imgMainFilter === mc.name;
+                    return (
+                      <button
+                        key={mc.id}
+                        type="button"
+                        onClick={() => setImgMainFilter(mc.id)}
+                        className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                          activeImgMain
+                            ? 'bg-[#F07842] text-white border-[#F07842]'
+                            : 'bg-[#FFFFFF] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#F3F5E9]'
+                        }`}
+                      >
+                        {mc.name} ({countInMc})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {filteredImageSubcategories.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-[#52574E]">
+                    لا توجد فئات فرعية مطابقة للبحث الحالي.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {filteredImageSubcategories.map((sub) => {
+                      const hasImg = Boolean(
+                        sub.imageUrl && sub.imageUrl.trim().length > 0
+                      );
+                      return (
+                        <div
+                          key={sub.id}
+                          className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-3.5 flex flex-col justify-between space-y-3"
+                        >
+                          <div className="group relative aspect-square w-full rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] flex flex-col justify-end">
+                            <div className="absolute inset-0">
+                              <CategoryCardArtwork
+                                name={sub.name}
+                                mainCategory={sub.mainCategory}
+                                imageUrl={sub.imageUrl}
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-[#131614]/90 via-[#131614]/25 to-transparent" />
+                            </div>
+
+                            <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10">
+                              <span className="px-2 py-0.5 rounded-md bg-[#1B1F1C]/75 text-white text-[10px] font-bold">
+                                {sub.mainCategory}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                  hasImg
+                                    ? 'bg-[#F07842] text-white'
+                                    : 'bg-[#1B1F1C]/70 text-[#F3F5E9]/85'
+                                }`}
+                              >
+                                {hasImg ? 'مرفوعة' : 'بدون صورة'}
+                              </span>
+                            </div>
+
+                            <div className="relative z-10 p-3 text-right">
+                              <div className="font-display text-base font-bold text-white leading-snug line-clamp-2">
+                                {sub.name}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() =>
+                                triggerSelectCategoryImage({
+                                  kind: 'sub',
+                                  subCat: sub,
+                                })
+                              }
+                              className="flex-1 min-h-[40px] py-2 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
+                            </button>
+
+                            {hasImg && (
+                              <button
+                                type="button"
+                                disabled={actionLoading}
+                                onClick={() => handleRemoveSubcategoryImage(sub)}
+                                title="حذف صورة الفئة الفرعية"
+                                className="min-w-[40px] min-h-[40px] rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] flex items-center justify-center transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: QUESTIONS MANAGEMENT (إدارة الأسئلة) */}
+          {adminTab === 'questions' && (
+            <div className="space-y-5">
+              {/* Summary KPI Strip */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5">
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 space-y-1">
+                  <div className="text-xs text-[#52574E]">الإجمالي الفعلي</div>
+                  <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
+                    {counts.total}{' '}
+                    <span className="text-xs font-normal text-[#52574E]">
+                      / {TARGET_TOTAL_QUESTIONS}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 space-y-1">
+                  <div className="text-xs text-[#52574E]">معتمد</div>
+                  <div className="font-mono tabular-nums text-2xl font-bold text-[#14543D]">
+                    {counts.approved}
+                  </div>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 space-y-1">
+                  <div className="text-xs text-[#52574E]">قيد المراجعة</div>
+                  <div className="font-mono tabular-nums text-2xl font-bold text-[#F07842]">
+                    {counts.pending}
+                  </div>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 space-y-1">
+                  <div className="text-xs text-[#52574E]">مرفوض</div>
+                  <div className="font-mono tabular-nums text-2xl font-bold text-rose-700">
+                    {counts.rejected}
+                  </div>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 space-y-1">
+                  <div className="text-xs text-[#52574E]">أنواع الوسائط</div>
+                  <div className="font-mono tabular-nums text-xs font-bold text-[#1B1F1C] leading-relaxed">
+                    {counts.textOnly} نص · {counts.illustrated} صورة · {counts.audioOnly} صوت
+                  </div>
+                </div>
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 space-y-1">
+                  <div className="text-xs text-[#52574E]">تكرارات محتملة</div>
+                  <div className="font-mono tabular-nums text-2xl font-bold text-[#F07842]">
+                    {counts.duplicates}
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Category Quick Filter */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="font-display text-sm font-bold text-[#1B1F1C]">
+                    تصفية حسب الفئة الرئيسية
+                  </h2>
+                  {mainCategoryFilter !== 'الكل' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMainCategoryFilter('الكل');
+                        setCategoryFilter('الكل');
+                      }}
+                      className="text-xs font-bold text-[#F07842] hover:underline cursor-pointer"
+                    >
+                      عرض جميع الفئات
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+                  {sortedMainCategories.map((mainCat) => {
+                    const catCount = questionCountByMainIdMap.get(mainCat.id) ?? 0;
+                    const isSelected = mainCategoryFilter === mainCat.name;
+
+                    return (
+                      <button
+                        key={mainCat.id}
+                        type="button"
+                        onClick={() => {
+                          const next = isSelected ? 'الكل' : mainCat.name;
+                          setMainCategoryFilter(next);
+                          setCategoryFilter('الكل');
+                        }}
+                        className={`p-3 rounded-xl border text-right transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#FEF2EC] border-[#F07842]'
+                            : 'bg-[#FFFFFF] border-[#E5E8DD] hover:bg-[#F3F5E9]/60'
+                        }`}
+                      >
+                        <div className="font-display text-xs font-bold text-[#1B1F1C] truncate">
+                          {mainCat.name}
+                        </div>
+                        <div className="font-mono tabular-nums text-sm font-bold text-[#14543D] mt-1">
+                          {catCount}{' '}
+                          <span className="text-[11px] font-normal text-[#52574E]">
+                            / {TARGET_QUESTIONS_PER_CATEGORY}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Search, Filters & Import/Export Toolbar */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <div className="md:col-span-4 relative">
+                    <Search className="w-4 h-4 text-[#52574E] absolute right-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="ابحث بنص السؤال أو الإجابة أو الفئة..."
+                      className="w-full min-h-[42px] pr-10 pl-3.5 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842] focus:bg-[#FFFFFF]"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <select
+                      value={categoryFilter}
+                      onChange={(e) => setCategoryFilter(e.target.value)}
+                      aria-label="تصفية حسب الفئة الفرعية"
+                      className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842]"
+                    >
+                      <option value="الكل">
+                        كل الفئات الفرعية ({allSubcategoryNames.length})
+                      </option>
+                      {sortedMainCategories.map((mainCat) => {
+                        const subs = getSubcategoriesForMain(mainCat);
+                        if (subs.length === 0) return null;
+                        return (
+                          <optgroup key={mainCat.id} label={mainCat.name}>
+                            {subs.map((sub) => (
+                              <option key={sub.id} value={sub.name}>
+                                {sub.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value)}
+                      aria-label="تصفية حسب نوع السؤال"
+                      className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842]"
+                    >
+                      <option value="الكل">كل الأنواع</option>
+                      <option value="text">سؤال نصي ({counts.textOnly})</option>
+                      <option value="image">سؤال صورة ({counts.illustrated})</option>
+                      <option value="audio">سؤال صوتي ({counts.audioOnly})</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <select
+                      value={difficultyFilter}
+                      onChange={(e) => setDifficultyFilter(e.target.value)}
+                      aria-label="تصفية حسب الصعوبة"
+                      className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842]"
+                    >
+                      <option value="الكل">كل الصعوبات</option>
+                      {DIFFICULTIES_LIST.map((diff) => (
+                        <option key={diff} value={diff}>
+                          {diff} ({DIFFICULTY_TO_POINTS[diff]})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      aria-label="تصفية حسب الحالة"
+                      className="w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] focus:outline-none focus:border-[#F07842]"
+                    >
+                      <option value="الكل">كل الحالات</option>
+                      <option value="approved">معتمد</option>
+                      <option value="pending">قيد المراجعة</option>
+                      <option value="rejected">مرفوض</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDuplicatesOnly((prev) => !prev)}
+                      className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                        showDuplicatesOnly
+                          ? 'bg-[#F07842] text-white border-[#F07842]'
+                          : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#E5E8DD]'
+                      }`}
+                    >
+                      كشف المكرر ({counts.duplicates})
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={handleConvertExistingToDirect}
+                      className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#EAF2EE] hover:bg-[#D5E6DD] text-[#14543D] border border-[#C5DDD1] flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>توحيد إلى أسئلة مباشرة</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleExportJSON}
+                      className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>تصدير JSON</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleExportCSV}
+                      className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>تصدير CSV</span>
+                    </button>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json,.csv"
+                      onChange={handleImportFile}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={actionLoading}
+                      className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#1B1F1C] hover:bg-[#2F3531] text-white flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-[#F07842]" />
+                      <span>استيراد JSON / CSV</span>
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-[#52574E] font-mono tabular-nums">
+                    المطابق للتصفية: <strong className="text-[#1B1F1C]">{filteredQuestions.length}</strong> سؤال
+                  </div>
+                </div>
+
+                {/* Sticky / Highlighted Bulk Actions Bar */}
+                {selectedIds.length > 0 && (
+                  <div className="bg-[#FEF2EC] border border-[#F07842]/45 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-[#1B1F1C]">
+                      <span>تم تحديد</span>
+                      <span className="font-mono tabular-nums text-[#F07842] text-sm">
+                        {selectedIds.length}
+                      </span>
+                      <span>سؤال</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => requestBulkStatus('approved')}
+                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-[#14543D] hover:bg-[#0E3F2D] text-white rounded-lg cursor-pointer transition-colors"
+                      >
+                        اعتماد المحدد
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => requestBulkStatus('rejected')}
+                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-[#F07842] hover:bg-[#D9632E] text-white rounded-lg cursor-pointer transition-colors"
+                      >
+                        رفض المحدد
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={requestBulkDelete}
+                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg cursor-pointer transition-colors"
+                      >
+                        حذف المحدد ({selectedIds.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIds([])}
+                        className="min-h-[38px] px-3 py-1.5 text-xs font-bold bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C] rounded-lg cursor-pointer"
+                      >
+                        إلغاء التحديد
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Questions Data View: Desktop Table + Mobile Cards */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden">
+                {/* Mobile Select-All Bar */}
+                {filteredQuestions.length > 0 && (
+                  <div className="md:hidden px-4 py-3 bg-[#F3F5E9]/70 border-b border-[#E5E8DD] flex items-center justify-between gap-2 text-xs">
+                    <label className="flex items-center gap-2.5 font-bold text-[#1B1F1C] cursor-pointer">
                       <input
                         type="checkbox"
+                        className="w-4 h-4 accent-[#F07842]"
                         checked={
                           filteredQuestions.length > 0 &&
                           filteredQuestions.every((q) => selectedIdsSet.has(q.id))
@@ -3680,726 +4372,928 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             setSelectedIds([]);
                           }
                         }}
-                        aria-label="تحديد كل الأسئلة المعروضة"
                       />
-                    </th>
-                    <th className="py-3.5 px-4 font-bold">الفئة الفرعية</th>
-                    <th className="py-3.5 px-4 font-bold">السؤال والإجابة</th>
-                    <th className="py-3.5 px-4 font-bold">النوع</th>
-                    <th className="py-3.5 px-4 font-bold">الصعوبة والنقاط</th>
-                    <th className="py-3.5 px-4 font-bold">الحالة</th>
-                    <th className="py-3.5 px-4 font-bold">الإجراءات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E8DD]">
-                  {filteredQuestions.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="py-12 text-center text-sm text-[#777B73]"
+                      <span>تحديد كل النتائج ({filteredQuestions.length})</span>
+                    </label>
+                    <span className="font-mono tabular-nums text-[#52574E]">
+                      صفحة {questionsPage} / {totalQuestionPages}
+                    </span>
+                  </div>
+                )}
+
+                {filteredQuestions.length === 0 ? (
+                  <div className="py-14 px-4 text-center space-y-3">
+                    <p className="text-sm font-bold text-[#1B1F1C]">
+                      {loadingQuestions
+                        ? 'جاري تحميل الأسئلة من قاعدة البيانات...'
+                        : 'لا توجد أسئلة مطابقة لمعايير البحث الحالية.'}
+                    </p>
+                    {!loadingQuestions && (
+                      <button
+                        type="button"
+                        onClick={openAddModal}
+                        className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] text-white text-xs font-bold cursor-pointer"
                       >
-                        {loadingQuestions
-                          ? 'جاري تحميل الأسئلة من قاعدة البيانات...'
-                          : 'لا توجد أسئلة مطابقة لمعايير البحث الحالية.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedQuestions.map((q) => {
-                      const isDup = duplicateIdsSet.has(q.id);
-                      const isChecked = selectedIdsSet.has(q.id);
-                      const parentMain = subcategoryToMainMap.get(q.category);
-                      return (
-                        <tr
-                          key={q.id}
-                          className={`hover:bg-[#F3F5E9]/50 transition-colors ${
-                            isChecked ? 'bg-[#F3F5E9]' : ''
-                          }`}
-                        >
-                          <td className="py-3.5 px-4">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedIds((prev) => [...prev, q.id]);
-                                } else {
-                                  setSelectedIds((prev) =>
-                                    prev.filter((item) => item !== q.id)
-                                  );
+                        إضافة سؤال جديد
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-right text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-[#F3F5E9] border-b border-[#E5E8DD] text-[#52574E]">
+                            <th className="py-3.5 px-4 w-10">
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 accent-[#F07842]"
+                                checked={
+                                  filteredQuestions.length > 0 &&
+                                  filteredQuestions.every((q) => selectedIdsSet.has(q.id))
                                 }
-                              }}
-                              aria-label={`تحديد السؤال ${q.id}`}
-                            />
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="font-bold text-[#14543D]">
-                              {q.category}
-                            </div>
-                            {parentMain && (
-                              <div className="text-[10px] text-[#777B73]">
-                                {parentMain}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 max-w-md space-y-1">
-                            <div className="font-semibold text-[#252824] text-sm">
-                              {q.questionText}
-                              {isDup && (
-                                <span className="mr-2 text-[11px] font-bold text-[#F07842]">
-                                  (مكرر محتمل)
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[#777B73]">
-                              الإجابة:{' '}
-                              <strong className="text-[#14543D]">
-                                {q.correctAnswer}
-                              </strong>
-                              {q.source && ` · المصدر: ${q.source}`}
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            {inferQuestionMediaType(q) === 'audio' ? (
-                              <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 rounded-lg bg-[#EAF2EE] border border-[#C5DDD1] flex items-center justify-center shrink-0">
-                                  <Volume2 className="w-4 h-4 text-[#14543D]" />
-                                </div>
-                                <div>
-                                  <div className="text-[#14543D] font-bold">
-                                    سؤال صوتي
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedIds(filteredQuestions.map((q) => q.id));
+                                  } else {
+                                    setSelectedIds([]);
+                                  }
+                                }}
+                                aria-label="تحديد كل الأسئلة المعروضة"
+                              />
+                            </th>
+                            <th className="py-3.5 px-4 font-bold">الفئة</th>
+                            <th className="py-3.5 px-4 font-bold">السؤال والإجابة</th>
+                            <th className="py-3.5 px-4 font-bold">الوسائط</th>
+                            <th className="py-3.5 px-4 font-bold">المستوى والنقاط</th>
+                            <th className="py-3.5 px-4 font-bold">الحالة</th>
+                            <th className="py-3.5 px-4 font-bold">الإجراءات</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#E5E8DD]">
+                          {paginatedQuestions.map((q) => {
+                            const isDup = duplicateIdsSet.has(q.id);
+                            const isChecked = selectedIdsSet.has(q.id);
+                            const parentMain = subcategoryToMainMap.get(q.category);
+                            const mediaKind = inferQuestionMediaType(q);
+                            return (
+                              <tr
+                                key={q.id}
+                                className={`hover:bg-[#F3F5E9]/50 transition-colors ${
+                                  isChecked ? 'bg-[#FEF2EC]/55' : ''
+                                }`}
+                              >
+                                <td className="py-3.5 px-4">
+                                  <input
+                                    type="checkbox"
+                                    className="w-4 h-4 accent-[#F07842]"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedIds((prev) => [...prev, q.id]);
+                                      } else {
+                                        setSelectedIds((prev) =>
+                                          prev.filter((item) => item !== q.id)
+                                        );
+                                      }
+                                    }}
+                                    aria-label={`تحديد السؤال ${q.id}`}
+                                  />
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <div className="font-bold text-[#1B1F1C]">
+                                    {q.category}
                                   </div>
-                                  <div className="text-[10px] text-[#777B73]">
-                                    {q.audioMaxPlays
-                                      ? `حد التشغيل: ${q.audioMaxPlays} ${q.audioMaxPlays === 1 ? 'مرة' : 'مرات'}`
-                                      : 'تشغيل غير محدود'}
-                                  </div>
-                                </div>
-                              </div>
-                            ) : inferQuestionMediaType(q) === 'image' && q.imageUrl ? (
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={q.imageUrl}
-                                  alt={q.imageDescription || 'صورة السؤال'}
-                                  referrerPolicy="no-referrer"
-                                  className="w-9 h-9 rounded-lg object-cover border border-[#E5E8DD] bg-[#F3F5E9] shrink-0"
-                                />
-                                <div>
-                                  <div className="text-[#F07842] font-bold flex items-center gap-1">
-                                    <ImageIcon className="w-3.5 h-3.5" />
-                                    <span>سؤال صورة</span>
-                                  </div>
-                                  {q.imageDescription && (
-                                    <div className="text-[10px] text-[#777B73] max-w-[120px] truncate">
-                                      {q.imageDescription}
+                                  {parentMain && (
+                                    <div className="text-[11px] text-[#52574E]">
+                                      {parentMain}
                                     </div>
                                   )}
+                                </td>
+                                <td className="py-3.5 px-4 max-w-md space-y-1">
+                                  <div className="font-semibold text-[#1B1F1C] text-sm leading-snug">
+                                    {q.questionText}
+                                    {isDup && (
+                                      <span className="mr-2 text-[11px] font-bold text-[#F07842]">
+                                        (مكرر محتمل)
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[#52574E]">
+                                    الإجابة:{' '}
+                                    <strong className="text-[#14543D]">
+                                      {q.correctAnswer}
+                                    </strong>
+                                    {q.source && ` · المصدر: ${q.source}`}
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  {mediaKind === 'audio' ? (
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-9 h-9 rounded-lg bg-[#EAF2EE] border border-[#C5DDD1] flex items-center justify-center shrink-0">
+                                        <Volume2 className="w-4 h-4 text-[#14543D]" />
+                                      </div>
+                                      <div>
+                                        <div className="text-[#14543D] font-bold">
+                                          سؤال صوتي
+                                        </div>
+                                        <div className="text-[10px] text-[#52574E]">
+                                          {q.audioMaxPlays
+                                            ? `حد: ${q.audioMaxPlays} ${q.audioMaxPlays === 1 ? 'مرة' : 'مرات'}`
+                                            : 'تشغيل مفتوح'}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : mediaKind === 'image' && q.imageUrl ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewQuestion(q)}
+                                      className="flex items-center gap-2 text-right cursor-pointer group"
+                                      title="اضغط لمعاينة الصورة والسؤال"
+                                    >
+                                      <img
+                                        src={q.imageUrl}
+                                        alt={q.imageDescription || 'صورة السؤال'}
+                                        referrerPolicy="no-referrer"
+                                        loading="lazy"
+                                        className="w-10 h-10 rounded-lg object-cover border border-[#E5E8DD] bg-[#F3F5E9] shrink-0 group-hover:border-[#F07842]"
+                                      />
+                                      <div>
+                                        <div className="text-[#F07842] font-bold flex items-center gap-1">
+                                          <ImageIcon className="w-3.5 h-3.5" />
+                                          <span>سؤال صورة</span>
+                                        </div>
+                                        {q.imageDescription && (
+                                          <div className="text-[10px] text-[#52574E] max-w-[120px] truncate">
+                                            {q.imageDescription}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[#52574E] font-semibold">
+                                      سؤال نصي
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <span className="font-semibold text-[#1B1F1C]">
+                                    {q.difficulty}
+                                  </span>
+                                  <span className="mx-1.5 text-[#E5E8DD]">·</span>
+                                  <span className="font-mono tabular-nums font-bold text-[#F07842]">
+                                    {q.points}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap font-bold">
+                                  {q.status === 'approved' && (
+                                    <span className="inline-flex items-center gap-1 text-[#14543D]">
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>معتمد</span>
+                                    </span>
+                                  )}
+                                  {q.status === 'pending' && (
+                                    <span className="inline-flex items-center gap-1 text-[#D9602B]">
+                                      <Clock className="w-3.5 h-3.5" />
+                                      <span>قيد المراجعة</span>
+                                    </span>
+                                  )}
+                                  {q.status === 'rejected' && (
+                                    <span className="inline-flex items-center gap-1 text-rose-700">
+                                      <XCircle className="w-3.5 h-3.5" />
+                                      <span>مرفوض</span>
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewQuestion(q)}
+                                      title="معاينة السؤال والإجابة"
+                                      aria-label="معاينة السؤال والإجابة"
+                                      className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-[#52574E] hover:text-[#1B1F1C] hover:bg-[#F3F5E9] rounded-lg transition-colors cursor-pointer"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                    {q.status !== 'approved' && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleSingleStatusChange(q.id, 'approved')
+                                        }
+                                        title="اعتماد السؤال"
+                                        aria-label="اعتماد السؤال"
+                                        className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-[#14543D] hover:bg-[#EAF2EE] rounded-lg transition-colors cursor-pointer"
+                                      >
+                                        <CheckCircle2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                    {q.status !== 'rejected' && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleSingleStatusChange(q.id, 'rejected')
+                                        }
+                                        title="رفض السؤال"
+                                        aria-label="رفض السؤال"
+                                        className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-[#F07842] hover:bg-[#FEF2EC] rounded-lg transition-colors cursor-pointer"
+                                      >
+                                        <XCircle className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditModal(q)}
+                                      title="تعديل السؤال"
+                                      aria-label="تعديل السؤال"
+                                      className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-[#1B1F1C] hover:bg-[#F3F5E9] rounded-lg transition-colors cursor-pointer"
+                                    >
+                                      <Edit3 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => requestSingleDelete(q)}
+                                      title="حذف السؤال"
+                                      aria-label="حذف السؤال"
+                                      className="min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Card View (Zero Horizontal Overflow) */}
+                    <div className="md:hidden divide-y divide-[#E5E8DD]">
+                      {paginatedQuestions.map((q) => {
+                        const isDup = duplicateIdsSet.has(q.id);
+                        const isChecked = selectedIdsSet.has(q.id);
+                        const parentMain = subcategoryToMainMap.get(q.category);
+                        const mediaKind = inferQuestionMediaType(q);
+                        return (
+                          <div
+                            key={q.id}
+                            className={`p-4 space-y-3 ${isChecked ? 'bg-[#FEF2EC]/55' : ''}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <label className="flex items-start gap-2.5 min-w-0 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="w-5 h-5 mt-0.5 accent-[#F07842] shrink-0"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedIds((prev) => [...prev, q.id]);
+                                    } else {
+                                      setSelectedIds((prev) =>
+                                        prev.filter((item) => item !== q.id)
+                                      );
+                                    }
+                                  }}
+                                />
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-[#1B1F1C] truncate">
+                                    {q.category}
+                                  </div>
+                                  <div className="text-[11px] text-[#52574E] truncate">
+                                    {parentMain || 'فئة عامة'} · {q.difficulty} ·{' '}
+                                    <span className="font-mono tabular-nums font-bold text-[#F07842]">
+                                      {q.points}
+                                    </span>
+                                  </div>
                                 </div>
+                              </label>
+
+                              <span className="shrink-0 text-[11px] font-bold">
+                                {q.status === 'approved' && (
+                                  <span className="inline-flex items-center gap-1 text-[#14543D]">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>معتمد</span>
+                                  </span>
+                                )}
+                                {q.status === 'pending' && (
+                                  <span className="inline-flex items-center gap-1 text-[#D9602B]">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>قيد المراجعة</span>
+                                  </span>
+                                )}
+                                {q.status === 'rejected' && (
+                                  <span className="inline-flex items-center gap-1 text-rose-700">
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    <span>مرفوض</span>
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <div className="text-sm font-bold text-[#1B1F1C] leading-relaxed">
+                                {q.questionText}
+                                {isDup && (
+                                  <span className="mr-1.5 text-[11px] font-bold text-[#F07842]">
+                                    (مكرر محتمل)
+                                  </span>
+                                )}
                               </div>
-                            ) : (
-                              <span className="text-[#14543D] font-semibold">
-                                سؤال نصي
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className="font-semibold text-[#252824]">
-                              {q.difficulty}
-                            </span>
-                            <span className="mx-1.5 text-[#777B73]">·</span>
-                            <span className="font-mono tabular-nums font-bold text-[#F07842]">
-                              {q.points}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap font-bold">
-                            {q.status === 'approved' && (
-                              <span className="text-[#14543D]">معتمد</span>
-                            )}
-                            {q.status === 'pending' && (
-                              <span className="text-[#F07842]">
-                                قيد المراجعة
-                              </span>
-                            )}
-                            {q.status === 'rejected' && (
-                              <span className="text-rose-700">مرفوض</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              {q.status !== 'approved' && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSingleStatusChange(q.id, 'approved')
-                                  }
-                                  title="اعتماد السؤال"
-                                  className="p-1.5 text-[#14543D] hover:bg-[#EAF2EE] rounded-lg cursor-pointer"
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                </button>
-                              )}
-                              {q.status !== 'rejected' && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSingleStatusChange(q.id, 'rejected')
-                                  }
-                                  title="رفض السؤال"
-                                  className="p-1.5 text-[#F07842] hover:bg-[#FEF2EC] rounded-lg cursor-pointer"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                              )}
+                              <div className="text-xs text-[#52574E]">
+                                الإجابة:{' '}
+                                <strong className="text-[#14543D]">{q.correctAnswer}</strong>
+                              </div>
+                            </div>
+
+                            {(mediaKind === 'image' && q.imageUrl) || mediaKind === 'audio' ? (
+                              <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#F3F5E9]/70 border border-[#E5E8DD] text-xs">
+                                {mediaKind === 'image' && q.imageUrl ? (
+                                  <>
+                                    <img
+                                      src={q.imageUrl}
+                                      alt={q.imageDescription || 'صورة السؤال'}
+                                      loading="lazy"
+                                      className="w-11 h-11 rounded-lg object-cover border border-[#E5E8DD] shrink-0"
+                                    />
+                                    <span className="font-bold text-[#F07842]">سؤال بصورة</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Volume2 className="w-4 h-4 text-[#14543D] shrink-0" />
+                                    <span className="font-bold text-[#14543D]">سؤال صوتي</span>
+                                  </>
+                                )}
+                              </div>
+                            ) : null}
+
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewQuestion(q)}
+                                className="min-h-[40px] px-3 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1 cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>معاينة</span>
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => openEditModal(q)}
-                                title="تعديل السؤال"
-                                className="p-1.5 text-[#252824] hover:bg-[#F3F5E9] rounded-lg cursor-pointer"
+                                className="min-h-[40px] px-3 rounded-xl bg-[#1B1F1C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                               >
-                                <Edit3 className="w-4 h-4" />
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>تعديل</span>
                               </button>
+                              {q.status !== 'approved' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSingleStatusChange(q.id, 'approved')}
+                                  className="min-h-[40px] px-3 rounded-xl bg-[#EAF2EE] text-[#14543D] text-xs font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>اعتماد</span>
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => requestSingleDelete(q)}
-                                title="حذف السؤال"
-                                className="p-1.5 text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                className="min-h-[40px] px-3 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1 cursor-pointer mr-auto"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف</span>
                               </button>
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls for Questions */}
-            {filteredQuestions.length > questionsPerPage && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-[#E5E8DD] bg-[#FFFFFF] rounded-b-2xl">
-                <div className="text-xs text-[#777B73]">
-                  عرض{' '}
-                  <span className="font-bold text-[#252824]">
-                    {((questionsPage - 1) * questionsPerPage + 1).toLocaleString('ar-SA')}
-                  </span>{' '}
-                  -{' '}
-                  <span className="font-bold text-[#252824]">
-                    {Math.min(questionsPage * questionsPerPage, filteredQuestions.length).toLocaleString('ar-SA')}
-                  </span>{' '}
-                  من أصل{' '}
-                  <span className="font-bold text-[#252824]">
-                    {filteredQuestions.length.toLocaleString('ar-SA')}
-                  </span>{' '}
-                  سؤال
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={questionsPage <= 1}
-                    onClick={() => {
-                      setQuestionsPage((p) => Math.max(1, p - 1));
-                      window.scrollTo({ top: 400, behavior: 'smooth' });
-                    }}
-                    className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] text-[#252824] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  >
-                    الصفحة السابقة
-                  </button>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#252824]">
-                    <span>صفحة</span>
-                    <span className="px-2.5 py-1 rounded bg-[#EAF2EE] text-[#14543D]">
-                      {questionsPage.toLocaleString('ar-SA')}
-                    </span>
-                    <span>من</span>
-                    <span>{totalQuestionPages.toLocaleString('ar-SA')}</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={questionsPage >= totalQuestionPages}
-                    onClick={() => {
-                      setQuestionsPage((p) => Math.min(totalQuestionPages, p + 1));
-                      window.scrollTo({ top: 400, behavior: 'smooth' });
-                    }}
-                    className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] text-[#252824] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
-                  >
-                    الصفحة التالية
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* TAB 5: CONTACT US SETTINGS MANAGEMENT */}
-      {adminTab === 'contact' && (
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 md:p-8 max-w-3xl space-y-6">
-          <div className="space-y-1 border-b border-[#E5E8DD] pb-4">
-            <div className="text-xs font-bold text-[#F07842]">
-              إعدادات صفحة تواصل معنا
-            </div>
-            <h2 className="font-display text-xl font-bold text-[#252824]">
-              تعديل بيانات وروابط التواصل
-            </h2>
-            <p className="text-xs text-[#777B73]">
-              جميع الحقول هنا تظهر مباشرة في صفحة «تواصل معنا». اترك أي حقل فارغاً إذا لم ترغب في عرضه حالياً.
-            </p>
-          </div>
-
-          <form
-            onSubmit={handleSaveContactSettings}
-            className="space-y-5 text-xs"
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5 sm:col-span-2">
-                <label className="block font-bold text-[#252824]">
-                  العنوان الترحيبي الرئيسي
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={contactHeading}
-                  onChange={(e) => setContactHeading(e.target.value)}
-                  placeholder="حنا هنا لمساعدتك!"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
-                />
-              </div>
-
-              <div className="space-y-1.5 sm:col-span-2">
-                <label className="block font-bold text-[#252824]">
-                  الرسالة الترحيبية القصيرة
-                </label>
-                <textarea
-                  rows={3}
-                  value={contactMessage}
-                  onChange={(e) => setContactMessage(e.target.value)}
-                  placeholder="اكتب رسالة قصيرة تدعو الزوار للتواصل معكم..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
-                  رقم أو رابط الواتساب (WhatsApp)
-                </label>
-                <input
-                  type="text"
-                  value={contactWhatsappUrl}
-                  onChange={(e) => setContactWhatsappUrl(e.target.value)}
-                  placeholder="مثال: https://wa.me/9665... أو رقم الجوال دولياً"
-                  dir="ltr"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] text-left font-mono"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
-                  النص الظاهر على زر الواتساب (اختياري)
-                </label>
-                <input
-                  type="text"
-                  value={contactWhatsappDisplay}
-                  onChange={(e) => setContactWhatsappDisplay(e.target.value)}
-                  placeholder="مثال: تواصل معنا عبر واتساب"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
-                />
-              </div>
-
-              <div className="space-y-1.5 sm:col-span-2">
-                <label className="block font-bold text-[#252824]">
-                  البريد الإلكتروني للتواصل (Email)
-                </label>
-                <input
-                  type="email"
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                  placeholder="ضع بريد التواصل الرسمي هنا..."
-                  dir="ltr"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] text-left font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-[#E5E8DD] space-y-4">
-              <div className="font-bold text-[#252824]">
-                روابط حسابات التواصل الاجتماعي (اختيارية)
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block font-semibold text-[#777B73]">
-                    رابط حساب X (تويتر)
-                  </label>
-                  <input
-                    type="url"
-                    value={contactTwitter}
-                    onChange={(e) => setContactTwitter(e.target.value)}
-                    placeholder="https://x.com/..."
-                    dir="ltr"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] text-left font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block font-semibold text-[#777B73]">
-                    رابط حساب إنستغرام (Instagram)
-                  </label>
-                  <input
-                    type="url"
-                    value={contactInstagram}
-                    onChange={(e) => setContactInstagram(e.target.value)}
-                    placeholder="https://instagram.com/..."
-                    dir="ltr"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] text-left font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block font-semibold text-[#777B73]">
-                    رابط حساب تيك توك (TikTok)
-                  </label>
-                  <input
-                    type="url"
-                    value={contactTiktok}
-                    onChange={(e) => setContactTiktok(e.target.value)}
-                    placeholder="https://tiktok.com/@..."
-                    dir="ltr"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] text-left font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block font-semibold text-[#777B73]">
-                    رابط حساب سناب شات (Snapchat)
-                  </label>
-                  <input
-                    type="url"
-                    value={contactSnapchat}
-                    onChange={(e) => setContactSnapchat(e.target.value)}
-                    placeholder="https://snapchat.com/add/..."
-                    dir="ltr"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] text-left font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-[#E5E8DD] flex justify-end">
-              <button
-                type="submit"
-                disabled={actionLoading}
-                className="px-7 py-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-2 cursor-pointer"
-              >
-                <Check className="w-4 h-4" />
-                <span>
-                  {actionLoading
-                    ? 'جاري الحفظ...'
-                    : 'حفظ بيانات التواصل في Firebase'}
-                </span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* TAB 6: USER CONTRIBUTIONS REVIEW (مساهمات المستخدمين) */}
-      {adminTab === 'contributions' && (
-        <div className="space-y-6">
-          {/* Header & Subtitle */}
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-[#14543D] mb-1 font-bold text-sm">
-                <Inbox className="w-5 h-5 text-[#F07842]" />
-                <span>مراجعة مساهمات اللاعبين والأسئلة المقترحة</span>
-              </div>
-              <p className="text-xs text-[#777B73]">
-                هنا تظهر جميع الأسئلة التي اقترحها المستخدمون من خلال «قائمتي الخاصة». يمكنك مراجعة نص السؤال والإجابة والصورة والتصنيف، ثم اعتماده لنشره فوراً في بنك الأسئلة العام أو رفضه مع ذكر السبب.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-              <button
-                type="button"
-                onClick={loadContributions}
-                disabled={loadingContributions}
-                className="px-4 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-2 cursor-pointer transition-colors"
-              >
-                <RefreshCw
-                  className={`w-4 h-4 ${loadingContributions ? 'animate-spin' : ''}`}
-                />
-                <span>تحديث</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Filter Bar & Search */}
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Status pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-              <button
-                type="button"
-                onClick={() => setContributionFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                  contributionFilter === 'all'
-                    ? 'bg-[#14543D] text-white'
-                    : 'bg-[#F3F5E9] text-[#777B73] hover:text-[#252824]'
-                }`}
-              >
-                الكل ({contributions.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setContributionFilter('pending')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                  contributionFilter === 'pending'
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
-                }`}
-              >
-                <span>قيد المراجعة</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
-                  {contributions.filter((c) => c.status === 'pending').length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setContributionFilter('approved')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                  contributionFilter === 'approved'
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                }`}
-              >
-                <span>معتمدة ومنشورة</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
-                  {contributions.filter((c) => c.status === 'approved').length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setContributionFilter('rejected')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                  contributionFilter === 'rejected'
-                    ? 'bg-rose-600 text-white'
-                    : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
-                }`}
-              >
-                <span>مرفوضة</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-mono">
-                  {contributions.filter((c) => c.status === 'rejected').length}
-                </span>
-              </button>
-            </div>
-
-            {/* Search Input */}
-            <div className="relative min-w-0 w-full sm:w-auto sm:min-w-[240px]">
-              <Search className="w-4 h-4 text-[#777B73] absolute right-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={contributionSearch}
-                onChange={(e) => setContributionSearch(e.target.value)}
-                placeholder="ابحث بالنص، الإجابة، أو الكاتب..."
-                className="w-full pl-3 pr-9 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824] placeholder:text-[#777B73]/70 focus:outline-hidden focus:border-[#14543D]"
-              />
-            </div>
-          </div>
-
-          {/* List of Contributions */}
-          {loadingContributions ? (
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center text-xs text-[#777B73]">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#14543D] mb-2" />
-              <span>جاري تحميل المساهمات من Firestore...</span>
-            </div>
-          ) : filteredContributions.length === 0 ? (
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center text-xs text-[#777B73] space-y-2">
-              <Inbox className="w-10 h-10 text-[#777B73]/40 mx-auto" />
-              <div className="font-bold text-[#252824] text-sm">
-                {contributionFilter === 'pending'
-                  ? 'لا توجد مساهمات قيد المراجعة حالياً'
-                  : 'لم يتم العثور على أي مساهمات مطابقة'}
-              </div>
-              <p className="max-w-md mx-auto text-[11px]">
-                عندما يرسل اللاعبون أسئلة من «قائمتي الخاصة»، ستظهر هنا فوراً لمراجعتها واعتمادها.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {filteredContributions.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#14543D]/40 rounded-2xl p-5 shadow-xs transition-all space-y-4"
-                >
-                  {/* Top Bar: Author Info & Badges */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E5E8DD]">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-[#14543D] text-white flex items-center justify-center text-xs font-bold">
-                        {(item.userName || item.userEmail || 'م')[0].toUpperCase()}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-[#252824]">
-                          {item.userName || 'مستخدم مساهم'}
-                        </div>
-                        <div className="text-[10px] text-[#777B73]" dir="ltr">
-                          {item.userEmail || '—'}
-                        </div>
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
+                  </>
+                )}
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#EAF2EE] text-[#14543D]">
-                        {item.mainCategory}
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#F3F5E9] text-[#252824] border border-[#E5E8DD]">
-                        {item.category}
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#F07842]/10 text-[#F07842]">
-                        {item.points} نقطة
-                      </span>
-
-                      {/* Status Badge */}
-                      {item.status === 'pending' && (
-                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-800">
-                          قيد المراجعة
-                        </span>
-                      )}
-                      {item.status === 'approved' && (
-                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>معتمد ومنشور</span>
-                        </span>
-                      )}
-                      {item.status === 'rejected' && (
-                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100 text-rose-800 flex items-center gap-1">
-                          <XCircle className="w-3 h-3" />
-                          <span>مرفوض</span>
-                        </span>
-                      )}
+                {/* Pagination Controls for Questions */}
+                {filteredQuestions.length > questionsPerPage && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-[#E5E8DD] bg-[#FFFFFF]">
+                    <div className="text-xs text-[#52574E] font-mono tabular-nums">
+                      عرض{' '}
+                      <strong className="text-[#1B1F1C]">
+                        {(questionsPage - 1) * questionsPerPage + 1}
+                      </strong>{' '}
+                      -{' '}
+                      <strong className="text-[#1B1F1C]">
+                        {Math.min(questionsPage * questionsPerPage, filteredQuestions.length)}
+                      </strong>{' '}
+                      من أصل{' '}
+                      <strong className="text-[#1B1F1C]">
+                        {filteredQuestions.length}
+                      </strong>{' '}
+                      سؤال
                     </div>
-                  </div>
-
-                  {/* Question & Image Body */}
-                  <div className="flex flex-col md:flex-row gap-4 items-start">
-                    {item.imageUrl && (
-                      <div className="w-full md:w-40 h-32 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] overflow-hidden shrink-0 group relative">
-                        <img
-                          src={item.imageUrl}
-                          alt="صورة السؤال"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setPreviewContribution(item)}
-                          className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-[11px] font-bold transition-opacity cursor-pointer"
-                        >
-                          تكبير الصورة
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="flex-1 space-y-3 min-w-0">
-                      <div>
-                        <div className="text-[11px] font-bold text-[#777B73] mb-1">
-                          نص السؤال:
-                        </div>
-                        <div className="text-sm font-bold text-[#252824] leading-relaxed">
-                          {item.questionText}
-                        </div>
-                      </div>
-
-                      <div className="bg-[#EAF2EE] border border-[#14543D]/20 rounded-xl p-3 space-y-1">
-                        <div className="text-[10px] font-bold text-[#14543D]">
-                          الإجابة النموذجية:
-                        </div>
-                        <div className="text-xs font-bold text-[#14543D]">
-                          {item.correctAnswer}
-                        </div>
-                      </div>
-
-                      {(item.explanation || item.source) && (
-                        <div className="flex flex-wrap gap-4 text-[11px] text-[#777B73]">
-                          {item.explanation && (
-                            <div>
-                              <span className="font-bold text-[#252824]">الشرح: </span>
-                              <span>{item.explanation}</span>
-                            </div>
-                          )}
-                          {item.source && (
-                            <div>
-                              <span className="font-bold text-[#252824]">المصدر: </span>
-                              <span>{item.source}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {item.status === 'rejected' && item.rejectionReason && (
-                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-0.5">
-                          <div className="font-bold">سبب الرفض المرسل للمستخدم:</div>
-                          <div>{item.rejectionReason}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions Footer */}
-                  <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-[11px] text-[#777B73]">
-                      تم الإرسال: {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString('ar-SA') : 'مؤخراً'}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setPreviewContribution(item)}
-                        className="px-3 py-1.5 rounded-lg border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#252824] flex items-center gap-1.5 cursor-pointer transition-colors"
+                        disabled={questionsPage <= 1}
+                        onClick={() => {
+                          setQuestionsPage((p) => Math.max(1, p - 1));
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] text-[#1B1F1C] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
                       >
-                        <Eye className="w-3.5 h-3.5 text-[#14543D]" />
-                        <span>معاينة في لوحة اللعبة</span>
+                        السابق
                       </button>
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#1B1F1C] font-mono tabular-nums">
+                        <span className="px-2.5 py-1 rounded-lg bg-[#FEF2EC] text-[#F07842]">
+                          {questionsPage}
+                        </span>
+                        <span className="text-[#52574E]">/</span>
+                        <span>{totalQuestionPages}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={questionsPage >= totalQuestionPages}
+                        onClick={() => {
+                          setQuestionsPage((p) => Math.min(totalQuestionPages, p + 1));
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] text-[#1B1F1C] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                      >
+                        التالي
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
-                      {item.status === 'pending' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenRejectModal(item)}
-                            disabled={actionLoading}
-                            className="px-3.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-xs font-bold text-rose-700 flex items-center gap-1.5 cursor-pointer transition-colors"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>رفض السؤال</span>
-                          </button>
+          {/* TAB 5: CONTACT US SETTINGS MANAGEMENT */}
+          {adminTab === 'contact' && (
+            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-8 max-w-3xl space-y-6">
+              <div className="space-y-1 border-b border-[#E5E8DD] pb-4">
+                <div className="text-xs font-bold text-[#F07842]">
+                  إعدادات صفحة تواصل معنا
+                </div>
+                <h2 className="font-display text-xl font-bold text-[#1B1F1C]">
+                  تعديل بيانات وروابط التواصل
+                </h2>
+                <p className="text-xs text-[#52574E]">
+                  جميع الحقول هنا تظهر مباشرة في صفحة «تواصل معنا». اترك أي حقل فارغاً إذا لم ترغب في عرضه حالياً.
+                </p>
+              </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleApproveContribution(item)}
-                            disabled={actionLoading}
-                            className="px-4 py-1.5 rounded-lg bg-[#14543D] hover:bg-[#0E3D2C] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-[#F07842]" />
-                            <span>اعتماد ونشر في اللعبة</span>
-                          </button>
-                        </>
-                      )}
+              <form
+                onSubmit={handleSaveContactSettings}
+                className="space-y-5 text-xs"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="block font-bold text-[#1B1F1C]">
+                      العنوان الترحيبي الرئيسي
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={contactHeading}
+                      onChange={(e) => setContactHeading(e.target.value)}
+                      placeholder="حنا هنا لمساعدتك!"
+                      className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C]"
+                    />
+                  </div>
 
-                      {item.status === 'rejected' && (
-                        <button
-                          type="button"
-                          onClick={() => handleApproveContribution(item)}
-                          disabled={actionLoading}
-                          className="px-3.5 py-1.5 rounded-lg border border-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>إعادة اعتماد السؤال</span>
-                        </button>
-                      )}
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="block font-bold text-[#1B1F1C]">
+                      الرسالة الترحيبية القصيرة
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={contactMessage}
+                      onChange={(e) => setContactMessage(e.target.value)}
+                      placeholder="اكتب رسالة قصيرة تدعو الزوار للتواصل معكم..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block font-bold text-[#1B1F1C]">
+                      رقم أو رابط الواتساب (WhatsApp)
+                    </label>
+                    <input
+                      type="text"
+                      value={contactWhatsappUrl}
+                      onChange={(e) => setContactWhatsappUrl(e.target.value)}
+                      placeholder="مثال: https://wa.me/9665... أو رقم الجوال دولياً"
+                      dir="ltr"
+                      className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block font-bold text-[#1B1F1C]">
+                      النص الظاهر على زر الواتساب (اختياري)
+                    </label>
+                    <input
+                      type="text"
+                      value={contactWhatsappDisplay}
+                      onChange={(e) => setContactWhatsappDisplay(e.target.value)}
+                      placeholder="مثال: تواصل معنا عبر واتساب"
+                      className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="block font-bold text-[#1B1F1C]">
+                      البريد الإلكتروني للتواصل (Email)
+                    </label>
+                    <input
+                      type="email"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      placeholder="ضع بريد التواصل الرسمي هنا..."
+                      dir="ltr"
+                      className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-[#E5E8DD] space-y-4">
+                  <div className="font-bold text-[#1B1F1C]">
+                    روابط حسابات التواصل الاجتماعي (اختيارية)
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block font-semibold text-[#52574E]">
+                        رابط حساب X (تويتر)
+                      </label>
+                      <input
+                        type="url"
+                        value={contactTwitter}
+                        onChange={(e) => setContactTwitter(e.target.value)}
+                        placeholder="https://x.com/..."
+                        dir="ltr"
+                        className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block font-semibold text-[#52574E]">
+                        رابط حساب إنستغرام (Instagram)
+                      </label>
+                      <input
+                        type="url"
+                        value={contactInstagram}
+                        onChange={(e) => setContactInstagram(e.target.value)}
+                        placeholder="https://instagram.com/..."
+                        dir="ltr"
+                        className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block font-semibold text-[#52574E]">
+                        رابط حساب تيك توك (TikTok)
+                      </label>
+                      <input
+                        type="url"
+                        value={contactTiktok}
+                        onChange={(e) => setContactTiktok(e.target.value)}
+                        placeholder="https://tiktok.com/@..."
+                        dir="ltr"
+                        className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block font-semibold text-[#52574E]">
+                        رابط حساب سناب شات (Snapchat)
+                      </label>
+                      <input
+                        type="url"
+                        value={contactSnapchat}
+                        onChange={(e) => setContactSnapchat(e.target.value)}
+                        placeholder="https://snapchat.com/add/..."
+                        dir="ltr"
+                        className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
+                      />
                     </div>
                   </div>
                 </div>
-              ))}
+
+                <div className="pt-4 border-t border-[#E5E8DD] flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={actionLoading}
+                    className="min-h-[44px] px-7 py-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>
+                      {actionLoading
+                        ? 'جاري الحفظ...'
+                        : 'حفظ بيانات التواصل في Firebase'}
+                    </span>
+                  </button>
+                </div>
+              </form>
             </div>
           )}
-        </div>
-      )}
+
+          {/* TAB 6: USER CONTRIBUTIONS REVIEW (مساهمات المستخدمين) */}
+          {adminTab === 'contributions' && (
+            <div className="space-y-5">
+              {/* Header & Subtitle */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-[#1B1F1C] font-bold text-sm">
+                    <Inbox className="w-5 h-5 text-[#F07842]" />
+                    <span>مراجعة مساهمات اللاعبين والأسئلة المقترحة</span>
+                  </div>
+                  <p className="text-xs text-[#52574E]">
+                    هنا تظهر الأسئلة التي اقترحها المستخدمون من خلال «قائمتي الخاصة». يمكنك مراجعتها واعتمادها أو رفضها مع ذكر السبب.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadContributions}
+                  disabled={loadingContributions}
+                  className="min-h-[42px] px-4 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-2 cursor-pointer self-start md:self-auto shrink-0 transition-colors"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 text-[#F07842] ${loadingContributions ? 'animate-spin' : ''}`}
+                  />
+                  <span>تحديث</span>
+                </button>
+              </div>
+
+              {/* Filter Bar & Search */}
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setContributionFilter('all')}
+                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                      contributionFilter === 'all'
+                        ? 'bg-[#1B1F1C] text-white'
+                        : 'bg-[#F3F5E9] text-[#52574E] hover:text-[#1B1F1C]'
+                    }`}
+                  >
+                    الكل ({contributions.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContributionFilter('pending')}
+                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      contributionFilter === 'pending'
+                        ? 'bg-[#F07842] text-white'
+                        : 'bg-[#FEF2EC] text-[#D9602B] hover:bg-[#FDE4D7]'
+                    }`}
+                  >
+                    <span>قيد المراجعة</span>
+                    <span className="font-mono tabular-nums text-[11px]">
+                      ({contributions.filter((c) => c.status === 'pending').length})
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContributionFilter('approved')}
+                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      contributionFilter === 'approved'
+                        ? 'bg-[#14543D] text-white'
+                        : 'bg-[#EAF2EE] text-[#14543D] hover:bg-[#D7E6DF]'
+                    }`}
+                  >
+                    <span>معتمدة</span>
+                    <span className="font-mono tabular-nums text-[11px]">
+                      ({contributions.filter((c) => c.status === 'approved').length})
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContributionFilter('rejected')}
+                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      contributionFilter === 'rejected'
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
+                    }`}
+                  >
+                    <span>مرفوضة</span>
+                    <span className="font-mono tabular-nums text-[11px]">
+                      ({contributions.filter((c) => c.status === 'rejected').length})
+                    </span>
+                  </button>
+                </div>
+
+                {/* Search Input */}
+                <div className="relative min-w-0 w-full sm:w-auto sm:min-w-[240px]">
+                  <Search className="w-4 h-4 text-[#52574E] absolute right-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={contributionSearch}
+                    onChange={(e) => setContributionSearch(e.target.value)}
+                    placeholder="ابحث بالنص، الإجابة، أو الكاتب..."
+                    className="w-full min-h-[40px] pl-3 pr-9 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#1B1F1C] placeholder:text-[#52574E]/70 focus:outline-hidden focus:border-[#F07842]"
+                  />
+                </div>
+              </div>
+
+              {/* List of Contributions */}
+              {loadingContributions ? (
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center text-xs text-[#52574E]">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#F07842] mb-2" />
+                  <span>جاري تحميل المساهمات من Firestore...</span>
+                </div>
+              ) : filteredContributions.length === 0 ? (
+                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center text-xs text-[#52574E] space-y-2">
+                  <Inbox className="w-10 h-10 text-[#52574E]/40 mx-auto" />
+                  <div className="font-bold text-[#1B1F1C] text-sm">
+                    {contributionFilter === 'pending'
+                      ? 'لا توجد مساهمات قيد المراجعة حالياً'
+                      : 'لم يتم العثور على أي مساهمات مطابقة'}
+                  </div>
+                  <p className="max-w-md mx-auto text-[11px]">
+                    عندما يرسل اللاعبون أسئلة من «قائمتي الخاصة»، ستظهر هنا فوراً لمراجعتها واعتمادها.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {filteredContributions.map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842]/40 rounded-2xl p-5 transition-colors space-y-4"
+                    >
+                      {/* Top Bar: Author Info & Metadata */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#E5E8DD]">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-[#1B1F1C] text-white flex items-center justify-center text-xs font-bold">
+                            {(item.userName || item.userEmail || 'م')[0].toUpperCase()}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs font-bold text-[#1B1F1C]">
+                              {item.userName || 'مستخدم مساهم'}
+                            </div>
+                            <div className="text-[11px] text-[#52574E] font-mono" dir="ltr">
+                              {item.userEmail || '—'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-bold text-[#1B1F1C]">
+                            {item.mainCategory}
+                          </span>
+                          <span aria-hidden="true" className="text-[#E5E8DD]">·</span>
+                          <span className="text-[#52574E]">{item.category}</span>
+                          <span aria-hidden="true" className="text-[#E5E8DD]">·</span>
+                          <span className="font-mono tabular-nums font-bold text-[#F07842]">
+                            {item.points} نقطة
+                          </span>
+                          <span aria-hidden="true" className="text-[#E5E8DD]">·</span>
+
+                          {item.status === 'pending' && (
+                            <span className="inline-flex items-center gap-1 font-bold text-[#D9602B]">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>قيد المراجعة</span>
+                            </span>
+                          )}
+                          {item.status === 'approved' && (
+                            <span className="inline-flex items-center gap-1 font-bold text-[#14543D]">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>معتمد ومنشور</span>
+                            </span>
+                          )}
+                          {item.status === 'rejected' && (
+                            <span className="inline-flex items-center gap-1 font-bold text-rose-700">
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>مرفوض</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Question & Image Body */}
+                      <div className="flex flex-col md:flex-row gap-4 items-start">
+                        {item.imageUrl && (
+                          <div className="w-full md:w-40 h-32 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] overflow-hidden shrink-0 group relative">
+                            <img
+                              src={item.imageUrl}
+                              alt="صورة السؤال"
+                              className="w-full h-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setPreviewContribution(item)}
+                              className="absolute inset-0 bg-black/45 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-[11px] font-bold transition-opacity cursor-pointer"
+                            >
+                              تكبير الصورة
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex-1 space-y-3 min-w-0">
+                          <div>
+                            <div className="text-[11px] font-bold text-[#52574E] mb-1">
+                              نص السؤال:
+                            </div>
+                            <div className="text-sm font-bold text-[#1B1F1C] leading-relaxed">
+                              {item.questionText}
+                            </div>
+                          </div>
+
+                          <div className="bg-[#EAF2EE] border border-[#14543D]/20 rounded-xl p-3 space-y-1">
+                            <div className="text-[10px] font-bold text-[#14543D]">
+                              الإجابة النموذجية:
+                            </div>
+                            <div className="text-xs font-bold text-[#14543D]">
+                              {item.correctAnswer}
+                            </div>
+                          </div>
+
+                          {(item.explanation || item.source) && (
+                            <div className="flex flex-wrap gap-4 text-[11px] text-[#52574E]">
+                              {item.explanation && (
+                                <div>
+                                  <span className="font-bold text-[#1B1F1C]">الشرح: </span>
+                                  <span>{item.explanation}</span>
+                                </div>
+                              )}
+                              {item.source && (
+                                <div>
+                                  <span className="font-bold text-[#1B1F1C]">المصدر: </span>
+                                  <span>{item.source}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {item.status === 'rejected' && item.rejectionReason && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-800 space-y-0.5">
+                              <div className="font-bold">سبب الرفض المرسل للمستخدم:</div>
+                              <div>{item.rejectionReason}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Actions Footer */}
+                      <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-[11px] text-[#52574E] font-mono tabular-nums">
+                          تاريخ الإرسال: {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString('ar-SA') : 'مؤخراً'}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewContribution(item)}
+                            className="min-h-[38px] px-3 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-[#F07842]" />
+                            <span>معاينة</span>
+                          </button>
+
+                          {item.status === 'pending' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRejectModal(item)}
+                                disabled={actionLoading}
+                                className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-xs font-bold text-rose-700 flex items-center gap-1.5 cursor-pointer transition-colors"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>رفض</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleApproveContribution(item)}
+                                disabled={actionLoading}
+                                className="min-h-[38px] px-4 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>اعتماد ونشر</span>
+                              </button>
+                            </>
+                          )}
+
+                          {item.status === 'rejected' && (
+                            <button
+                              type="button"
+                              onClick={() => handleApproveContribution(item)}
+                              disabled={actionLoading}
+                              className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>إعادة اعتماد</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
       {/* SECTION 7: PLAYER & CATEGORY ANALYTICS DASHBOARD */}
       {adminTab === 'player_analytics' && (
@@ -4438,18 +5332,36 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
       {/* SECTION 10: WALA KALIMA QR WORD BANK & SETTINGS */}
       {adminTab === 'wala_kalima' && (
-        <AdminWalaKalimaSection onSettingsUpdated={onWalaKalimaSettingsUpdated} />
+        <AdminWalaKalimaSection
+          onSettingsUpdated={onWalaKalimaSettingsUpdated}
+          walaKalimaCategory={walaKalimaMainCategory}
+          comingSoonBusy={actionLoading}
+          onToggleComingSoon={handleToggleMainCategoryComingSoon}
+        />
       )}
+        </div>
+      </div>
 
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}
       {mainModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/65 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label={
+            editingMainCategory
+              ? `تعديل الفئة الرئيسية: ${editingMainCategory.name}`
+              : 'إضافة فئة رئيسية جديدة'
+          }
+          onClick={() => {
+            if (!actionLoading) setMainModalOpen(false);
+          }}
         >
-          <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col">
-            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+          >
+            <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <h3 className="font-display text-base sm:text-lg font-bold">
                 {editingMainCategory
                   ? `تعديل الفئة الرئيسية: ${editingMainCategory.name}`
@@ -4458,9 +5370,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setMainModalOpen(false)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
+                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
               >
-                إغلاق
+                <X className="w-3.5 h-3.5" />
+                <span>إغلاق</span>
               </button>
             </div>
 
@@ -4472,7 +5385,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 {/* Right Column (Form Fields) */}
                 <div className="md:col-span-7 space-y-4">
                   <div className="space-y-1.5">
-                    <label className="block font-bold text-[#252824]">
+                    <label className="block font-bold text-[#1B1F1C]">
                       اسم الفئة
                     </label>
                     <input
@@ -4482,7 +5395,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       value={mainFormName}
                       onChange={(e) => setMainFormName(e.target.value)}
                       placeholder="مثال: عام، كرة قدم، علوم وتقنية..."
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] font-bold"
+                      className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] font-bold focus:outline-hidden focus:border-[#F07842]"
                     />
                     {editingMainCategory &&
                       editingMainCategory.name !== mainFormName.trim() &&
@@ -4494,7 +5407,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block font-bold text-[#252824]">
+                    <label className="block font-bold text-[#1B1F1C]">
                       وصف الفئة
                     </label>
                     <textarea
@@ -4503,13 +5416,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       value={mainFormDescription}
                       onChange={(e) => setMainFormDescription(e.target.value)}
                       placeholder="وصف مختصر يظهر تحت اسم الفئة الرئيسية في الموقع..."
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="block font-bold text-[#252824]">
+                      <label className="block font-bold text-[#1B1F1C]">
                         ترتيب ظهور الفئة
                       </label>
                       <input
@@ -4520,12 +5433,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         onChange={(e) =>
                           setMainFormSortOrder(Number(e.target.value) || 1)
                         }
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] font-mono"
+                        className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] font-mono tabular-nums focus:outline-hidden focus:border-[#F07842]"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="block font-bold text-[#252824]">
+                      <label className="block font-bold text-[#1B1F1C]">
                         حالة الفئة (ظاهرة / مخفية)
                       </label>
                       <select
@@ -4533,7 +5446,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         onChange={(e) =>
                           setMainFormIsActive(e.target.value === 'visible')
                         }
-                        className="w-full px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] font-semibold"
+                        className="w-full min-h-[42px] px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] font-semibold focus:outline-hidden focus:border-[#F07842]"
                       >
                         <option value="visible">ظاهرة في الموقع</option>
                         <option value="hidden">مخفية عن الألعاب الجديدة</option>
@@ -4542,7 +5455,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block font-bold text-[#252824]">
+                    <label className="block font-bold text-[#1B1F1C]">
                       أيقونة الفئة (تظهر في أعمدة لوحة اللعب)
                     </label>
                     <select
@@ -4552,7 +5465,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           e.target.value as MainCategoryIconName
                         )
                       }
-                      className="w-full px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                      className="w-full min-h-[42px] px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                     >
                       {ICON_OPTIONS.map((ico) => (
                         <option key={ico.id} value={ico.id}>
@@ -4570,11 +5483,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       className="mt-0.5 accent-[#F07842]"
                     />
                     <div className="space-y-0.5">
-                      <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                      <div className="font-bold text-[#1B1F1C] flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-[#F07842]" />
                         <span>تفعيل وضع «قريباً» (تعطيل مؤقت دون حذف)</span>
                       </div>
-                      <p className="text-[11px] text-[#777B73]">
+                      <p className="text-[11px] text-[#52574E]">
                         تظهر البطاقة في الموقع بشارة «قريباً» ويُمنع اختيارها في المباريات مع بقاء جميع الأسئلة والصور محفوظة.
                       </p>
                     </div>
@@ -4583,11 +5496,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
                 {/* Left Column (Category Image + Live Card Preview) */}
                 <div className="md:col-span-5 space-y-3">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     صورة الفئة ومعاينة البطاقة
                   </label>
 
-                  <div className="group relative aspect-square w-full rounded-2xl overflow-hidden border-2 border-[#E5E8DD] bg-[#14543D] flex flex-col justify-end">
+                  <div className="group relative aspect-square w-full rounded-2xl overflow-hidden border-2 border-[#E5E8DD] bg-[#1B1F1C] flex flex-col justify-end">
                     <div className="absolute inset-0">
                       <CategoryCardArtwork
                         name={mainFormName || 'اسم الفئة'}
@@ -4606,7 +5519,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           <span>قريباً</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-md bg-[#252824]/75 text-white font-mono text-[10px] font-bold">
+                        <span className="px-2 py-0.5 rounded-md bg-[#1B1F1C]/75 text-white font-mono text-[10px] font-bold">
                           معاينة البطاقة
                         </span>
                       )}
@@ -4640,7 +5553,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           mainCat: editingMainCategory || undefined,
                         })
                       }
-                      className="flex-1 py-2.5 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="flex-1 min-h-[42px] py-2.5 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <Crop className="w-3.5 h-3.5" />
                       <span>
@@ -4653,7 +5566,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         onClick={() => setMainFormImageUrl('')}
                         title="إزالة الصورة"
-                        className="p-2.5 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] cursor-pointer"
+                        className="min-h-[42px] px-3 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -4670,7 +5583,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     onClick={() =>
                       openDeleteMainCategoryDialog(editingMainCategory)
                     }
-                    className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1.5 cursor-pointer"
+                    className="min-h-[42px] px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1.5 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>حذف الفئة</span>
@@ -4683,14 +5596,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setMainModalOpen(false)}
-                    className="px-5 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] font-bold cursor-pointer"
+                    className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] font-bold cursor-pointer"
                   >
                     إلغاء
                   </button>
                   <button
                     type="submit"
                     disabled={actionLoading}
-                    className="px-6 py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold cursor-pointer"
+                    className="min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer transition-colors"
                   >
                     {actionLoading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
                   </button>
@@ -4704,24 +5617,29 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 2: WEBSITE CARD PREVIEW MODAL FOR MAIN CATEGORY */}
       {previewMainCategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label={`معاينة الفئة الرئيسية: ${previewMainCategory.name}`}
+          onClick={() => setPreviewMainCategory(null)}
         >
-          <div className="w-full max-w-md bg-[#F3F5E9] border-2 border-[#E5E8DD] rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5"
+          >
             <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
               <div>
                 <div className="text-[11px] font-bold text-[#F07842]">
                   معاينة حية لظهور الفئة في الموقع
                 </div>
-                <h3 className="font-display text-lg font-bold text-[#252824]">
+                <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
                   {previewMainCategory.name}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setPreviewMainCategory(null)}
-                className="px-3 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#252824] cursor-pointer"
+                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer"
               >
                 إغلاق
               </button>
@@ -4746,7 +5664,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <span>قريباً</span>
                   </span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-lg bg-[#252824]/75 backdrop-blur-xs text-white font-mono text-[11px] font-bold">
+                  <span className="px-2.5 py-1 rounded-lg bg-[#1B1F1C]/75 backdrop-blur-xs text-white font-mono tabular-nums text-[11px] font-bold">
                     {getSubcategoriesForMain(previewMainCategory).length} فئات
                   </span>
                 )}
@@ -4776,14 +5694,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   setPreviewMainCategory(null);
                   openEditMainCategoryModal(target);
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-[#14543D] text-white text-xs font-bold cursor-pointer"
+                className="flex-1 min-h-[42px] py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold cursor-pointer transition-colors"
               >
                 تعديل هذه الفئة
               </button>
               <button
                 type="button"
                 onClick={() => setPreviewMainCategory(null)}
-                className="px-5 py-2.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#252824] cursor-pointer"
+                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer"
               >
                 تم
               </button>
@@ -4795,20 +5713,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 3: SAFE DELETE MAIN CATEGORY CONFIRMATION & REASSIGNMENT DIALOG */}
       {deletingMainCategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label={`تأكيد حذف الفئة الرئيسية ${deletingMainCategory.name}`}
+          onClick={() => {
+            if (!actionLoading) setDeletingMainCategory(null);
+          }}
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5 text-xs">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5 text-xs"
+          >
             <div className="flex items-start gap-3">
               <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-display text-lg font-bold text-[#252824]">
+                <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
                   تأكيد حذف الفئة الرئيسية «{deletingMainCategory.name}»
                 </h3>
-                <p className="text-[#777B73] leading-relaxed">
+                <p className="text-[#52574E] leading-relaxed">
                   هل أنت متأكد من رغبتك في حذف هذه الفئة الرئيسية؟
                 </p>
               </div>
@@ -4819,8 +5744,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <div className="bg-[#FEF2EC] border border-[#F07842] rounded-xl p-4 space-y-3">
                 <div className="font-bold text-[#D9602B]">
                   تنبيه حماية البيانات: تحتوي هذه الفئة على{' '}
-                  {deletingMainSubs.length} فئة فرعية و{' '}
-                  {deletingMainQuestions.length} سؤال مرتبط بها.
+                  <span className="font-mono tabular-nums">{deletingMainSubs.length}</span> فئة فرعية و{' '}
+                  <span className="font-mono tabular-nums">{deletingMainQuestions.length}</span> سؤال مرتبط بها.
                 </div>
 
                 <div className="space-y-2.5">
@@ -4835,7 +5760,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         onChange={() =>
                           setDeleteMainMode('reassign_subcategories')
                         }
-                        className="mt-0.5"
+                        className="mt-0.5 accent-[#F07842]"
                       />
                       <div className="space-y-2 flex-1">
                         <div className="font-bold text-[#14543D]">
@@ -4847,7 +5772,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             onChange={(e) =>
                               setDeleteMainTargetId(e.target.value)
                             }
-                            className="w-full px-3 py-2 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] font-semibold"
+                            className="w-full min-h-[40px] px-3 py-2 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] font-semibold"
                           >
                             {sortedMainCategories
                               .filter((m) => m.id !== deletingMainCategory.id)
@@ -4868,7 +5793,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       name="deleteMainMode"
                       checked={deleteMainMode === 'delete_subcategories'}
                       onChange={() => setDeleteMainMode('delete_subcategories')}
-                      className="mt-0.5"
+                      className="mt-0.5 accent-rose-600"
                     />
                     <div className="space-y-2 flex-1">
                       <div className="font-bold text-rose-700">
@@ -4900,7 +5825,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setDeletingMainCategory(null)}
-                className="px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#252824] font-bold cursor-pointer"
+                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-bold cursor-pointer"
               >
                 إلغاء
               </button>
@@ -4908,7 +5833,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 type="button"
                 disabled={actionLoading}
                 onClick={handleConfirmDeleteMainCategory}
-                className="px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
+                className="min-h-[42px] px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
               >
                 {actionLoading ? 'جاري التنفيذ...' : 'تأكيد حذف الفئة'}
               </button>
@@ -4920,12 +5845,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 4: ADD / EDIT SUBCATEGORY MODAL */}
       {subModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/60 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label={
+            editingSubcategory
+              ? 'تعديل وتنظيم الفئة الفرعية'
+              : 'إضافة فئة فرعية جديدة'
+          }
+          onClick={() => {
+            if (!actionLoading) setSubModalOpen(false);
+          }}
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col">
-            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col"
+          >
+            <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <h3 className="font-display text-base sm:text-lg font-bold">
                 {editingSubcategory
                   ? 'تعديل وتنظيم الفئة الفرعية'
@@ -4934,9 +5870,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setSubModalOpen(false)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
+                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
-                إغلاق
+                <X className="w-3.5 h-3.5" />
+                <span>إغلاق</span>
               </button>
             </div>
 
@@ -4965,13 +5902,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               )}
 
               <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
+                <label className="block font-bold text-[#1B1F1C]">
                   الفئة الرئيسية التابعة لها (يمكنك نقل الفئة الفرعية لأي قسم رئيسي)
                 </label>
                 <select
                   value={subFormMainCategoryId}
                   onChange={(e) => setSubFormMainCategoryId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] font-semibold"
+                  className="w-full min-h-[42px] px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] font-semibold focus:outline-hidden focus:border-[#F07842]"
                 >
                   {sortedMainCategories.map((mc) => (
                     <option key={mc.id} value={mc.id}>
@@ -4982,7 +5919,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
+                <label className="block font-bold text-[#1B1F1C]">
                   اسم الفئة الفرعية (تظهر كعمود في لوحة اللعب)
                 </label>
                 <input
@@ -4991,7 +5928,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   value={subFormName}
                   onChange={(e) => setSubFormName(e.target.value)}
                   placeholder="مثال: الدوري السعودي، كأس العالم، ون بيس..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                  className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                 />
                 {editingSubcategory &&
                   editingSubcategory.name !== subFormName.trim() && (
@@ -5002,7 +5939,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
+                <label className="block font-bold text-[#1B1F1C]">
                   وصف مختصر للفئة الفرعية
                 </label>
                 <input
@@ -5010,13 +5947,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   value={subFormDescription}
                   onChange={(e) => setSubFormDescription(e.target.value)}
                   placeholder="وصف قصير يوضح محتوى الأسئلة داخل هذه الفئة..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                  className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     ترتيب العرض (Sort Order)
                   </label>
                   <input
@@ -5027,12 +5964,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     onChange={(e) =>
                       setSubFormSortOrder(Number(e.target.value) || 1)
                     }
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] font-mono"
+                    className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] font-mono tabular-nums focus:outline-hidden focus:border-[#F07842]"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     حالة الظهور للاعبين
                   </label>
                   <select
@@ -5040,7 +5977,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     onChange={(e) =>
                       setSubFormIsActive(e.target.value === 'active')
                     }
-                    className="w-full px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                    className="w-full min-h-[42px] px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                   >
                     <option value="active">ظاهرة للاعبين</option>
                     <option value="hidden">مخفية عن الألعاب الجديدة</option>
@@ -5056,11 +5993,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   className="mt-0.5 accent-[#F07842]"
                 />
                 <div className="space-y-0.5">
-                  <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                  <div className="font-bold text-[#1B1F1C] flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-[#F07842]" />
                     <span>تفعيل وضع «قريباً» لهذه الفئة الفرعية</span>
                   </div>
-                  <p className="text-[11px] text-[#777B73]">
+                  <p className="text-[11px] text-[#52574E]">
                     تظهر بشارة «قريباً» وتُمنع من اللعب مؤقتاً مع الحفاظ على جميع أسئلتها وصورتها.
                   </p>
                 </div>
@@ -5069,22 +6006,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               {/* Subcategory Image Upload in Modal */}
               <div className="space-y-2.5 pt-1">
                 <div className="flex items-center justify-between">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     صورة الفئة الفرعية
                   </label>
                   {subFormImageUrl ? (
-                    <span className="text-[11px] font-bold text-[#14543D] bg-[#EAF2EE] px-2 py-0.5 rounded-md">
-                      مرتبطة بالصورة ✓
+                    <span className="text-[11px] font-bold text-[#14543D] inline-flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>مرتبطة بالصورة</span>
                     </span>
                   ) : (
-                    <span className="text-[11px] font-semibold text-[#777B73]">
+                    <span className="text-[11px] font-semibold text-[#52574E]">
                       بدون صورة مخصصة
                     </span>
                   )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl bg-[#F3F5E9]/70 border border-[#E5E8DD]">
-                  <div className="w-20 h-20 rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#14543D] shrink-0">
+                  <div className="w-20 h-20 rounded-xl overflow-hidden border border-[#E5E8DD] bg-[#1B1F1C] shrink-0">
                     <CategoryCardArtwork
                       name={subFormName || 'فئة فرعية'}
                       mainCategory={
@@ -5106,7 +6044,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             subCat: editingSubcategory || undefined,
                           })
                         }
-                        className="px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>
@@ -5123,13 +6061,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             setSubFormImageUrl('');
                             setSubModalFeedback(null);
                           }}
-                          className="px-3 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-rose-50 text-rose-700 font-bold cursor-pointer"
+                          className="min-h-[40px] px-3 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-rose-50 text-rose-700 font-bold cursor-pointer"
                         >
                           إزالة الصورة
                         </button>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#777B73] leading-relaxed">
+                    <p className="text-[11px] text-[#52574E] leading-relaxed">
                       الصيغ المدعومة: JPG, JPEG, PNG, WEBP · الحد الأقصى 5 ميجابايت · تُقص وتُرفع إلى Cloudinary ثم تُربط بالفئة عند الحفظ.
                     </p>
                   </div>
@@ -5140,14 +6078,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setSubModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer"
+                  className="min-h-[42px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer"
+                  className="min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer transition-colors"
                 >
                   {actionLoading ? 'جاري الحفظ...' : 'حفظ الفئة الفرعية'}
                 </button>
@@ -5160,20 +6098,27 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 5: SAFE DELETE SUBCATEGORY CONFIRMATION DIALOG */}
       {deletingSubcategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label={`تأكيد حذف الفئة الفرعية ${deletingSubcategory.name}`}
+          onClick={() => {
+            if (!actionLoading) setDeletingSubcategory(null);
+          }}
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-hidden shadow-2xl p-6 space-y-5 text-xs">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-hidden shadow-2xl p-6 space-y-5 text-xs"
+          >
             <div className="flex items-start gap-3">
               <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-display text-lg font-bold text-[#252824]">
+                <h3 className="font-display text-lg font-bold text-[#1B1F1C]">
                   تأكيد حذف الفئة الفرعية «{deletingSubcategory.name}»
                 </h3>
-                <p className="text-[#777B73] leading-relaxed">
+                <p className="text-[#52574E] leading-relaxed">
                   هل أنت متأكد من حذف هذه الفئة الفرعية؟
                 </p>
               </div>
@@ -5183,7 +6128,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <div className="bg-[#FEF2EC] border border-[#F07842] rounded-xl p-4 space-y-3">
                 <div className="font-bold text-[#D9602B]">
                   تنبيه: تحتوي هذه الفئة الفرعية على{' '}
-                  {deletingSubQuestions.length} سؤال في قاعدة البيانات.
+                  <span className="font-mono tabular-nums">{deletingSubQuestions.length}</span> سؤال في قاعدة البيانات.
                 </div>
 
                 <div className="space-y-2">
@@ -5195,7 +6140,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         name="deleteSubMode"
                         checked={deleteSubMode === 'reassign_questions'}
                         onChange={() => setDeleteSubMode('reassign_questions')}
-                        className="mt-0.5"
+                        className="mt-0.5 accent-[#F07842]"
                       />
                       <div className="space-y-2 flex-1">
                         <div className="font-bold text-[#14543D]">
@@ -5207,7 +6152,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             onChange={(e) =>
                               setDeleteSubTargetId(e.target.value)
                             }
-                            className="w-full px-3 py-2 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] font-semibold"
+                            className="w-full min-h-[40px] px-3 py-2 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] font-semibold"
                           >
                             {subcategories
                               .filter((s) => s.id !== deletingSubcategory.id)
@@ -5228,9 +6173,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       name="deleteSubMode"
                       checked={deleteSubMode === 'keep_questions'}
                       onChange={() => setDeleteSubMode('keep_questions')}
-                      className="mt-0.5"
+                      className="mt-0.5 accent-[#F07842]"
                     />
-                    <div className="font-bold text-[#252824]">
+                    <div className="font-bold text-[#1B1F1C]">
                       حذف الفئة الفرعية فقط والاحتفاظ بالأسئلة في بنك الأسئلة
                     </div>
                   </label>
@@ -5241,7 +6186,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       name="deleteSubMode"
                       checked={deleteSubMode === 'delete_questions'}
                       onChange={() => setDeleteSubMode('delete_questions')}
-                      className="mt-0.5"
+                      className="mt-0.5 accent-rose-600"
                     />
                     <div className="space-y-2 flex-1">
                       <div className="font-bold text-rose-700">
@@ -5272,7 +6217,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setDeletingSubcategory(null)}
-                className="px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#252824] font-bold cursor-pointer"
+                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-bold cursor-pointer"
               >
                 إلغاء
               </button>
@@ -5280,7 +6225,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 type="button"
                 disabled={actionLoading}
                 onClick={handleConfirmDeleteSubcategory}
-                className="px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
+                className="min-h-[42px] px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
               >
                 {actionLoading ? 'جاري الحذف...' : 'تأكيد الحذف'}
               </button>
@@ -5292,12 +6237,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 6: ADD / EDIT QUESTION MODAL */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/60 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label={editingQuestionId ? 'تعديل بيانات السؤال' : 'إضافة سؤال جديد'}
+          onClick={() => {
+            if (!actionLoading) handleCloseQuestionModal();
+          }}
         >
-          <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col">
-            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col"
+          >
+            <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <h3 className="font-display text-base sm:text-lg font-bold">
                 {editingQuestionId ? 'تعديل بيانات السؤال' : 'إضافة سؤال جديد'}
               </h3>
@@ -5305,9 +6257,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 type="button"
                 disabled={actionLoading}
                 onClick={handleCloseQuestionModal}
-                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2 disabled:opacity-50"
+                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
               >
-                إغلاق
+                <X className="w-3.5 h-3.5" />
+                <span>إغلاق</span>
               </button>
             </div>
 
@@ -5343,7 +6296,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
               {/* Question Media Type Selector */}
               <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
+                <label className="block font-bold text-[#1B1F1C]">
                   نوع السؤال
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
@@ -5356,8 +6309,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     }}
                     className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'text'
-                        ? 'bg-[#14543D] text-white border-[#14543D]'
-                        : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
+                        ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
+                        : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#1B1F1C]/40'
                     }`}
                   >
                     <FileQuestion className="w-4 h-4 shrink-0" />
@@ -5374,7 +6327,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'image'
                         ? 'bg-[#F07842] text-white border-[#F07842]'
-                        : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#F07842]/40'
+                        : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#F07842]/40'
                     }`}
                   >
                     <ImageIcon className="w-4 h-4 shrink-0" />
@@ -5391,7 +6344,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'audio'
                         ? 'bg-[#14543D] text-white border-[#14543D]'
-                        : 'bg-[#F3F5E9] text-[#252824] border-[#E5E8DD] hover:border-[#14543D]/40'
+                        : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#14543D]/40'
                     }`}
                   >
                     <Volume2 className="w-4 h-4 text-[#F07842] shrink-0" />
@@ -5402,13 +6355,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     الفئة الفرعية
                   </label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                    className="w-full min-h-[42px] px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                   >
                     {sortedMainCategories.map((mainCat) => {
                       const subs = getSubcategoriesForMain(mainCat);
@@ -5427,7 +6380,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     مستوى الصعوبة والنقاط
                   </label>
                   <select
@@ -5437,7 +6390,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       setFormPoints(pts);
                       setFormDifficulty(POINT_TO_DIFFICULTY[pts]);
                     }}
-                    className="w-full px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                    className="w-full min-h-[42px] px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                   >
                     <option value={100}>100 نقطة — سهل</option>
                     <option value={200}>200 نقطة — متوسط</option>
@@ -5449,7 +6402,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
+                <label className="block font-bold text-[#1B1F1C]">
                   نص السؤال المباشر
                 </label>
                 <textarea
@@ -5464,7 +6417,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       ? 'مثال: استمع إلى المقطع الصوتي وتعرّف على الصوت أو صاحب النشيد...'
                       : 'اكتب السؤال المباشر بصياغة عربية واضحة ومكتملة بدون الحاجة لخيارات...'
                   }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                 />
               </div>
 
@@ -5473,11 +6426,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="space-y-0.5">
-                      <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                      <div className="font-bold text-[#1B1F1C] flex items-center gap-1.5">
                         <ImageIcon className="w-4 h-4 text-[#F07842]" />
                         <span>صورة السؤال (مطلوبة لسؤال الصورة)</span>
                       </div>
-                      <p className="text-[11px] text-[#777B73]">
+                      <p className="text-[11px] text-[#52574E]">
                         الصيغ المدعومة: JPG وPNG وWEBP · الحد الأقصى للحجم: 5 ميجابايت · أو أدخل رابط صورة HTTPS موثوق.
                       </p>
                     </div>
@@ -5494,7 +6447,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         disabled={actionLoading}
                         onClick={() => questionImageInputRef.current?.click()}
-                        className="px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>
@@ -5509,7 +6462,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           type="button"
                           disabled={actionLoading}
                           onClick={handleRemoveQuestionImage}
-                          className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
+                          className="min-h-[40px] px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>إزالة الصورة</span>
@@ -5520,7 +6473,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
                   {!pendingQuestionImageFile && (
                     <div className="space-y-1">
-                      <label className="block text-[11px] font-bold text-[#777B73]">
+                      <label className="block text-[11px] font-bold text-[#52574E]">
                         أو رابط صورة موثوق (HTTPS):
                       </label>
                       <input
@@ -5532,7 +6485,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           setFormImageStoragePath('');
                         }}
                         placeholder="https://..."
-                        className="w-full px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824] text-left"
+                        className="w-full min-h-[40px] px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
                       />
                     </div>
                   )}
@@ -5540,11 +6493,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   {(pendingQuestionImagePreviewUrl || formImageUrl) && (
                     <div className="space-y-3 pt-2 border-t border-[#E5E8DD]">
                       <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl p-3 flex flex-col items-center gap-2">
-                        <div className="w-full flex items-center justify-between text-[11px] text-[#777B73]">
+                        <div className="w-full flex items-center justify-between text-[11px] text-[#52574E]">
                           <span className="font-semibold text-[#14543D]">
                             معاينة الصورة قبل الحفظ:
                           </span>
-                          <span>
+                          <span className="font-mono">
                             {pendingQuestionImageFile
                               ? `ملف جديد: ${pendingQuestionImageFile.name} (${(
                                   pendingQuestionImageFile.size /
@@ -5565,7 +6518,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       </div>
 
                       <div className="space-y-1">
-                        <label className="block font-bold text-[#252824]">
+                        <label className="block font-bold text-[#1B1F1C]">
                           وصف الصورة (اختياري — لا يظهر قبل الإجابة إذا كان يكشف الحل)
                         </label>
                         <input
@@ -5575,7 +6528,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             setFormImageDescription(e.target.value)
                           }
                           placeholder="وصف بديل مختصر للصورة..."
-                          className="w-full px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824]"
+                          className="w-full min-h-[40px] px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#1B1F1C]"
                         />
                       </div>
                     </div>
@@ -5588,11 +6541,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 space-y-3.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="space-y-0.5">
-                      <div className="font-bold text-[#252824] flex items-center gap-1.5">
+                      <div className="font-bold text-[#1B1F1C] flex items-center gap-1.5">
                         <Volume2 className="w-4 h-4 text-[#14543D]" />
                         <span>المقطع الصوتي للسؤال (مطلوب للسؤال الصوتي)</span>
                       </div>
-                      <p className="text-[11px] text-[#777B73]">
+                      <p className="text-[11px] text-[#52574E]">
                         الصيغ المدعومة: MP3 وWAV وOGG وM4A وAAC وWEBM · الحد الأقصى: 10 ميجابايت · لا يظهر اسم الملف للاعبين.
                       </p>
                     </div>
@@ -5609,7 +6562,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         disabled={actionLoading}
                         onClick={() => questionAudioInputRef.current?.click()}
-                        className="px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>
@@ -5624,7 +6577,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           type="button"
                           disabled={actionLoading}
                           onClick={handleRemoveQuestionAudio}
-                          className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
+                          className="min-h-[40px] px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>إزالة المقطع</span>
@@ -5635,7 +6588,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
                   {!pendingQuestionAudioFile && (
                     <div className="space-y-1">
-                      <label className="block text-[11px] font-bold text-[#777B73]">
+                      <label className="block text-[11px] font-bold text-[#52574E]">
                         أو رابط صوتي موثوق (HTTPS):
                       </label>
                       <input
@@ -5647,18 +6600,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           setFormAudioStoragePath('');
                         }}
                         placeholder="https://..."
-                        className="w-full px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#252824] text-left"
+                        className="w-full min-h-[40px] px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#1B1F1C] text-left font-mono"
                       />
                     </div>
                   )}
 
                   {(pendingQuestionAudioPreviewUrl || formAudioUrl) && (
                     <div className="space-y-2 pt-2 border-t border-[#E5E8DD]">
-                      <div className="flex items-center justify-between text-[11px] text-[#777B73]">
+                      <div className="flex items-center justify-between text-[11px] text-[#52574E]">
                         <span className="font-semibold text-[#14543D]">
                           معاينة المقطع الصوتي قبل الحفظ:
                         </span>
-                        <span>
+                        <span className="font-mono">
                           {pendingQuestionAudioFile
                             ? `ملف جديد (${(
                                 pendingQuestionAudioFile.size /
@@ -5678,7 +6631,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
                   {/* Configurable Max Play Count */}
                   <div className="pt-2 border-t border-[#E5E8DD] space-y-2">
-                    <label className="block font-bold text-[#252824]">
+                    <label className="block font-bold text-[#1B1F1C]">
                       عدد مرات تشغيل المقطع المسموحة لكل سؤال
                     </label>
                     <div className="flex flex-wrap items-center gap-2">
@@ -5694,10 +6647,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             key={String(opt.value)}
                             type="button"
                             onClick={() => setFormAudioMaxPlays(opt.value)}
-                            className={`px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                            className={`min-h-[36px] px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
                               isSelected
                                 ? 'bg-[#F07842] text-white border-[#F07842]'
-                                : 'bg-[#FFFFFF] text-[#252824] border-[#E5E8DD] hover:border-[#F07842]/50'
+                                : 'bg-[#FFFFFF] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#F07842]/50'
                             }`}
                           >
                             {opt.label}
@@ -5706,7 +6659,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       })}
 
                       <div className="flex items-center gap-1.5 mr-auto">
-                        <span className="text-[11px] text-[#777B73]">مخصص:</span>
+                        <span className="text-[11px] text-[#52574E]">مخصص:</span>
                         <input
                           type="number"
                           min={1}
@@ -5721,7 +6674,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               setFormAudioMaxPlays(normalizeAudioMaxPlays(val));
                             }
                           }}
-                          className="w-16 px-2 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] text-center font-mono tabular-nums text-xs text-[#252824]"
+                          className="w-16 min-h-[36px] px-2 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] text-center font-mono tabular-nums text-xs text-[#1B1F1C]"
                         />
                       </div>
                     </div>
@@ -5731,7 +6684,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     الإجابة الصحيحة المعتمدة
                   </label>
                   <input
@@ -5740,12 +6693,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     value={formCorrectAnswer}
                     onChange={(e) => setFormCorrectAnswer(e.target.value)}
                     placeholder="اكتب الإجابة الصحيحة..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                    className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     حالة الاعتماد
                   </label>
                   <select
@@ -5753,7 +6706,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     onChange={(e) =>
                       setFormStatus(e.target.value as ApprovalStatus)
                     }
-                    className="w-full px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                    className="w-full min-h-[42px] px-3 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                   >
                     <option value="approved">معتمد (يظهر في اللعب)</option>
                     <option value="pending">قيد المراجعة</option>
@@ -5764,7 +6717,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     شرح مختصر للمعلومة (اختياري)
                   </label>
                   <input
@@ -5772,12 +6725,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     value={formExplanation}
                     onChange={(e) => setFormExplanation(e.target.value)}
                     placeholder="توضيح يظهر بعد كشف الإجابة..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                    className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block font-bold text-[#252824]">
+                  <label className="block font-bold text-[#1B1F1C]">
                     المصدر أو المرجع (اختياري)
                   </label>
                   <input
@@ -5785,7 +6738,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     value={formSource}
                     onChange={(e) => setFormSource(e.target.value)}
                     placeholder="مثال: دارة الملك عبدالعزيز، موسوعة..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824]"
+                    className="w-full min-h-[42px] px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] focus:outline-hidden focus:border-[#F07842]"
                   />
                 </div>
               </div>
@@ -5795,14 +6748,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   type="button"
                   disabled={actionLoading}
                   onClick={handleCloseQuestionModal}
-                  className="px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer disabled:opacity-50"
+                  className="min-h-[42px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer disabled:opacity-50"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {actionLoading
                     ? pendingQuestionImageFile
@@ -5821,11 +6774,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: REJECT CONTRIBUTION REASON */}
       {rejectModalContribution && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/65 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label="رفض مساهمة السؤال"
+          onClick={() => {
+            if (!actionLoading) setRejectModalContribution(null);
+          }}
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+          >
             <div className="bg-rose-700 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <XCircle className="w-4 h-4" />
@@ -5834,22 +6794,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setRejectModalContribution(null)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
+                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
-                إغلاق
+                <X className="w-3.5 h-3.5" />
+                <span>إغلاق</span>
               </button>
             </div>
 
             <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs">
               <div className="bg-[#F3F5E9] p-3 rounded-xl border border-[#E5E8DD] space-y-1">
-                <div className="font-bold text-[#252824]">السؤال:</div>
-                <div className="text-[#777B73] line-clamp-2">
+                <div className="font-bold text-[#1B1F1C]">السؤال:</div>
+                <div className="text-[#52574E] line-clamp-2">
                   {rejectModalContribution.questionText}
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-bold text-[#252824]">
+                <label className="block font-bold text-[#1B1F1C]">
                   سبب الرفض (سيظهر للمستخدم في قائمته الخاصة لمساعدته في التعديل):
                 </label>
                 <textarea
@@ -5857,7 +6818,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   value={rejectReasonText}
                   onChange={(e) => setRejectReasonText(e.target.value)}
                   placeholder="مثال: السؤال مكرر، أو الإجابة بحاجة لتدقيق، أو التصنيف غير مناسب..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#252824] leading-relaxed resize-none focus:outline-hidden focus:border-rose-600"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-[#1B1F1C] leading-relaxed resize-none focus:outline-hidden focus:border-rose-600"
                 />
               </div>
 
@@ -5865,7 +6826,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setRejectModalContribution(null)}
-                  className="px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer"
+                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -5873,7 +6834,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   type="button"
                   onClick={handleConfirmReject}
                   disabled={actionLoading}
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
+                  className="min-h-[42px] px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
                 >
                   {actionLoading ? 'جاري الحفظ...' : 'تأكيد الرفض'}
                 </button>
@@ -5883,15 +6844,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         </div>
       )}
 
-      {/* MODAL: PREVIEW QUESTION IN GAME BOARD */}
+      {/* MODAL: PREVIEW QUESTION IN GAME BOARD (CONTRIBUTION) */}
       {previewContribution && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/75 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label="معاينة السؤال كما يظهر في لوحة المنافسة"
+          onClick={() => setPreviewContribution(null)}
         >
-          <div className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-[#14543D] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+          >
+            <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <Eye className="w-4 h-4 text-[#F07842]" />
                 <span>معاينة السؤال كما يظهر في لوحة المنافسة</span>
@@ -5899,36 +6865,36 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewContribution(null)}
-                className="text-white/80 hover:text-white text-xs cursor-pointer min-h-[36px] px-2"
+                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
-                إغلاق
+                <X className="w-3.5 h-3.5" />
+                <span>إغلاق</span>
               </button>
             </div>
 
             <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-right">
-              {/* Fake Game Tile Header */}
               <div className="flex items-center justify-between bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl px-4 py-2.5 text-xs">
-                <div className="font-bold text-[#14543D]">
-                  {previewContribution.mainCategory} • {previewContribution.category}
+                <div className="font-bold text-[#1B1F1C]">
+                  {previewContribution.mainCategory} · {previewContribution.category}
                 </div>
-                <div className="font-mono font-bold text-[#F07842] text-sm">
+                <div className="font-mono tabular-nums font-bold text-[#F07842] text-sm">
                   {previewContribution.points} نقطة
                 </div>
               </div>
 
-              {/* Fake Question Card Display */}
-              <div className="border-2 border-[#14543D] rounded-2xl p-6 bg-[#FFFFFF] shadow-md space-y-4 text-center">
+              <div className="border-2 border-[#E5E8DD] rounded-2xl p-6 bg-[#FFFFFF] shadow-xs space-y-4 text-center">
                 {previewContribution.imageUrl && (
                   <div className="w-full max-h-64 rounded-xl overflow-hidden bg-[#F3F5E9] border border-[#E5E8DD] mx-auto">
                     <img
                       src={previewContribution.imageUrl}
                       alt="صورة السؤال"
+                      referrerPolicy="no-referrer"
                       className="w-full h-full max-h-64 object-contain"
                     />
                   </div>
                 )}
 
-                <div className="font-bold text-lg text-[#252824] leading-relaxed py-2">
+                <div className="font-bold text-lg text-[#1B1F1C] leading-relaxed py-2">
                   {previewContribution.questionText}
                 </div>
 
@@ -5940,8 +6906,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
 
                 {previewContribution.explanation && (
-                  <div className="text-right text-xs text-[#777B73] bg-[#F3F5E9] p-3 rounded-xl">
-                    <span className="font-bold text-[#252824]">الشرح: </span>
+                  <div className="text-right text-xs text-[#52574E] bg-[#F3F5E9] p-3 rounded-xl">
+                    <span className="font-bold text-[#1B1F1C]">الشرح: </span>
                     {previewContribution.explanation}
                   </div>
                 )}
@@ -5951,9 +6917,281 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setPreviewContribution(null)}
-                  className="px-6 py-2 rounded-xl bg-[#14543D] text-white font-bold text-xs cursor-pointer hover:bg-[#0E3D2C]"
+                  className="min-h-[42px] px-6 py-2 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3531] text-white font-bold text-xs cursor-pointer"
                 >
                   إغلاق المعاينة
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: QUESTION BANK PREVIEW MODAL */}
+      {previewQuestion && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-label="معاينة السؤال والإجابة"
+          onClick={() => setPreviewQuestion(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+          >
+            <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Eye className="w-4 h-4 text-[#F07842]" />
+                <span>معاينة السؤال والإجابة</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewQuestion(null)}
+                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>إغلاق</span>
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-right text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl px-4 py-3">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-[#1B1F1C] text-sm">
+                    {previewQuestion.category}
+                  </div>
+                  <div className="text-[11px] text-[#52574E]">
+                    {subcategoryToMainMap.get(previewQuestion.category) || 'فئة عامة'} ·{' '}
+                    {previewQuestion.difficulty}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono tabular-nums font-bold text-[#F07842] text-sm">
+                    {previewQuestion.points} نقطة
+                  </span>
+                  {previewQuestion.status === 'approved' && (
+                    <span className="inline-flex items-center gap-1 font-bold text-[#14543D]">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>معتمد</span>
+                    </span>
+                  )}
+                  {previewQuestion.status === 'pending' && (
+                    <span className="inline-flex items-center gap-1 font-bold text-[#D9602B]">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>قيد المراجعة</span>
+                    </span>
+                  )}
+                  {previewQuestion.status === 'rejected' && (
+                    <span className="inline-flex items-center gap-1 font-bold text-rose-700">
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span>مرفوض</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-[#E5E8DD] rounded-2xl p-5 bg-[#FFFFFF] space-y-4">
+                {inferQuestionMediaType(previewQuestion) === 'image' &&
+                  previewQuestion.imageUrl && (
+                    <div className="w-full max-h-64 rounded-xl overflow-hidden bg-[#F3F5E9] border border-[#E5E8DD] flex items-center justify-center">
+                      <img
+                        src={previewQuestion.imageUrl}
+                        alt={previewQuestion.imageDescription || 'صورة السؤال'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full max-h-64 object-contain"
+                      />
+                    </div>
+                  )}
+
+                {inferQuestionMediaType(previewQuestion) === 'audio' &&
+                  previewQuestion.audioUrl && (
+                    <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3">
+                      <QuestionAudioPlayer
+                        audioUrl={previewQuestion.audioUrl}
+                        maxPlays={previewQuestion.audioMaxPlays ?? null}
+                        previewMode
+                        questionKey={`bank_preview_${previewQuestion.id}`}
+                      />
+                    </div>
+                  )}
+
+                <div className="font-display font-bold text-base sm:text-lg text-[#1B1F1C] leading-relaxed text-center py-1">
+                  {previewQuestion.questionText}
+                </div>
+
+                <div className="border-t border-[#E5E8DD] pt-4 space-y-1.5">
+                  <div className="font-bold text-[#14543D]">الإجابة الصحيحة:</div>
+                  <div className="bg-[#EAF2EE] border border-[#C5DDD1] rounded-xl p-3.5 text-sm font-bold text-[#14543D]">
+                    {previewQuestion.correctAnswer}
+                  </div>
+                </div>
+
+                {(previewQuestion.explanation || previewQuestion.source) && (
+                  <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3.5 space-y-1 text-[#52574E]">
+                    {previewQuestion.explanation && (
+                      <div>
+                        <strong className="text-[#1B1F1C]">التوضيح: </strong>
+                        {previewQuestion.explanation}
+                      </div>
+                    )}
+                    {previewQuestion.source && (
+                      <div>
+                        <strong className="text-[#1B1F1C]">المصدر: </strong>
+                        {previewQuestion.source}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-[#E5E8DD] flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = previewQuestion;
+                      setPreviewQuestion(null);
+                      openEditModal(target);
+                    }}
+                    className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>تعديل السؤال</span>
+                  </button>
+                  {previewQuestion.status !== 'approved' && (
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => {
+                        const targetId = previewQuestion.id;
+                        setPreviewQuestion(null);
+                        handleSingleStatusChange(targetId, 'approved');
+                      }}
+                      className="min-h-[42px] px-4 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>اعتماد</span>
+                    </button>
+                  )}
+                  {previewQuestion.status !== 'rejected' && (
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => {
+                        const targetId = previewQuestion.id;
+                        setPreviewQuestion(null);
+                        handleSingleStatusChange(targetId, 'rejected');
+                      }}
+                      className="min-h-[42px] px-4 py-2 rounded-xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#D9602B] hover:bg-[#FDE4D7] font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      <span>رفض</span>
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewQuestion(null)}
+                  className="min-h-[42px] px-5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] font-bold cursor-pointer"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM BULK STATUS UPDATE */}
+      {bulkStatusConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            bulkStatusConfirmModal.status === 'approved'
+              ? 'تأكيد الاعتماد الجماعي للأسئلة'
+              : 'تأكيد الرفض الجماعي للأسئلة'
+          }
+          onClick={() => {
+            if (!actionLoading) setBulkStatusConfirmModal(null);
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl"
+          >
+            <div
+              className={`px-5 py-4 flex items-center justify-between text-white ${
+                bulkStatusConfirmModal.status === 'approved'
+                  ? 'bg-[#14543D]'
+                  : 'bg-[#F07842]'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-bold text-sm">
+                {bulkStatusConfirmModal.status === 'approved' ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : (
+                  <XCircle className="w-4 h-4" />
+                )}
+                <span>
+                  {bulkStatusConfirmModal.status === 'approved'
+                    ? 'تأكيد الاعتماد الجماعي للأسئلة'
+                    : 'تأكيد الرفض الجماعي للأسئلة'}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setBulkStatusConfirmModal(null)}
+                className="min-h-[36px] px-2.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs text-right">
+              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-4 space-y-1.5">
+                <div className="font-bold text-[#1B1F1C] text-sm">
+                  {bulkStatusConfirmModal.status === 'approved'
+                    ? 'سيتم اعتماد الأسئلة المحددة وإتاحتها في المباريات:'
+                    : 'سيتم تغيير حالة الأسئلة المحددة إلى مرفوض:'}
+                </div>
+                <div className="text-[#52574E]">
+                  عدد الأسئلة المشمولة بالإجراء:{' '}
+                  <strong className="font-mono tabular-nums text-sm text-[#1B1F1C]">
+                    {bulkStatusConfirmModal.ids.length}
+                  </strong>{' '}
+                  سؤال
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-[#E5E8DD] flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => setBulkStatusConfirmModal(null)}
+                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={executeConfirmedBulkStatus}
+                  className={`min-h-[42px] px-5 py-2 rounded-xl text-white font-bold cursor-pointer disabled:opacity-60 transition-colors ${
+                    bulkStatusConfirmModal.status === 'approved'
+                      ? 'bg-[#14543D] hover:bg-[#0E3F2D]'
+                      : 'bg-[#F07842] hover:bg-[#D9632E]'
+                  }`}
+                >
+                  {actionLoading
+                    ? 'جاري التنفيذ...'
+                    : bulkStatusConfirmModal.status === 'approved'
+                    ? `تأكيد اعتماد (${bulkStatusConfirmModal.ids.length})`
+                    : `تأكيد رفض (${bulkStatusConfirmModal.ids.length})`}
                 </button>
               </div>
             </div>
@@ -5964,11 +7202,21 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: CONFIRM QUESTION(S) PERMANENT DELETE */}
       {deleteConfirmModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#252824]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
+          aria-label="تأكيد الحذف النهائي للأسئلة"
+          onClick={() => {
+            if (!actionLoading) {
+              setDeleteConfirmModal(null);
+              setDeleteModalError(null);
+            }
+          }}
         >
-          <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+          >
             <div className="bg-rose-700 text-white px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <AlertTriangle className="w-4 h-4" />
@@ -5981,7 +7229,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   setDeleteConfirmModal(null);
                   setDeleteModalError(null);
                 }}
-                className="text-white/85 hover:text-white text-xs cursor-pointer"
+                className="min-h-[36px] px-2.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
               >
                 إغلاق
               </button>
@@ -5994,7 +7242,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
                 <div className="text-rose-800">
                   عدد الأسئلة التي سيتم حذفها نهائياً:{' '}
-                  <strong className="font-mono text-sm">
+                  <strong className="font-mono tabular-nums text-sm">
                     {deleteConfirmModal.ids.length}
                   </strong>{' '}
                   سؤال
@@ -6002,14 +7250,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
 
               {deleteConfirmModal.previewText && (
-                <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3 text-[#252824]">
+                <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3 text-[#1B1F1C]">
                   <span className="font-bold">نص السؤال: </span>
                   {deleteConfirmModal.previewText}
                 </div>
               )}
 
-              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3.5 text-[#777B73] space-y-1 leading-relaxed">
-                <div className="font-bold text-[#252824]">نطاق الحماية والحذف:</div>
+              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-3.5 text-[#52574E] space-y-1 leading-relaxed">
+                <div className="font-bold text-[#1B1F1C]">نطاق الحماية والحذف:</div>
                 <div>• سيتم حذف مستندات هذه الأسئلة من Firestore ومنع عودة أسئلة البنك المدمج المحذوفة عند تحديث الصفحة.</div>
                 <div>• لن يتم حذف أي فئة رئيسية أو فرعية، ولا صور Cloudinary، ولا بيانات المباريات أو المستخدمين.</div>
               </div>
@@ -6028,7 +7276,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     setDeleteConfirmModal(null);
                     setDeleteModalError(null);
                   }}
-                  className="px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#252824] font-semibold cursor-pointer"
+                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -6036,7 +7284,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   type="button"
                   disabled={actionLoading}
                   onClick={handleExecuteConfirmedDelete}
-                  className="px-5 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer disabled:opacity-60"
+                  className="min-h-[42px] px-5 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer disabled:opacity-60"
                 >
                   {actionLoading
                     ? 'جاري تنفيذ الحذف...'

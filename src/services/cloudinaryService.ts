@@ -41,7 +41,12 @@ export async function uploadCategoryImageToCloudinarySigned(
       ? rawType
       : 'image/webp';
   const ext = mime === 'image/png' ? 'png' : mime === 'image/jpeg' ? 'jpg' : 'webp';
-  const safeId = options.categoryId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 64) || 'cat';
+  const safeId =
+    options.categoryId
+      .replace(/[^a-zA-Z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 64) || 'cat';
   const file =
     croppedBlob instanceof File
       ? croppedBlob
@@ -54,6 +59,64 @@ export async function uploadCategoryImageToCloudinarySigned(
     folderHint: options.categoryType === 'main' ? 'main' : 'sub',
     questionIdHint: safeId,
   });
+}
+
+function buildSignEndpointError(
+  status: number,
+  parsedBody: Partial<{ error?: string; code?: string }>,
+  contentTypeHeader: string
+): Error {
+  const serverCode = typeof parsedBody.code === 'string' ? parsedBody.code : '';
+  const serverMsg = typeof parsedBody.error === 'string' ? parsedBody.error.trim() : '';
+
+  if (status === 404) {
+    if (serverCode === 'api/not-found') {
+      return new Error(
+        `[api/not-found] نقطة نهاية توقيع الرفع (/api/cloudinary/sign) غير مسجلة على الخادم الحالي.`
+      );
+    }
+    return new Error(
+      `[http_404] مسار توقيع الرفع (/api/cloudinary/sign) غير موجود على الاستضافة الحالية (HTTP 404 — ${
+        contentTypeHeader.includes('application/json') ? 'JSON' : 'صفحة خادم ثابتة'
+      }). تأكد من نشر دوال /api على Vercel أو تشغيل الخادم الخلفي.`
+    );
+  }
+
+  if (status === 405) {
+    return new Error(
+      `[${serverCode || 'http_405'}] طريقة الطلب مرفوضة عند مسار /api/cloudinary/sign (HTTP 405). تحقق من توجيه مسارات API في الاستضافة.`
+    );
+  }
+
+  if (status === 401 || serverCode === 'auth/missing-token' || serverCode === 'auth/invalid-token') {
+    return new Error(
+      `[${serverCode || 'http_401'}] مشكلة في المصادقة: ${
+        serverMsg || 'يرجى تسجيل الدخول بحساب المشرف أو تحديث الجلسة والمحاولة مجدداً.'
+      }`
+    );
+  }
+
+  if (status === 403 || serverCode === 'auth/forbidden') {
+    return new Error(
+      `[${serverCode || 'http_403'}] مشكلة في الصلاحيات: ${
+        serverMsg || 'رفع صور الفئات يتطلب حساب مشرف معتمد.'
+      }`
+    );
+  }
+
+  if (status === 503 || serverCode === 'cloudinary/not-configured') {
+    return new Error(
+      `[${serverCode || 'cloudinary/not-configured'}] مشكلة في إعدادات Cloudinary على الخادم: ${
+        serverMsg ||
+        'تأكد من ضبط متغيرات CLOUDINARY_CLOUD_NAME وCLOUDINARY_API_KEY وCLOUDINARY_API_SECRET.'
+      }`
+    );
+  }
+
+  const code = serverCode || `http_${status}`;
+  const message =
+    serverMsg || `تعذر الحصول على توقيع الرفع الآمن من الخادم (HTTP ${status}).`;
+  return new Error(`[${code}] ${message}`);
 }
 
 export async function uploadQuestionImageToCloudinarySigned(
@@ -103,74 +166,95 @@ export async function uploadQuestionImageToCloudinarySigned(
   const { contentType } = resolveQuestionImageMeta(file);
 
   // 2. Request temporary upload signature from backend API (API Secret never enters browser)
-  const signController = new AbortController();
-  const signTimeout = setTimeout(() => signController.abort(), 12000);
-  let signData: CloudinarySignResponse;
-
-  try {
-    const signRes = await fetch('/api/cloudinary/sign', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({
-        scope: options.scope,
-        folderHint: options.folderHint || 'general',
-        questionIdHint: options.questionIdHint || '',
-        mimeType: contentType,
-        fileSize: file.size,
-      }),
-      signal: signController.signal,
-    });
-    clearTimeout(signTimeout);
-
-    const parsedBody = (await signRes.json().catch(() => ({}))) as Partial<
-      CloudinarySignResponse & { error?: string; code?: string }
-    >;
-
-    if (!signRes.ok) {
-      const code = parsedBody.code || `http_${signRes.status}`;
-      const message =
-        parsedBody.error ||
-        `تعذر الحصول على توقيع الرفع الآمن من الخادم (HTTP ${signRes.status}).`;
-      console.error('[NIZAL Cloudinary Sign Error]', {
-        status: signRes.status,
-        code,
-        message,
-        scope: options.scope,
+  const requestSignature = async (tokenToUse: string): Promise<CloudinarySignResponse> => {
+    const signController = new AbortController();
+    const signTimeout = setTimeout(() => signController.abort(), 12000);
+    try {
+      const signRes = await fetch('/api/cloudinary/sign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${tokenToUse}`,
+        },
+        body: JSON.stringify({
+          scope: options.scope,
+          folderHint: options.folderHint || 'general',
+          questionIdHint: options.questionIdHint || '',
+          mimeType: contentType,
+          fileSize: file.size,
+        }),
+        signal: signController.signal,
       });
-      throw new Error(`[${code}] ${message}`);
-    }
+      clearTimeout(signTimeout);
 
-    if (
-      !parsedBody.cloudName ||
-      !parsedBody.apiKey ||
-      !parsedBody.signature ||
-      !parsedBody.timestamp ||
-      !parsedBody.folder ||
-      !parsedBody.publicId
-    ) {
-      throw new Error(
-        '[cloudinary/invalid-sign-response] استجابة توقيع الرفع من الخادم غير مكتملة.'
-      );
-    }
+      const contentTypeHeader = (signRes.headers.get('content-type') || '').toLowerCase();
+      const parsedBody = (await signRes.json().catch(() => ({}))) as Partial<
+        CloudinarySignResponse & { error?: string; code?: string }
+      >;
 
-    signData = parsedBody as CloudinarySignResponse;
+      if (!signRes.ok) {
+        const diagnosticErr = buildSignEndpointError(
+          signRes.status,
+          parsedBody,
+          contentTypeHeader
+        );
+        console.error('[NIZAL Cloudinary Sign Error]', {
+          status: signRes.status,
+          code: parsedBody.code || `http_${signRes.status}`,
+          contentType: contentTypeHeader,
+          scope: options.scope,
+        });
+        throw diagnosticErr;
+      }
+
+      if (
+        !parsedBody.cloudName ||
+        !parsedBody.apiKey ||
+        !parsedBody.signature ||
+        !parsedBody.timestamp ||
+        !parsedBody.folder ||
+        !parsedBody.publicId
+      ) {
+        if (!contentTypeHeader.includes('application/json')) {
+          throw new Error(
+            '[cloudinary/route-misconfigured] أعاد المسار /api/cloudinary/sign صفحة غير متوقعة بدلاً من بيانات JSON؛ تحقق من توجيه API على الخادم.'
+          );
+        }
+        throw new Error(
+          '[cloudinary/invalid-sign-response] استجابة توقيع الرفع من الخادم غير مكتملة.'
+        );
+      }
+
+      return parsedBody as CloudinarySignResponse;
+    } catch (err) {
+      clearTimeout(signTimeout);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error(
+          '[cloudinary/sign-timeout] انتهت مهلة الاتصال بالخادم لتجهيز رفع الصورة. تأكد من استقرار الاتصال بالإنترنت وأعد المحاولة.'
+        );
+      }
+      if (err instanceof TypeError) {
+        console.error('[NIZAL Cloudinary Sign Network Error]', err);
+        throw new Error(
+          '[cloudinary/sign-network] تعذر الاتصال بخادم التطبيق لتجهيز رفع الصورة. تحقق من اتصال الإنترنت وأعد المحاولة.'
+        );
+      }
+      throw err;
+    }
+  };
+
+  let signData: CloudinarySignResponse;
+  try {
+    signData = await requestSignature(idToken);
   } catch (err) {
-    clearTimeout(signTimeout);
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(
-        '[cloudinary/sign-timeout] انتهت مهلة الاتصال بالخادم لتجهيز رفع الصورة. تأكد من استقرار الاتصال بالإنترنت وأعد المحاولة.'
-      );
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('[auth/invalid-token]')) {
+      const refreshedToken = await currentUser.getIdToken(true).catch(() => '');
+      if (!refreshedToken) throw err;
+      signData = await requestSignature(refreshedToken);
+    } else {
+      throw err;
     }
-    if (err instanceof TypeError) {
-      console.error('[NIZAL Cloudinary Sign Network Error]', err);
-      throw new Error(
-        '[cloudinary/sign-network] تعذر الاتصال بخادم التطبيق لتجهيز رفع الصورة. تحقق من اتصال الإنترنت وأعد المحاولة.'
-      );
-    }
-    throw err;
   }
 
   // 3. Upload file directly to Cloudinary using the signed parameters

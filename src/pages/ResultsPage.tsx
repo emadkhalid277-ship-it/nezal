@@ -97,7 +97,7 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
                     delay: effects.motion ? Math.min(index * 0.08, 0.32) : 0,
                     ease: [0.16, 1, 0.3, 1],
                   }}
-                  className={`relative overflow-hidden p-4 sm:p-5 rounded-2xl border flex items-center justify-between gap-3 sm:gap-4 transition-shadow ${
+                  className={`relative overflow-hidden p-3.5 sm:p-5 rounded-2xl border flex items-center justify-between gap-2.5 sm:gap-4 transition-shadow ${
                     isWinner
                       ? outcome.isTie
                         ? 'bg-[#FFFBEB] border-amber-300 shadow-sm'
@@ -105,21 +105,21 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
                       : 'bg-[#FFFFFF] border-[#E5E8DD]'
                   }`}
                 >
-                  <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                  <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
                     <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center font-mono tabular-nums text-base font-extrabold text-white shrink-0 shadow-xs"
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center font-mono tabular-nums text-sm sm:text-base font-extrabold text-white shrink-0 shadow-xs"
                       style={{ backgroundColor: team.color }}
                     >
                       #{rankNumber}
                     </div>
                     <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-display text-base sm:text-lg font-bold text-[#1B1F1C] truncate">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <span className="font-display text-sm sm:text-lg font-bold text-[#1B1F1C] truncate">
                           {displayTeamName}
                         </span>
                         {isWinner && (
                           <span
-                            className={`text-xs font-bold px-2 py-0.5 rounded-md shrink-0 ${
+                            className={`text-[11px] sm:text-xs font-bold px-2 py-0.5 rounded-md shrink-0 ${
                               outcome.isTie
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-[#FEF2EC] text-[#F07842]'
@@ -130,7 +130,7 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
                         )}
                       </div>
                       {team.players.length > 0 && (
-                        <div className="text-xs text-[#52574E] truncate">
+                        <div className="text-[11px] sm:text-xs text-[#52574E] truncate">
                           اللاعبون: {team.players.join(' · ')}
                         </div>
                       )}
@@ -143,10 +143,10 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
                       animateOnMount
                       motionEnabled={effects.motion && effects.winner}
                       durationMs={620}
-                      className="font-mono text-2xl sm:text-3xl font-extrabold"
+                      className="font-mono text-xl sm:text-3xl font-extrabold"
                       style={{ color: team.color }}
                     />
-                    <div className="text-[11px] font-medium text-[#52574E]">
+                    <div className="text-[10px] sm:text-[11px] font-medium text-[#52574E]">
                       نقطة
                     </div>
                   </div>

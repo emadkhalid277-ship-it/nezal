@@ -8,18 +8,15 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  AlertCircle,
   Image as ImageIcon,
   BookOpen,
   FolderTree,
   ChevronRight,
   Search,
   Sparkles,
-  Info,
   UploadCloud,
   X,
   Eye,
-  Check,
   RefreshCw,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
@@ -49,6 +46,15 @@ import {
   isValidHttpUrl,
   validateQuestionImageFile,
 } from '../utils/questionMedia';
+import {
+  AlertBanner,
+  ConfirmDialog,
+  EmptyState,
+  LoadingState,
+  ModalShell,
+  StatusBadge,
+  UI_CLASSES,
+} from '../components/ui';
 
 interface MyQuestionListsPageProps {
   user: User | null;
@@ -111,6 +117,26 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
 
   // Rejection Reason Details Modal
   const [viewingRejection, setViewingRejection] = useState<{ questionText: string; reason: string } | null>(null);
+
+  // Unified ConfirmDialog state (replaces window.confirm)
+  const [confirmState, setConfirmState] = useState<
+    | { kind: 'delete_list'; listId: string; listName: string }
+    | { kind: 'delete_question'; question: UserCustomQuestion }
+    | { kind: 'submit_review'; question: UserCustomQuestion }
+    | null
+  >(null);
+
+  useEffect(() => {
+    if (!previewImageUrl) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setPreviewImageUrl(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewImageUrl]);
 
   // 1. Initial Load of User Lists
   useEffect(() => {
@@ -251,24 +277,56 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
     }
   };
 
-  const handleDeleteList = async (listId: string, listName: string) => {
+  const handleDeleteList = (listId: string, listName: string) => {
     if (!user) return;
-    if (!window.confirm(`هل أنت متأكد من حذف القائمة "${listName}"؟ سيتم حذف جميع الأسئلة الموجودة بداخلها.`)) {
-      return;
-    }
+    setConfirmState({ kind: 'delete_list', listId, listName });
+  };
 
+  const executeConfirmAction = async () => {
+    if (!user || !confirmState) return;
     setActionLoading(true);
     try {
-      await deleteUserList(user.uid, listId);
-      const remaining = lists.filter((l) => l.id !== listId);
-      setLists(remaining);
-      if (activeListId === listId) {
-        setActiveListId(remaining.length > 0 ? remaining[0].id : null);
+      if (confirmState.kind === 'delete_list') {
+        const { listId } = confirmState;
+        await deleteUserList(user.uid, listId);
+        const remaining = lists.filter((l) => l.id !== listId);
+        setLists(remaining);
+        if (activeListId === listId) {
+          setActiveListId(remaining.length > 0 ? remaining[0].id : null);
+        }
+        showFeedback('success', 'تم حذف القائمة وأسئلتها بنجاح.');
+      } else if (confirmState.kind === 'delete_question') {
+        const { question: q } = confirmState;
+        await deleteUserQuestion(user.uid, q.id, q.imageStoragePath);
+        setQuestions((prev) => prev.filter((item) => item.id !== q.id));
+        showFeedback('success', 'تم حذف السؤال من القائمة.');
+      } else if (confirmState.kind === 'submit_review') {
+        const { question: q } = confirmState;
+        const contribId = await submitQuestionToAdmin(
+          user.uid,
+          q,
+          user.email || '',
+          user.displayName || user.email?.split('@')[0] || ''
+        );
+        setQuestions((prev) =>
+          prev.map((item) =>
+            item.id === q.id
+              ? { ...item, contributionStatus: 'pending', contributionId: contribId, rejectionReason: '' }
+              : item
+          )
+        );
+        showFeedback('success', 'تم إرسال السؤال للإدارة بنجاح، وستتم مراجعته قريباً.');
       }
-      showFeedback('success', 'تم حذف القائمة وأسئلتها بنجاح.');
+      setConfirmState(null);
     } catch (err: any) {
-      console.error('Error deleting list:', err);
-      showFeedback('error', 'تعذر حذف القائمة.');
+      console.error('Confirm action failed:', err);
+      if (confirmState.kind === 'delete_list') {
+        showFeedback('error', 'تعذر حذف القائمة.');
+      } else if (confirmState.kind === 'delete_question') {
+        showFeedback('error', 'تعذر حذف السؤال.');
+      } else {
+        showFeedback('error', 'تعذر إرسال السؤال للمراجعة. يرجى المحاولة لاحقاً.');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -469,24 +527,12 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
     }
   };
 
-  const handleDeleteQuestion = async (q: UserCustomQuestion) => {
+  const handleDeleteQuestion = (q: UserCustomQuestion) => {
     if (!user) return;
-    if (!window.confirm('هل أنت متأكد من حذف هذا السؤال من قائمتك؟')) return;
-
-    setActionLoading(true);
-    try {
-      await deleteUserQuestion(user.uid, q.id, q.imageStoragePath);
-      setQuestions((prev) => prev.filter((item) => item.id !== q.id));
-      showFeedback('success', 'تم حذف السؤال من القائمة.');
-    } catch (err: any) {
-      console.error('Error deleting question:', err);
-      showFeedback('error', 'تعذر حذف السؤال.');
-    } finally {
-      setActionLoading(false);
-    }
+    setConfirmState({ kind: 'delete_question', question: q });
   };
 
-  const handleSubmitForReview = async (q: UserCustomQuestion) => {
+  const handleSubmitForReview = (q: UserCustomQuestion) => {
     if (!user) return;
     if (q.contributionStatus === 'pending') {
       showFeedback('info', 'هذا السؤال تم إرساله وهو حالياً قيد المراجعة لدى الإدارة.');
@@ -496,35 +542,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
       showFeedback('info', 'هذا السؤال تم اعتماده مسبقاً في بنك أسئلة نِزال العام!');
       return;
     }
-
-    if (!window.confirm('هل ترغب في إرسال هذا السؤال إلى إدارة نِزال للمراجعة والاعتماد في بنك الأسئلة العام؟')) {
-      return;
-    }
-
-    setActionLoading(true);
-    try {
-      const contribId = await submitQuestionToAdmin(
-        user.uid,
-        q,
-        user.email || '',
-        user.displayName || user.email?.split('@')[0] || ''
-      );
-
-      setQuestions((prev) =>
-        prev.map((item) =>
-          item.id === q.id
-            ? { ...item, contributionStatus: 'pending', contributionId: contribId, rejectionReason: '' }
-            : item
-        )
-      );
-
-      showFeedback('success', 'تم إرسال السؤال للإدارة بنجاح، وستتم مراجعته قريباً.');
-    } catch (err: any) {
-      console.error('Error submitting question for review:', err);
-      showFeedback('error', 'تعذر إرسال السؤال للمراجعة. يرجى المحاولة لاحقاً.');
-    } finally {
-      setActionLoading(false);
-    }
+    setConfirmState({ kind: 'submit_review', question: q });
   };
 
   // Render Logged Out View
@@ -534,24 +552,24 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
         <div className="w-20 h-20 rounded-3xl bg-[#14543D]/10 text-[#14543D] flex items-center justify-center mx-auto shadow-inner">
           <BookOpen className="w-10 h-10" />
         </div>
-        <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#252824]">
+        <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#1B1F1C]">
           قائمتي الخاصة — بنك الأسئلة الشخصي
         </h1>
-        <p className="text-sm sm:text-base text-[#777B73] max-w-lg mx-auto leading-relaxed">
+        <p className="text-sm sm:text-base text-[#52574E] max-w-lg mx-auto leading-relaxed">
           سجل دخولك لتتمكن من إنشاء قوائم أسئلتك المخصصة، وإضافة أسئلتك وإجاباتها، والمساهمة مع مجتمع «نِزال» في بناء بنك الأسئلة الشامل.
         </p>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="w-full sm:w-auto px-6 py-3 min-h-[46px] rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+            className={`${UI_CLASSES.btnPrimary} w-full sm:w-auto px-6 min-h-[46px] shadow-sm`}
           >
             تسجيل الدخول / إنشاء حساب
           </button>
           <button
             type="button"
             onClick={onNavigateHome}
-            className="w-full sm:w-auto px-5 py-3 min-h-[46px] rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#252824] font-bold text-sm border border-[#E5E8DD] transition-all cursor-pointer"
+            className={`${UI_CLASSES.btnOutline} w-full sm:w-auto px-5 min-h-[46px] text-[#52574E]`}
           >
             العودة للرئيسية
           </button>
@@ -564,29 +582,12 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
     <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-5 md:py-8 space-y-6 md:space-y-8">
       {/* Toast Notification Banner */}
       {feedback && (
-        <div
-          className={`p-4 rounded-2xl flex items-center justify-between gap-3 text-sm font-bold shadow-md transition-all ${
-            feedback.type === 'success'
-              ? 'bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/20'
-              : feedback.type === 'error'
-              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-              : 'bg-[#FDF0EA] text-[#D9602B] border border-[#F5D0BE]'
-          }`}
+        <AlertBanner
+          tone={feedback.type === 'success' ? 'success' : feedback.type === 'error' ? 'error' : 'warning'}
+          onDismiss={() => setFeedback(null)}
         >
-          <div className="flex items-center gap-2">
-            {feedback.type === 'success' && <CheckCircle2 className="w-5 h-5 shrink-0" />}
-            {feedback.type === 'error' && <AlertCircle className="w-5 h-5 shrink-0" />}
-            {feedback.type === 'info' && <Info className="w-5 h-5 shrink-0" />}
-            <span>{feedback.message}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setFeedback(null)}
-            className="p-1 hover:bg-black/5 rounded-lg cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+          {feedback.message}
+        </AlertBanner>
       )}
 
       {/* Page Header */}
@@ -599,7 +600,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
           <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-[#14543D]">
             قائمتي الخاصة
           </h1>
-          <p className="text-xs sm:text-sm text-[#777B73] max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#52574E] max-w-2xl leading-relaxed">
             أنشئ قوائم أسئلتك المخصصة لمناسباتك أو أصدقائك، واصنع أسئلة مصورة أو نصية مباشرة، وشاركها مع مجتمع «نِزال» عبر زر «إرسال للمراجعة» لتُعتمد رسمياً في اللعبة!
           </p>
         </div>
@@ -608,7 +609,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
           <button
             type="button"
             onClick={openCreateListModal}
-            className="px-4 py-2.5 min-h-[42px] rounded-xl bg-[#14543D] hover:bg-[#0E3B2B] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+            className="px-4 py-2.5 min-h-[44px] rounded-xl bg-[#14543D] hover:bg-[#0E3B2B] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
           >
             <FolderPlus className="w-4 h-4" />
             <span>إنشاء قائمة جديدة</span>
@@ -617,7 +618,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
             type="button"
             disabled={!activeListId}
             onClick={openCreateQuestionModal}
-            className="px-4 py-2.5 min-h-[42px] rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            className="px-4 py-2.5 min-h-[44px] rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة سؤال</span>
@@ -631,14 +632,14 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
         <div className="lg:col-span-1 space-y-4">
           <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 space-y-3 shadow-xs">
             <div className="flex items-center justify-between pb-2 border-b border-[#E5E8DD]">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#252824]">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#1B1F1C]">
                 <FolderTree className="w-4 h-4 text-[#14543D]" />
-                <span>قوائمي ({lists.length})</span>
+                <span className="tabular-nums">قوائمي ({lists.length})</span>
               </div>
               <button
                 type="button"
                 onClick={openCreateListModal}
-                className="text-xs font-bold text-[#F07842] hover:underline flex items-center gap-1 cursor-pointer"
+                className="min-h-[36px] px-2 text-xs font-bold text-[#F07842] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>قائمة</span>
@@ -646,14 +647,14 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
             </div>
 
             {loadingLists ? (
-              <div className="py-6 text-center text-xs text-[#777B73]">جارٍ تحميل القوائم...</div>
+              <div className="py-6 text-center text-xs text-[#52574E]">جارٍ تحميل القوائم...</div>
             ) : lists.length === 0 ? (
               <div className="py-8 text-center space-y-3">
-                <p className="text-xs text-[#777B73]">لم تنشئ أي قائمة بعد.</p>
+                <p className="text-xs text-[#666B62]">لم تنشئ أي قائمة بعد.</p>
                 <button
                   type="button"
                   onClick={openCreateListModal}
-                  className="px-3 py-1.5 rounded-lg bg-[#EAF2EE] text-[#14543D] text-xs font-bold hover:bg-[#D7E6DF] cursor-pointer"
+                  className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[#EAF2EE] text-[#14543D] text-xs font-bold hover:bg-[#D7E6DF] cursor-pointer"
                 >
                   + أنشئ أول قائمة
                 </button>
@@ -669,13 +670,13 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                       className={`group p-3 rounded-xl border text-right cursor-pointer transition-all flex items-center justify-between gap-2 ${
                         isActive
                           ? 'bg-[#EAF2EE] border-[#14543D]/30 text-[#14543D]'
-                          : 'bg-[#FBFDFB] hover:bg-[#F3F5E9] border-[#E5E8DD] text-[#252824]'
+                          : 'bg-[#F7F8F1] hover:bg-[#F3F5E9] border-[#E5E8DD] text-[#1B1F1C]'
                       }`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-xs truncate">{l.name}</div>
                         {l.description && (
-                          <div className="text-[11px] text-[#777B73] truncate">{l.description}</div>
+                          <div className="text-[11px] text-[#52574E] truncate">{l.description}</div>
                         )}
                       </div>
 
@@ -686,8 +687,9 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             e.stopPropagation();
                             openEditListModal(l);
                           }}
-                          className="p-2 sm:p-1.5 rounded-md text-[#777B73] hover:text-[#14543D] hover:bg-black/5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
+                          className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#52574E] hover:text-[#14543D] hover:bg-black/5 transition-colors cursor-pointer"
                           title="تعديل القائمة"
+                          aria-label={`تعديل القائمة ${l.name}`}
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
@@ -697,14 +699,15 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             e.stopPropagation();
                             handleDeleteList(l.id, l.name);
                           }}
-                          className="p-2 sm:p-1.5 rounded-md text-[#777B73] hover:text-rose-600 hover:bg-black/5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
+                          className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#52574E] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="حذف القائمة"
+                          aria-label={`حذف القائمة ${l.name}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                         <ChevronRight
                           className={`w-4 h-4 transition-transform ${
-                            isActive ? 'rotate-180 text-[#14543D]' : 'text-[#777B73]'
+                            isActive ? 'rotate-180 text-[#14543D]' : 'text-[#666B62]'
                           }`}
                         />
                       </div>
@@ -725,16 +728,16 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5E8DD]">
                   <div>
                     <div className="text-xs font-bold text-[#F07842]">القائمة المفتوحة</div>
-                    <h2 className="font-display text-xl font-bold text-[#252824]">{activeList.name}</h2>
+                    <h2 className="font-display text-xl font-bold text-[#1B1F1C]">{activeList.name}</h2>
                     {activeList.description && (
-                      <p className="text-xs text-[#777B73] mt-0.5">{activeList.description}</p>
+                      <p className="text-xs text-[#52574E] mt-0.5">{activeList.description}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => openEditListModal(activeList)}
-                      className="px-3 py-1.5 rounded-lg border border-[#E5E8DD] text-xs font-bold text-[#777B73] hover:text-[#14543D] hover:bg-[#F3F5E9] flex items-center gap-1 cursor-pointer"
+                      className="min-h-[40px] px-3 py-1.5 rounded-xl border border-[#E5E8DD] text-xs font-bold text-[#52574E] hover:text-[#14543D] hover:bg-[#F7F8F1] flex items-center gap-1 cursor-pointer transition-colors"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>تعديل</span>
@@ -742,7 +745,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     <button
                       type="button"
                       onClick={openCreateQuestionModal}
-                      className="px-3.5 py-1.5 rounded-lg bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>إضافة سؤال</span>
@@ -753,13 +756,14 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                 {/* Search & Filters Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                   <div className="relative min-w-0 w-full sm:flex-1 sm:min-w-[200px]">
-                    <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#777B73]" />
+                    <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#666B62]" />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="ابحث في الأسئلة أو الإجابات..."
-                      className="w-full pl-3 pr-9 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D] focus:ring-1 focus:ring-[#14543D]"
+                      aria-label="ابحث في الأسئلة أو الإجابات"
+                      className="w-full min-h-[42px] pl-3 pr-9 py-2 text-xs bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] placeholder:text-[#666B62] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15 transition-colors"
                     />
                   </div>
 
@@ -767,7 +771,8 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     <select
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
-                      className="px-3 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl text-[#252824] font-medium focus:outline-none focus:border-[#14543D]"
+                      aria-label="تصفية حسب الحالة"
+                      className="min-h-[42px] px-3 py-2 text-xs bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] font-medium focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
                     >
                       <option value="all">جميع الحالات</option>
                       <option value="draft">مسودة (غير مرسل)</option>
@@ -779,7 +784,8 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     <select
                       value={pointsFilter}
                       onChange={(e) => setPointsFilter(e.target.value)}
-                      className="px-3 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl text-[#252824] font-medium focus:outline-none focus:border-[#14543D]"
+                      aria-label="تصفية حسب النقاط"
+                      className="min-h-[42px] px-3 py-2 text-xs bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] font-medium focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
                     >
                       <option value="all">جميع النقاط</option>
                       <option value="100">100 نقطة</option>
@@ -792,10 +798,11 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     <button
                       type="button"
                       onClick={() => loadQuestionsForList(activeList.id)}
-                      className="p-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#777B73] hover:text-[#14543D] border border-[#E5E8DD] cursor-pointer"
+                      className="min-w-[42px] min-h-[42px] rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD] text-[#52574E] hover:text-[#14543D] border border-[#E5E8DD] flex items-center justify-center cursor-pointer transition-colors"
                       title="تحديث الأسئلة"
+                      aria-label="تحديث الأسئلة"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <RefreshCw className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -803,29 +810,23 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
 
               {/* Questions List */}
               {loadingQuestions ? (
-                <div className="py-16 text-center text-sm text-[#777B73] bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl">
-                  جارٍ تحميل أسئلة القائمة...
-                </div>
+                <LoadingState message="جارٍ تحميل أسئلة القائمة..." />
               ) : filteredQuestions.length === 0 ? (
-                <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center space-y-4">
-                  <div className="w-14 h-14 rounded-2xl bg-[#F3F5E9] text-[#777B73] flex items-center justify-center mx-auto">
-                    <BookOpen className="w-6 h-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-sm text-[#252824]">لا توجد أسئلة في هذه القائمة حالياً</h3>
-                    <p className="text-xs text-[#777B73] max-w-sm mx-auto">
-                      ابدأ بإضافة أول سؤال، حدد نقاطه وفئته، وأرسله للمراجعة ليدخل بنك أسئلة نِزال!
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={openCreateQuestionModal}
-                    className="px-4 py-2 rounded-xl bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>إضافة أول سؤال</span>
-                  </button>
-                </div>
+                <EmptyState
+                  icon={<BookOpen className="w-6 h-6" />}
+                  title="لا توجد أسئلة في هذه القائمة حالياً"
+                  description="ابدأ بإضافة أول سؤال، حدد نقاطه وفئته، وأرسله للمراجعة ليدخل بنك أسئلة نِزال!"
+                  action={
+                    <button
+                      type="button"
+                      onClick={openCreateQuestionModal}
+                      className={`${UI_CLASSES.btnGreen} text-xs`}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>إضافة أول سؤال</span>
+                    </button>
+                  }
+                />
               ) : (
                 <div className="space-y-3.5">
                   {filteredQuestions.map((q) => {
@@ -842,39 +843,39 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                         {/* Card Header: Category & Points & Status Badge */}
                         <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-[#E5E8DD]/60">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-2.5 py-0.5 rounded-lg bg-[#EAF2EE] text-[#14543D] text-[11px] font-bold">
+                            <StatusBadge tone="green">
                               {q.mainCategory} · {q.category}
-                            </span>
-                            <span className="px-2.5 py-0.5 rounded-lg bg-[#FDF0EA] text-[#D9602B] font-mono text-[11px] font-bold">
+                            </StatusBadge>
+                            <StatusBadge tone="orange" className="font-mono">
                               {q.points} نقطة ({q.difficulty})
-                            </span>
+                            </StatusBadge>
                             {q.imageUrl && (
-                              <span className="px-2 py-0.5 rounded-lg bg-[#F3F5E9] text-[#777B73] text-[10px] font-bold flex items-center gap-1">
+                              <StatusBadge tone="neutral">
                                 <ImageIcon className="w-3 h-3 text-[#F07842]" />
                                 <span>سؤال مصوّر</span>
-                              </span>
+                              </StatusBadge>
                             )}
                           </div>
 
                           {/* Contribution Status Badge */}
                           <div className="flex items-center gap-1.5">
                             {isDraft && (
-                              <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center gap-1">
+                              <StatusBadge tone="neutral">
                                 <Edit3 className="w-3 h-3" />
                                 <span>مسودة شخصية</span>
-                              </span>
+                              </StatusBadge>
                             )}
                             {isPending && (
-                              <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold flex items-center gap-1">
-                                <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                              <StatusBadge tone="amber">
+                                <Clock className="w-3 h-3" />
                                 <span>قيد المراجعة</span>
-                              </span>
+                              </StatusBadge>
                             )}
                             {isApproved && (
-                              <span className="px-2.5 py-1 rounded-lg bg-[#EAF2EE] text-[#14543D] border border-[#14543D]/25 text-[11px] font-bold flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3 text-[#14543D]" />
+                              <StatusBadge tone="green">
+                                <CheckCircle2 className="w-3 h-3" />
                                 <span>معتمد في بنك نِزال</span>
-                              </span>
+                              </StatusBadge>
                             )}
                             {isRejected && (
                               <button
@@ -885,7 +886,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                                     reason: q.rejectionReason || 'لم يحدد المشرف سبباً.',
                                   })
                                 }
-                                className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 hover:bg-rose-100 cursor-pointer"
+                                className="min-h-[32px] px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 hover:bg-rose-100 cursor-pointer transition-colors"
                                 title="اضغط لعرض سبب الرفض"
                               >
                                 <XCircle className="w-3 h-3 text-rose-600" />
@@ -902,13 +903,14 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                               <img
                                 src={q.imageUrl}
                                 alt={q.imageDescription || 'صورة السؤال'}
-                                className="w-24 h-24 object-cover rounded-xl border border-[#E5E8DD] bg-slate-50 cursor-pointer"
+                                className="w-24 h-24 object-cover rounded-xl border border-[#E5E8DD] bg-[#F7F8F1] cursor-pointer"
                                 onClick={() => setPreviewImageUrl(q.imageUrl || null)}
                               />
                               <button
                                 type="button"
                                 onClick={() => setPreviewImageUrl(q.imageUrl || null)}
-                                className="absolute inset-0 bg-black/40 text-white rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                aria-label="تكبير صورة السؤال"
+                                className="absolute inset-0 bg-black/40 text-white rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                 title="تكبير الصورة"
                               >
                                 <Eye className="w-5 h-5" />
@@ -917,23 +919,23 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                           )}
 
                           <div className="flex-1 space-y-1.5 min-w-0">
-                            <h4 className="font-bold text-sm text-[#252824] leading-relaxed">
+                            <h4 className="font-bold text-sm text-[#1B1F1C] leading-relaxed">
                               {q.questionText}
                             </h4>
 
-                            <div className="p-2.5 rounded-xl bg-[#F3F5E9]/50 border border-[#E5E8DD]/60 space-y-1 text-xs">
+                            <div className="p-3 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] space-y-1 text-xs">
                               <div>
                                 <span className="font-bold text-[#14543D]">الإجابة الصحيحة: </span>
-                                <span className="text-[#252824]">{q.correctAnswer}</span>
+                                <span className="text-[#1B1F1C]">{q.correctAnswer}</span>
                               </div>
                               {q.explanation && (
-                                <div className="text-[11px] text-[#777B73]">
-                                  <span className="font-bold text-[#777B73]">الشرح: </span>
+                                <div className="text-[11px] text-[#52574E]">
+                                  <span className="font-bold text-[#52574E]">الشرح: </span>
                                   <span>{q.explanation}</span>
                                 </div>
                               )}
                               {q.source && (
-                                <div className="text-[10px] text-[#777B73]/80">
+                                <div className="text-[10px] text-[#666B62]">
                                   <span>المصدر: {q.source}</span>
                                 </div>
                               )}
@@ -942,8 +944,8 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                         </div>
 
                         {/* Card Footer: Actions */}
-                        <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#E5E8DD]/40">
-                          <div className="text-[10px] text-[#777B73]">
+                        <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#E5E8DD]/60">
+                          <div className="text-[10px] text-[#666B62]">
                             أُضيف في {new Date(q.createdAt).toLocaleDateString('ar-SA')}
                           </div>
 
@@ -954,7 +956,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                                 type="button"
                                 disabled={actionLoading}
                                 onClick={() => handleSubmitForReview(q)}
-                                className="px-3 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                                className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                                 title="إرسال هذا السؤال لمراجعته من إدارة نِزال"
                               >
                                 <Send className="w-3.5 h-3.5" />
@@ -965,8 +967,9 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             <button
                               type="button"
                               onClick={() => openEditQuestionModal(q)}
-                              className="p-1.5 rounded-lg text-[#777B73] hover:text-[#14543D] hover:bg-[#F3F5E9] cursor-pointer"
+                              className="min-w-[40px] min-h-[40px] rounded-xl text-[#52574E] hover:text-[#14543D] hover:bg-[#F7F8F1] border border-transparent hover:border-[#E5E8DD] flex items-center justify-center cursor-pointer transition-colors"
                               title="تعديل السؤال"
+                              aria-label="تعديل السؤال"
                             >
                               <Edit3 className="w-4 h-4" />
                             </button>
@@ -974,8 +977,9 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDeleteQuestion(q)}
-                              className="p-1.5 rounded-lg text-[#777B73] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                              className="min-w-[40px] min-h-[40px] rounded-xl text-[#52574E] hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
                               title="حذف السؤال"
+                              aria-label="حذف السؤال"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -988,374 +992,341 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               )}
             </>
           ) : (
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-12 text-center space-y-4">
-              <div className="w-16 h-16 rounded-3xl bg-[#EAF2EE] text-[#14543D] flex items-center justify-center mx-auto">
-                <FolderPlus className="w-8 h-8" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-bold text-base text-[#252824]">اختر أو أنشئ قائمة للبدء</h3>
-                <p className="text-xs text-[#777B73] max-w-sm mx-auto">
-                  يمكنك تنظيم أسئلتك في قوائم متعددة، مثل «أسئلة كروية مع الأصدقاء» أو «تحديات الأنمي».
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={openCreateListModal}
-                className="px-5 py-2.5 rounded-xl bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] inline-flex items-center gap-2 shadow-xs cursor-pointer"
-              >
-                <FolderPlus className="w-4 h-4" />
-                <span>إنشاء قائمة جديدة الآن</span>
-              </button>
-            </div>
+            <EmptyState
+              icon={<FolderPlus className="w-7 h-7 text-[#14543D]" />}
+              title="اختر أو أنشئ قائمة للبدء"
+              description="يمكنك تنظيم أسئلتك في قوائم متعددة، مثل «أسئلة كروية مع الأصدقاء» أو «تحديات الأنمي»."
+              action={
+                <button
+                  type="button"
+                  onClick={openCreateListModal}
+                  className={`${UI_CLASSES.btnGreen} text-xs`}
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  <span>إنشاء قائمة جديدة الآن</span>
+                </button>
+              }
+            />
           )}
         </div>
       </div>
 
       {/* MODAL 1: Create / Edit List */}
-      {listModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-[#FFFFFF] rounded-3xl border border-[#E5E8DD] max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
-              <h3 className="font-display font-bold text-base text-[#252824]">
-                {editingList ? 'تعديل اسم القائمة' : 'إنشاء قائمة أسئلة جديدة'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setListModalOpen(false)}
-                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveList} className="space-y-4 text-right">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#252824]">
-                  اسم القائمة <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={listFormName}
-                  onChange={(e) => setListFormName(e.target.value)}
-                  placeholder="مثال: أسئلة العائلة، أساطير ون بيس..."
-                  className="w-full px-3.5 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#252824]">وصف القائمة (اختياري)</label>
-                <textarea
-                  rows={3}
-                  value={listFormDesc}
-                  onChange={(e) => setListFormDesc(e.target.value)}
-                  placeholder="ملاحظات أو وصف للقائمة..."
-                  className="w-full px-3.5 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setListModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#777B73] hover:bg-[#F3F5E9] cursor-pointer"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="px-5 py-2 rounded-xl bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {actionLoading ? 'جارٍ الحفظ...' : editingList ? 'حفظ التعديلات' : 'إنشاء القائمة'}
-                </button>
-              </div>
-            </form>
+      <ModalShell
+        isOpen={listModalOpen}
+        onClose={() => setListModalOpen(false)}
+        title={editingList ? 'تعديل اسم القائمة' : 'إنشاء قائمة أسئلة جديدة'}
+        icon={<FolderPlus className="w-4 h-4 text-[#F07842]" />}
+        headerTone="dark"
+        maxWidth="md"
+        closeDisabled={actionLoading}
+      >
+        <form onSubmit={handleSaveList} className="space-y-4 text-right">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[#1B1F1C]">
+              اسم القائمة <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={listFormName}
+              onChange={(e) => setListFormName(e.target.value)}
+              placeholder="مثال: أسئلة العائلة، أساطير ون بيس..."
+              className="w-full min-h-[44px] px-3.5 py-2 text-xs sm:text-sm bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
+            />
           </div>
-        </div>
-      )}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[#1B1F1C]">وصف القائمة (اختياري)</label>
+            <textarea
+              rows={3}
+              value={listFormDesc}
+              onChange={(e) => setListFormDesc(e.target.value)}
+              placeholder="ملاحظات أو وصف للقائمة..."
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setListModalOpen(false)}
+              className={`${UI_CLASSES.btnNeutral} text-xs`}
+            >
+              إلغاء
+            </button>
+            <button
+              type="submit"
+              disabled={actionLoading}
+              className={`${UI_CLASSES.btnGreen} text-xs`}
+            >
+              {actionLoading ? 'جارٍ الحفظ...' : editingList ? 'حفظ التعديلات' : 'إنشاء القائمة'}
+            </button>
+          </div>
+        </form>
+      </ModalShell>
 
       {/* MODAL 2: Create / Edit Question */}
-      {questionModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-[#FFFFFF] rounded-3xl border border-[#E5E8DD] max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-[#F07842]" />
-                <h3 className="font-display font-bold text-base text-[#252824]">
-                  {editingQuestion ? 'تعديل السؤال' : 'إضافة سؤال جديد إلى قائمتك'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                disabled={actionLoading || uploadingImage}
-                onClick={handleCloseQuestionModal}
-                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer disabled:opacity-50"
+      <ModalShell
+        isOpen={questionModalOpen}
+        onClose={handleCloseQuestionModal}
+        title={editingQuestion ? 'تعديل السؤال' : 'إضافة سؤال جديد إلى قائمتك'}
+        icon={<BookOpen className="w-4 h-4 text-[#F07842]" />}
+        headerTone="dark"
+        maxWidth="2xl"
+        closeDisabled={actionLoading || uploadingImage}
+      >
+        <form onSubmit={handleSaveQuestion} className="space-y-4 text-right">
+          {questionModalError && (
+            <AlertBanner tone="error">{questionModalError}</AlertBanner>
+          )}
+          {/* Category Selectors */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#1B1F1C]">
+                التصنيف الرئيسي <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formMainCatId}
+                onChange={(e) => {
+                  const newMainId = e.target.value;
+                  setFormMainCatId(newMainId);
+                  const matchingSubs = subcategories.filter(
+                    (s) => s.isActive && (s.mainCategoryId === newMainId || !s.mainCategoryId)
+                  );
+                  setFormSubcatId(matchingSubs[0]?.id || '');
+                }}
+                className="w-full min-h-[42px] px-3 py-2 text-xs bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
               >
-                <X className="w-5 h-5" />
-              </button>
+                {mainCategories
+                  .filter((m) => m.isActive)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+              </select>
             </div>
 
-            <form onSubmit={handleSaveQuestion} className="space-y-4 text-right">
-              {questionModalError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span>{questionModalError}</span>
-                </div>
-              )}
-              {/* Category Selectors */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#252824]">
-                    التصنيف الرئيسي <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formMainCatId}
-                    onChange={(e) => {
-                      const newMainId = e.target.value;
-                      setFormMainCatId(newMainId);
-                      const matchingSubs = subcategories.filter(
-                        (s) => s.isActive && (s.mainCategoryId === newMainId || !s.mainCategoryId)
-                      );
-                      setFormSubcatId(matchingSubs[0]?.id || '');
-                    }}
-                    className="w-full px-3 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#1B1F1C]">
+                التصنيف الفرعي <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formSubcatId}
+                onChange={(e) => setFormSubcatId(e.target.value)}
+                className="w-full min-h-[42px] px-3 py-2 text-xs bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
+              >
+                {availableSubcategories.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Point Values Segmented Selector */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-[#1B1F1C]">
+              قيمة السؤال والنقاط ({POINT_TO_DIFFICULTY[formPoints]})
+            </label>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {([100, 200, 300, 400, 500] as PointValue[]).map((pts) => {
+                const isSelected = formPoints === pts;
+                return (
+                  <button
+                    key={pts}
+                    type="button"
+                    onClick={() => setFormPoints(pts)}
+                    className={`py-2 min-h-[42px] text-xs font-mono font-bold tabular-nums rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
+                        : 'bg-[#F7F8F1] text-[#52574E] border-[#E5E8DD] hover:border-[#F07842]/50'
+                    }`}
                   >
-                    {mainCategories
-                      .filter((m) => m.isActive)
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
+                    {pts}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#252824]">
-                    التصنيف الفرعي <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={formSubcatId}
-                    onChange={(e) => setFormSubcatId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
-                  >
-                    {availableSubcategories.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+          {/* Question Text */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1B1F1C]">
+              نص السؤال (مباشر ومحدد) <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={3}
+              required
+              value={formQuestionText}
+              onChange={(e) => setFormQuestionText(e.target.value)}
+              placeholder="اكتب السؤال بصيغة مباشرة وواضحة..."
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
+            />
+          </div>
 
-              {/* Point Values Segmented Selector */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#252824]">
-                  قيمة السؤال والنقاط ({POINT_TO_DIFFICULTY[formPoints]})
-                </label>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                  {([100, 200, 300, 400, 500] as PointValue[]).map((pts) => {
-                    const isSelected = formPoints === pts;
-                    return (
-                      <button
-                        key={pts}
-                        type="button"
-                        onClick={() => setFormPoints(pts)}
-                        className={`py-2 min-h-[42px] text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#14543D] text-white border-[#14543D] shadow-xs'
-                            : 'bg-[#FBFDFB] text-[#777B73] border-[#E5E8DD] hover:border-[#14543D]/30'
-                        }`}
-                      >
-                        {pts}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+          {/* Correct Answer */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#1B1F1C]">
+              الإجابة الصحيحة <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={formCorrectAnswer}
+              onChange={(e) => setFormCorrectAnswer(e.target.value)}
+              placeholder="الإجابة الصحيحة والدقيقة..."
+              className="w-full min-h-[42px] px-3.5 py-2 text-xs sm:text-sm bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
+            />
+          </div>
 
-              {/* Question Text */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-[#252824]">
-                  نص السؤال (مباشر ومحدد) <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={formQuestionText}
-                  onChange={(e) => setFormQuestionText(e.target.value)}
-                  placeholder="اكتب السؤال بصيغة مباشرة وواضحة..."
-                  className="w-full px-3.5 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
+          {/* Explanation & Source */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#1B1F1C]">شرح الإجابة (اختياري)</label>
+              <input
+                type="text"
+                value={formExplanation}
+                onChange={(e) => setFormExplanation(e.target.value)}
+                placeholder="معلومات إضافية توضيحية..."
+                className="w-full min-h-[42px] px-3 py-2 text-xs bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#1B1F1C]">المصدر أو المرجع (اختياري)</label>
+              <input
+                type="text"
+                value={formSource}
+                onChange={(e) => setFormSource(e.target.value)}
+                placeholder="مثال: ويكيبيديا، موقع الفيفا..."
+                className="w-full min-h-[42px] px-3 py-2 text-xs bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl text-[#1B1F1C] focus:bg-white focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
+              />
+            </div>
+          </div>
+
+          {/* Optional Image Upload */}
+          <div className="space-y-1.5 pt-1">
+            <label className="text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5">
+              <ImageIcon className="w-3.5 h-3.5 text-[#F07842]" />
+              <span>صورة السؤال (اختياري)</span>
+            </label>
+
+            {imagePreview ? (
+              <div className="flex items-center gap-3 p-3 bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl">
+                <img
+                  src={imagePreview}
+                  alt="معاينة الصورة"
+                  className="w-16 h-16 object-cover rounded-lg border border-[#E5E8DD]"
                 />
-              </div>
-
-              {/* Correct Answer */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-[#252824]">
-                  الإجابة الصحيحة <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formCorrectAnswer}
-                  onChange={(e) => setFormCorrectAnswer(e.target.value)}
-                  placeholder="الإجابة الصحيحة والدقيقة..."
-                  className="w-full px-3.5 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
-                />
-              </div>
-
-              {/* Explanation & Source */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#252824]">شرح الإجابة (اختياري)</label>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="text-xs font-bold text-[#1B1F1C]">صورة مرفقة بالسؤال</div>
                   <input
                     type="text"
-                    value={formExplanation}
-                    onChange={(e) => setFormExplanation(e.target.value)}
-                    placeholder="معلومات إضافية توضيحية..."
-                    className="w-full px-3 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
+                    value={formImageDesc}
+                    onChange={(e) => setFormImageDesc(e.target.value)}
+                    placeholder="وصف مختصر للصورة..."
+                    className="w-full min-h-[34px] px-2.5 py-1 text-[11px] bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg focus:outline-none focus:border-[#F07842]"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[#252824]">المصدر أو المرجع (اختياري)</label>
-                  <input
-                    type="text"
-                    value={formSource}
-                    onChange={(e) => setFormSource(e.target.value)}
-                    placeholder="مثال: ويكيبيديا، موقع الفيفا..."
-                    className="w-full px-3 py-2 text-xs bg-[#FBFDFB] border border-[#E5E8DD] rounded-xl focus:outline-none focus:border-[#14543D]"
-                  />
-                </div>
-              </div>
-
-              {/* Optional Image Upload */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-xs font-bold text-[#252824] flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5 text-[#F07842]" />
-                  <span>صورة السؤال (اختياري)</span>
-                </label>
-
-                {imagePreview ? (
-                  <div className="flex items-center gap-3 p-3 bg-[#F3F5E9]/50 border border-[#E5E8DD] rounded-xl">
-                    <img
-                      src={imagePreview}
-                      alt="معاينة الصورة"
-                      className="w-16 h-16 object-cover rounded-lg border border-[#E5E8DD]"
-                    />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="text-xs font-bold text-[#252824]">صورة مرفقة بالسؤال</div>
-                      <input
-                        type="text"
-                        value={formImageDesc}
-                        onChange={(e) => setFormImageDesc(e.target.value)}
-                        placeholder="وصف مختصر للصورة..."
-                        className="w-full px-2.5 py-1 text-[11px] bg-[#FFFFFF] border border-[#E5E8DD] rounded-lg"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      disabled={actionLoading || uploadingImage}
-                      onClick={handleRemoveImage}
-                      className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-50"
-                      title="حذف الصورة"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-[#E5E8DD] hover:border-[#14543D]/40 rounded-xl cursor-pointer bg-[#FBFDFB] hover:bg-[#F3F5E9]/30 transition-colors">
-                    <UploadCloud className="w-6 h-6 text-[#777B73] mb-1" />
-                    <span className="text-xs font-bold text-[#14543D]">اضغط لرفع صورة من جهازك</span>
-                    <span className="text-[10px] text-[#777B73]">صيغ مدعومة: JPG, PNG, WEBP (حتى 5 ميجابايت)</span>
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                      onChange={handleImageChange}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-              </div>
-
-              {/* Form Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E8DD]">
                 <button
                   type="button"
                   disabled={actionLoading || uploadingImage}
-                  onClick={handleCloseQuestionModal}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-[#777B73] hover:bg-[#F3F5E9] cursor-pointer disabled:opacity-50"
+                  onClick={handleRemoveImage}
+                  aria-label="حذف الصورة المرفقة"
+                  className="min-w-[36px] min-h-[36px] rounded-lg text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer disabled:opacity-50"
+                  title="حذف الصورة"
                 >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading || uploadingImage}
-                  className="px-6 py-2 rounded-xl bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {uploadingImage
-                    ? 'جارٍ رفع الصورة...'
-                    : actionLoading
-                    ? 'جارٍ الحفظ...'
-                    : editingQuestion
-                    ? 'حفظ التعديلات'
-                    : 'إضافة السؤال'}
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-            </form>
+            ) : (
+              <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-[#E5E8DD] hover:border-[#F07842]/50 rounded-xl cursor-pointer bg-[#F7F8F1] hover:bg-[#FEF2EC]/40 transition-colors">
+                <UploadCloud className="w-6 h-6 text-[#666B62] mb-1" />
+                <span className="text-xs font-bold text-[#14543D]">اضغط لرفع صورة من جهازك</span>
+                <span className="text-[10px] text-[#666B62]">صيغ مدعومة: JPG, PNG, WEBP (حتى 5 ميجابايت)</span>
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
-        </div>
-      )}
+
+          {/* Form Buttons */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E8DD]">
+            <button
+              type="button"
+              disabled={actionLoading || uploadingImage}
+              onClick={handleCloseQuestionModal}
+              className={`${UI_CLASSES.btnNeutral} text-xs`}
+            >
+              إلغاء
+            </button>
+            <button
+              type="submit"
+              disabled={actionLoading || uploadingImage}
+              className={`${UI_CLASSES.btnGreen} text-xs`}
+            >
+              {uploadingImage
+                ? 'جارٍ رفع الصورة...'
+                : actionLoading
+                ? 'جارٍ الحفظ...'
+                : editingQuestion
+                ? 'حفظ التعديلات'
+                : 'إضافة السؤال'}
+            </button>
+          </div>
+        </form>
+      </ModalShell>
 
       {/* MODAL 3: Rejection Reason Details Modal */}
-      {viewingRejection && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-[#FFFFFF] rounded-3xl border border-rose-200 max-w-md w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-right">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E5E8DD]">
-              <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
-                <XCircle className="w-5 h-5" />
-                <span>سبب رفض السؤال من الإدارة</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewingRejection(null)}
-                className="p-2 rounded-lg hover:bg-slate-100 text-[#777B73] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <ModalShell
+        isOpen={Boolean(viewingRejection)}
+        onClose={() => setViewingRejection(null)}
+        title="سبب رفض السؤال من الإدارة"
+        icon={<XCircle className="w-4 h-4" />}
+        headerTone="danger"
+        maxWidth="md"
+        footer={
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setViewingRejection(null)}
+              className={`${UI_CLASSES.btnGreen} text-xs`}
+            >
+              فهمت
+            </button>
+          </div>
+        }
+      >
+        {viewingRejection && (
+          <div className="space-y-3 text-xs text-right">
+            <div className="text-[#52574E] font-bold">السؤال:</div>
+            <div className="font-bold text-[#1B1F1C] p-3 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] leading-relaxed">
+              {viewingRejection.questionText}
             </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="text-[#777B73]">السؤال:</div>
-              <div className="font-bold text-[#252824] p-3 rounded-xl bg-[#F3F5E9]">
-                {viewingRejection.questionText}
-              </div>
-              <div className="text-[#777B73] pt-1">ملاحظة المشرف وسبب الرفض:</div>
-              <div className="p-3 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 leading-relaxed">
-                {viewingRejection.reason}
-              </div>
-            </div>
-
-            <div className="pt-2 text-left">
-              <button
-                type="button"
-                onClick={() => setViewingRejection(null)}
-                className="px-4 py-2 min-h-[40px] rounded-xl bg-[#14543D] text-white text-xs font-bold cursor-pointer"
-              >
-                فهمت
-              </button>
+            <div className="text-[#52574E] font-bold pt-1">ملاحظة المشرف وسبب الرفض:</div>
+            <div className="p-3 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 leading-relaxed">
+              {viewingRejection.reason}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalShell>
 
       {/* MODAL 4: Full Image Preview Modal */}
       {previewImageUrl && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-4 cursor-zoom-out"
+          className="fixed inset-0 z-50 bg-[#1B1F1C]/85 flex items-center justify-center p-3 sm:p-4 cursor-zoom-out"
+          role="dialog"
+          aria-modal="true"
+          aria-label="معاينة صورة السؤال مكبرة"
           onClick={() => setPreviewImageUrl(null)}
         >
-          <div className="relative max-w-3xl max-h-[90dvh]">
+          <div className="relative max-w-3xl max-h-[90dvh]" onClick={(e) => e.stopPropagation()}>
             <img
               src={previewImageUrl}
               alt="صورة السؤال مكبرة"
@@ -1364,13 +1335,40 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
             <button
               type="button"
               onClick={() => setPreviewImageUrl(null)}
-              className="absolute top-3 left-3 p-2.5 bg-black/60 hover:bg-black/80 text-white rounded-full cursor-pointer"
+              aria-label="إغلاق المعاينة"
+              className="absolute top-3 left-3 min-w-[44px] min-h-[44px] bg-black/70 hover:bg-black/90 text-white rounded-full flex items-center justify-center cursor-pointer transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
       )}
+
+      {/* CONFIRMATION DIALOG (Delete List / Delete Question / Submit for Review) */}
+      <ConfirmDialog
+        isOpen={confirmState !== null}
+        onClose={() => setConfirmState(null)}
+        onConfirm={executeConfirmAction}
+        title={
+          confirmState?.kind === 'delete_list'
+            ? 'حذف قائمة الأسئلة'
+            : confirmState?.kind === 'delete_question'
+            ? 'حذف السؤال'
+            : 'إرسال السؤال للمراجعة'
+        }
+        message={
+          confirmState?.kind === 'delete_list'
+            ? `هل أنت متأكد من حذف القائمة «${confirmState.listName}»؟ سيتم حذف جميع الأسئلة الموجودة بداخلها.`
+            : confirmState?.kind === 'delete_question'
+            ? 'هل أنت متأكد من حذف هذا السؤال من قائمتك نهائياً؟'
+            : 'هل ترغب في إرسال هذا السؤال إلى إدارة نِزال للمراجعة والاعتماد في بنك الأسئلة العام؟'
+        }
+        confirmLabel={
+          confirmState?.kind === 'submit_review' ? 'إرسال للمراجعة' : 'تأكيد الحذف'
+        }
+        tone={confirmState?.kind === 'submit_review' ? 'green' : 'danger'}
+        loading={actionLoading}
+      />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
+  ChevronDown,
   Clock,
   EyeOff,
   Flag,
@@ -43,6 +44,7 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
   const [connectionWarning, setConnectionWarning] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<WalaKalimaPlayerSessionState | null>(null);
   const [clockOffsetMs, setClockOffsetMs] = useState<number>(0);
+  const [showRules, setShowRules] = useState<boolean>(false);
 
   const claimAttemptedRef = useRef(false);
   const hasMeasuredRttOffsetRef = useRef(false);
@@ -286,10 +288,10 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
           <Lock className="w-7 h-7 text-[#F07842]" />
         </div>
         <div className="space-y-1">
-          <h1 className="font-display text-lg font-bold text-[#252824]">
+          <h1 className="font-display text-lg font-bold text-[#1B1F1C]">
             جاري تجهيز الكلمة السرية للتمثيل الصامت...
           </h1>
-          <p className="text-xs text-[#777B73]">تأكد أن شاشة جوالك موجهة لك فقط</p>
+          <p className="text-xs text-[#52574E]">تأكد أن شاشة جوالك موجهة لك فقط</p>
         </div>
       </div>
     );
@@ -306,7 +308,7 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
             <ShieldAlert className="w-7 h-7" />
           </div>
           <div className="space-y-2">
-            <h1 className="font-display text-xl font-bold text-[#252824]">
+            <h1 className="font-display text-xl font-bold text-[#1B1F1C]">
               لا يمكن فتح هذه الجولة
             </h1>
             <p className="text-sm text-[#52574E] leading-relaxed">
@@ -317,7 +319,7 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
             <button
               type="button"
               onClick={onExitToHome}
-              className="w-full min-h-[48px] rounded-2xl bg-[#14543D] text-white font-bold text-sm cursor-pointer"
+              className="w-full min-h-[48px] rounded-2xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold text-sm cursor-pointer transition-colors"
             >
               العودة إلى الرئيسية
             </button>
@@ -351,14 +353,14 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
             <div className="text-xs font-bold text-[#D9602B]">
               {sessionState.teamName} · {sessionState.contentTypeLabel}
             </div>
-            <h1 className="font-display text-2xl font-bold text-[#252824]">
+            <h1 className="font-display text-2xl font-bold text-[#1B1F1C]">
               {wonRound
                 ? 'كفو! خمن فريقك الكلمة بنجاح'
                 : isTimeUp
                 ? 'انتهى الوقت!'
                 : 'تم إنهاء الجولة'}
             </h1>
-            <p className="text-xs text-[#777B73] leading-relaxed">
+            <p className="text-xs text-[#52574E] leading-relaxed">
               {wonRound
                 ? 'أصبحت شاشة المباراة جاهزة الآن لاعتماد النقاط لفريقك.'
                 : 'انتهت الجولة بـ 0 نقطة وأصبحت شاشة المباراة جاهزة للانتقال للدور التالي.'}
@@ -372,9 +374,9 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
                 {wonRound ? 'صحيح' : 'لم يُخمن'}
               </div>
             </div>
-            <div className="rounded-2xl bg-[#F3F5E9] border border-[#E5E8DD] p-3">
-              <div className="text-[11px] font-bold text-[#777B73]">التخطي</div>
-              <div className="font-mono text-2xl font-bold text-[#52574E] tabular-nums mt-0.5">
+            <div className="rounded-2xl bg-[#F7F8F1] border border-[#E5E8DD] p-3">
+              <div className="text-[11px] font-bold text-[#52574E]">التخطي</div>
+              <div className="font-mono text-2xl font-bold text-[#1B1F1C] tabular-nums mt-0.5">
                 {sessionState.skippedCount}
               </div>
             </div>
@@ -400,14 +402,14 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
   return (
     <div
       dir="rtl"
-      className="min-h-[100dvh] bg-[#F3F5E9] flex flex-col max-w-lg mx-auto"
+      className="min-h-[100dvh] bg-[#F3F5E9] flex flex-col max-w-lg mx-auto overflow-x-hidden"
     >
-      {/* Compact Top Bar (<= 56px) */}
-      <header className="sticky top-0 z-20 bg-[#FFFFFF]/95 backdrop-blur border-b border-[#E5E8DD] px-4 h-14 flex items-center justify-between gap-3">
+      {/* Compact Top Bar (<= 52px) */}
+      <header className="sticky top-0 z-20 bg-[#FFFFFF]/95 backdrop-blur border-b border-[#E5E8DD] px-3.5 h-[52px] flex items-center justify-between gap-2 shrink-0">
         <div className="min-w-0 flex items-center gap-1.5 text-xs font-bold text-[#14543D]">
           <Lock className="w-3.5 h-3.5 text-[#F07842] shrink-0" />
           <span className="truncate">{sessionState.teamName}</span>
-          <span className="text-[#777B73]">·</span>
+          <span className="text-[#666B62]">·</span>
           <span className="text-[#52574E] truncate">{sessionState.contentTypeLabel}</span>
         </div>
 
@@ -416,17 +418,17 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
           disabled={busyAction !== null}
           onClick={() => handleAction('finish')}
           aria-label="إنهاء الجولة بدون نقاط"
-          className="min-h-[40px] px-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+          className="min-h-[44px] px-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
         >
           <Flag className="w-3.5 h-3.5" />
           <span>إنهاء (0)</span>
         </button>
       </header>
 
-      {/* Main Content: Circular Timer + Secret Word + Charades Rules */}
-      <main className="flex-1 px-4 py-4 flex flex-col justify-between gap-4">
+      {/* Main Content: Single-Screen Mobile Focus (Timer + Secret Word + Quick Rules) */}
+      <main className="flex-1 px-3.5 py-2.5 sm:py-4 flex flex-col justify-between gap-2.5 sm:gap-4">
         {/* Timer & Round Meta Strip */}
-        <div className="bg-white border border-[#E5E8DD] rounded-3xl p-4 flex items-center justify-between gap-4 shadow-xs">
+        <div className="bg-white border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-3 sm:p-4 flex items-center justify-between gap-3 sm:gap-4 shadow-xs">
           <CircularCountdownTimer
             totalSeconds={sessionState.timerSeconds}
             remainingSeconds={sessionState.remainingSeconds}
@@ -436,26 +438,26 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
             onReachZero={() => {
               void syncWithServer();
             }}
-            size={104}
-            strokeWidth={8}
+            size={92}
+            strokeWidth={7}
             variant="light"
             connectionWarning={connectionWarning}
           />
 
-          <div className="flex-1 space-y-2 text-right">
+          <div className="flex-1 space-y-1.5 sm:space-y-2 text-right min-w-0">
             <div className="text-xs font-bold text-[#14543D]">
               التمثيل الصامت جارٍ الآن
             </div>
-            <div className="flex items-center justify-between text-xs border-b border-[#F3F5E9] pb-1.5">
-              <span className="text-[#777B73] font-semibold">
+            <div className="flex items-center justify-between text-xs border-b border-[#E5E8DD] pb-1.5 gap-2">
+              <span className="text-[#52574E] font-semibold truncate">
                 {levelMeta.levelLabel} ({levelMeta.difficulty})
               </span>
-              <span className="font-mono font-bold text-[#F07842] tabular-nums">
+              <span className="font-mono font-bold text-[#F07842] tabular-nums shrink-0">
                 +{sessionState.pointsPerCorrectWord} نقطة
               </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-[#777B73] font-semibold">التخطي المتبقي</span>
+              <span className="text-[#52574E] font-semibold">التخطي المتبقي</span>
               <span className="font-mono font-bold text-[#14543D] tabular-nums">
                 {remainingSkips} / {sessionState.maxSkips}
               </span>
@@ -465,68 +467,89 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
 
         {/* Secret Word Hero Card (ONLY visible on acting player's phone) */}
         {activeWord && (
-          <div className="bg-gradient-to-br from-[#14543D] to-[#0E3D2C] border-2 border-[#14543D] rounded-3xl p-5 sm:p-7 text-center text-white shadow-lg space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold text-[#EAF2EE]/85">
+          <div className="flex-1 flex flex-col justify-center bg-gradient-to-br from-[#14543D] to-[#0E3D2C] border-2 border-[#14543D] rounded-3xl p-4 sm:p-7 text-center text-white shadow-lg space-y-2.5 sm:space-y-3">
+            <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs font-bold text-[#EAF2EE]/85">
               <span>الكلمة السرية على جوالك فقط</span>
-              <span className="font-sans text-[#FDBA74]">
+              <span className="font-sans text-[#FDBA74] shrink-0">
                 {levelMeta.levelLabel} · {activeWord.points ?? sessionState.pointsPerCorrectWord} نقطة
               </span>
             </div>
 
-            <div className="py-4 sm:py-6">
+            <div className="py-3 sm:py-6">
               <h1 className="font-display text-3xl sm:text-4xl font-bold text-white leading-tight break-words text-balance">
                 {activeWord.word}
               </h1>
             </div>
 
-            <p className="text-xs font-semibold text-[#EAF2EE]/90">
+            <p className="text-[11px] sm:text-xs font-semibold text-[#EAF2EE]/90">
               مثّلها لفريقك بالحركات والإشارات وتعبيرات الوجه فقط!
             </p>
           </div>
         )}
 
-        {/* Strict Charades Rules Card */}
+        {/* Slim Collapsible Charades Rules Reminder (no vertical crowding on phones) */}
         <section
           aria-label="قواعد التمثيل الصامت"
-          className="bg-white border border-[#E5E8DD] rounded-2xl p-4 space-y-2.5"
+          className="bg-white border border-[#E5E8DD] rounded-2xl overflow-hidden"
         >
-          <div className="text-xs font-bold text-[#252824]">قواعد التمثيل الصامت:</div>
-          <ul className="space-y-2 text-xs text-[#52574E] font-semibold">
-            <li className="flex items-center gap-2">
-              <Hand className="w-4 h-4 text-[#14543D] shrink-0" />
-              <span>الإيماءات وحركات اليد والجسم وتعبيرات الوجه فقط.</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <MicOff className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>ممنوع الكلام أو الهمس أو إصدار أي أصوات أو نطق حروف الكلمة.</span>
-            </li>
-            <li className="flex items-center gap-2">
-              <EyeOff className="w-4 h-4 text-[#D9602B] shrink-0" />
-              <span>ممنوع الكتابة أو إظهار شاشة الهاتف لبقية الفريق.</span>
-            </li>
-          </ul>
+          <button
+            type="button"
+            onClick={() => setShowRules((prev) => !prev)}
+            aria-expanded={showRules}
+            className="w-full min-h-[40px] px-3.5 py-2 flex items-center justify-between gap-2 text-[11px] font-bold text-[#1B1F1C] cursor-pointer hover:bg-[#F7F8F1] transition-colors"
+          >
+            <span className="flex items-center gap-1.5 truncate text-[#52574E]">
+              <MicOff className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+              <span className="truncate">
+                إيماءات وحركات فقط · ممنوع الكلام أو إظهار الشاشة
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1 text-[#14543D] shrink-0">
+              <span>{showRules ? 'إخفاء' : 'القواعد'}</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform ${showRules ? 'rotate-180' : ''}`}
+              />
+            </span>
+          </button>
+
+          {showRules && (
+            <ul className="px-3.5 pb-3 pt-1 border-t border-[#E5E8DD] space-y-1.5 text-xs text-[#52574E] font-semibold">
+              <li className="flex items-center gap-2">
+                <Hand className="w-4 h-4 text-[#14543D] shrink-0" />
+                <span>الإيماءات وحركات اليد والجسم وتعبيرات الوجه فقط.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <MicOff className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>ممنوع الكلام أو الهمس أو إصدار أي أصوات أو نطق حروف الكلمة.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <EyeOff className="w-4 h-4 text-[#D9602B] shrink-0" />
+                <span>ممنوع الكتابة أو إظهار شاشة الهاتف لبقية الفريق.</span>
+              </li>
+            </ul>
+          )}
         </section>
 
         {actionHint && (
           <div
             role="status"
-            className="p-3 rounded-xl bg-[#FFF7ED] border border-[#F07842]/40 text-xs font-bold text-[#D9602B] text-center"
+            className="p-2.5 rounded-xl bg-[#FFF7ED] border border-[#F07842]/40 text-xs font-bold text-[#D9602B] text-center"
           >
             {actionHint}
           </div>
         )}
       </main>
 
-      {/* Thumb-Zone Bottom Action Controls (56px high touch targets) */}
-      <footer className="bg-[#FFFFFF] border-t border-[#E5E8DD] p-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-        <div className="grid grid-cols-2 gap-3">
+      {/* Thumb-Zone Bottom Action Controls (58px high touch targets) */}
+      <footer className="bg-[#FFFFFF] border-t border-[#E5E8DD] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shrink-0">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
           <button
             type="button"
             disabled={busyAction !== null}
             onClick={() => handleAction('correct')}
-            className="min-h-[56px] px-3 rounded-2xl bg-[#14543D] hover:bg-[#0E3D2C] active:scale-[0.98] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-60 whitespace-nowrap"
+            className="min-h-[58px] px-2.5 sm:px-3 py-2 rounded-2xl bg-[#14543D] hover:bg-[#0E3D2C] active:scale-[0.98] text-white font-bold text-xs sm:text-sm leading-tight text-center flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer shadow-md transition-all disabled:opacity-60"
           >
-            <CheckCircle2 className="w-5 h-5 text-[#86EFAC] shrink-0" />
+            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-[#86EFAC] shrink-0" />
             <span>
               {busyAction === 'correct'
                 ? 'جاري الاعتماد...'
@@ -538,9 +561,9 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
             type="button"
             disabled={busyAction !== null || !canSkip}
             onClick={() => handleAction('skip')}
-            className="min-h-[56px] px-3 rounded-2xl bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.98] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all disabled:opacity-45 disabled:cursor-not-allowed whitespace-nowrap"
+            className="min-h-[58px] px-2.5 sm:px-3 py-2 rounded-2xl bg-[#F07842] hover:bg-[#D9632E] active:scale-[0.98] text-white font-bold text-xs sm:text-sm leading-tight text-center flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer shadow-md transition-all disabled:opacity-45 disabled:cursor-not-allowed"
           >
-            <SkipForward className="w-5 h-5 shrink-0" />
+            <SkipForward className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
             <span>
               {busyAction === 'skip'
                 ? 'جاري التبديل...'

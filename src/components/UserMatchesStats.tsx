@@ -53,9 +53,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-[#FFFFFF] border border-[#E5E8DD] shadow-lg rounded-xl px-3 py-2 text-right text-xs space-y-1">
-        <p className="font-bold text-[#252824]">{label}</p>
+        <p className="font-bold text-[#1B1F1C]">{label}</p>
         {payload.map((entry: any, index: number) => (
-          <p key={`item-${index}`} className="font-bold" style={{ color: entry.color || entry.fill }}>
+          <p key={`item-${index}`} className="font-bold tabular-nums" style={{ color: entry.color || entry.fill }}>
             {entry.name || 'القيمة'}: {entry.value}
           </p>
         ))}
@@ -71,8 +71,8 @@ const CustomPieTooltip = ({ active, payload }: any) => {
     const data = payload[0];
     return (
       <div className="bg-[#FFFFFF] border border-[#E5E8DD] shadow-lg rounded-xl px-3 py-2 text-right text-xs space-y-0.5">
-        <p className="font-bold text-[#252824]">{data.name}</p>
-        <p className="font-bold" style={{ color: data.payload.fill }}>
+        <p className="font-bold text-[#1B1F1C]">{data.name}</p>
+        <p className="font-bold tabular-nums" style={{ color: data.payload.fill }}>
           {data.value} مباراة ({data.payload.percent ? `${Math.round(data.payload.percent * 100)}%` : ''})
         </p>
       </div>
@@ -210,16 +210,16 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
             <BarChart3 className="w-5 h-5 text-[#F07842]" />
           </div>
           <div>
-            <h2 className="font-display text-lg sm:text-xl font-bold text-[#252824]">
+            <h2 className="font-display text-lg sm:text-xl font-bold text-[#1B1F1C]">
               لوحة الإحصائيات والأداء
             </h2>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               تحليل دقيق لنشاطك، الفئات المفضلة، ونسب الإنجاز عبر مبارياتك في نِزال
             </p>
           </div>
         </div>
 
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F3F5E9] text-xs font-bold text-[#14543D] self-start sm:self-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs font-bold text-[#14543D] self-start sm:self-center">
           <Sparkles className="w-3.5 h-3.5 text-[#F07842]" />
           <span>تحديث إحصائي فوري</span>
         </div>
@@ -228,15 +228,15 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
       {/* KPI Highlight Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Matches */}
-        <div className="p-4 rounded-2xl bg-[#F3F5E9]/60 border border-[#E5E8DD] space-y-1">
-          <div className="flex items-center justify-between text-xs text-[#777B73] font-medium">
+        <div className="p-4 rounded-2xl bg-[#F7F8F1] border border-[#E5E8DD] space-y-1">
+          <div className="flex items-center justify-between text-xs text-[#52574E] font-medium">
             <span>إجمالي المباريات</span>
             <Target className="w-4 h-4 text-[#14543D]" />
           </div>
-          <div className="font-display text-2xl font-bold text-[#14543D]">
+          <div className="font-display text-2xl font-bold text-[#14543D] tabular-nums">
             {summary.total}
           </div>
-          <div className="text-[11px] text-[#777B73] flex items-center gap-1.5 pt-0.5">
+          <div className="text-[11px] text-[#52574E] flex items-center gap-1.5 pt-0.5 tabular-nums">
             <span className="text-emerald-700 font-bold">{summary.completed} مكتملة</span>
             <span>•</span>
             <span className="text-amber-700 font-bold">{summary.inProgress} جارية</span>
@@ -244,12 +244,12 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
         </div>
 
         {/* Completion Rate */}
-        <div className="p-4 rounded-2xl bg-[#F3F5E9]/60 border border-[#E5E8DD] space-y-1">
-          <div className="flex items-center justify-between text-xs text-[#777B73] font-medium">
+        <div className="p-4 rounded-2xl bg-[#F7F8F1] border border-[#E5E8DD] space-y-1">
+          <div className="flex items-center justify-between text-xs text-[#52574E] font-medium">
             <span>نسبة الإتمام والحسم</span>
             <CheckCircle2 className="w-4 h-4 text-[#F07842]" />
           </div>
-          <div className="font-display text-2xl font-bold text-[#F07842]">
+          <div className="font-display text-2xl font-bold text-[#F07842] tabular-nums">
             {summary.completionRate}%
           </div>
           <div className="w-full bg-[#E5E8DD] h-1.5 rounded-full overflow-hidden mt-2">
@@ -261,29 +261,29 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
         </div>
 
         {/* Total Questions Played */}
-        <div className="p-4 rounded-2xl bg-[#F3F5E9]/60 border border-[#E5E8DD] space-y-1">
-          <div className="flex items-center justify-between text-xs text-[#777B73] font-medium">
+        <div className="p-4 rounded-2xl bg-[#F7F8F1] border border-[#E5E8DD] space-y-1">
+          <div className="flex items-center justify-between text-xs text-[#52574E] font-medium">
             <span>الأسئلة المجابة</span>
             <Flame className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="font-display text-2xl font-bold text-[#252824]">
+          <div className="font-display text-2xl font-bold text-[#1B1F1C] tabular-nums">
             {summary.totalQuestionsPlayed}
           </div>
-          <div className="text-[11px] text-[#777B73] pt-0.5">
+          <div className="text-[11px] text-[#52574E] pt-0.5">
             سؤال تم التنافس عليه
           </div>
         </div>
 
         {/* Highest Score */}
-        <div className="p-4 rounded-2xl bg-[#F3F5E9]/60 border border-[#E5E8DD] space-y-1">
-          <div className="flex items-center justify-between text-xs text-[#777B73] font-medium">
+        <div className="p-4 rounded-2xl bg-[#F7F8F1] border border-[#E5E8DD] space-y-1">
+          <div className="flex items-center justify-between text-xs text-[#52574E] font-medium">
             <span>أعلى نقاط مسجلة</span>
             <Trophy className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="font-display text-2xl font-bold text-emerald-700">
+          <div className="font-display text-2xl font-bold text-emerald-700 tabular-nums">
             {summary.highestScore}
           </div>
-          <div className="text-[11px] text-[#777B73] pt-0.5">
+          <div className="text-[11px] text-[#52574E] pt-0.5 tabular-nums">
             معدل الفريق: {summary.avgScore} نقطة
           </div>
         </div>
@@ -296,17 +296,17 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#14543D]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 أكثر الفئات لعباً واختياراً
               </h3>
             </div>
-            <span className="text-[11px] font-bold text-[#777B73]">
+            <span className="text-[11px] font-bold text-[#666B62] tabular-nums">
               أعلى {topCategoriesData.length} تصنيفات
             </span>
           </div>
 
           {topCategoriesData.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[#777B73]">
+            <div className="py-12 text-center text-xs text-[#666B62]">
               لا توجد بيانات فئات كافية بعد. اختر فئاتك وابدأ التحدي!
             </div>
           ) : (
@@ -318,12 +318,12 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
                   margin={{ top: 8, right: 16, left: 16, bottom: 8 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E8DD" />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#777B73' }} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#666B62' }} />
                   <YAxis
                     dataKey="name"
                     type="category"
                     width={110}
-                    tick={{ fontSize: 11, fill: '#252824', fontWeight: 600 }}
+                    tick={{ fontSize: 11, fill: '#1B1F1C', fontWeight: 600 }}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar
@@ -350,11 +350,11 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <PieIcon className="w-4 h-4 text-[#F07842]" />
-              <h3 className="font-display text-sm font-bold text-[#252824]">
+              <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                 توزيع حالات المباريات
               </h3>
             </div>
-            <span className="text-[11px] font-bold text-[#777B73]">
+            <span className="text-[11px] font-bold text-[#666B62] tabular-nums">
               {summary.total} مباراة
             </span>
           </div>
@@ -388,8 +388,8 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
                   className="w-3 h-3 rounded-full shrink-0"
                   style={{ backgroundColor: item.fill }}
                 />
-                <span className="text-[#777B73]">{item.name}:</span>
-                <span className="font-bold text-[#252824]">{item.value}</span>
+                <span className="text-[#52574E]">{item.name}:</span>
+                <span className="font-bold text-[#1B1F1C] tabular-nums">{item.value}</span>
               </div>
             ))}
           </div>
@@ -401,11 +401,11 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-[#14543D]" />
-                <h3 className="font-display text-sm font-bold text-[#252824]">
+                <h3 className="font-display text-sm font-bold text-[#1B1F1C]">
                   مسار أعلى نتيجة تم تحقيقها (المباريات الأخيرة)
                 </h3>
               </div>
-              <span className="text-[11px] font-bold text-[#777B73]">
+              <span className="text-[11px] font-bold text-[#666B62]">
                 تطور الأداء
               </span>
             </div>
@@ -425,11 +425,11 @@ export const UserMatchesStats: React.FC<UserMatchesStatsProps> = ({ matches }) =
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E8DD" />
                   <XAxis
                     dataKey="matchLabel"
-                    tick={{ fontSize: 11, fill: '#777B73' }}
+                    tick={{ fontSize: 11, fill: '#666B62' }}
                   />
                   <YAxis
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: '#777B73' }}
+                    tick={{ fontSize: 11, fill: '#666B62' }}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Area

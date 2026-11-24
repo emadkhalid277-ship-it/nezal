@@ -590,9 +590,9 @@ export default function App() {
     );
   }, [activeSubcategories, mainCategories]);
 
-  // Keep teamSubcategoryIds synchronized and deduplicated whenever teams or playableSubcategories change
+  // Keep teamSubcategoryIds synchronized and deduplicated whenever teams or playableSubcategories change (never mutate ongoing locked matches)
   useEffect(() => {
-    if (!categoriesLoaded || playableSubcategories.length === 0) return;
+    if (isGameLocked || !categoriesLoaded || playableSubcategories.length === 0) return;
 
     setTeamSubcategoryIds((prev) => {
       const sanitized = sanitizeTeamSubcategoryPicks(
@@ -1704,9 +1704,21 @@ export default function App() {
       return;
     }
 
-    if (!isAllTeamsSelectionComplete) {
+    const playableIdSet = new Set(playableSubcategories.map((s) => s.id));
+    const hasUnavailablePick = teams.some((t) =>
+      (teamSubcategoryIds[t.id] || []).some((subId) => !playableIdSet.has(subId))
+    );
+
+    if (!isAllTeamsSelectionComplete || hasUnavailablePick) {
+      if (hasUnavailablePick) {
+        setTeamSubcategoryIds((prev) =>
+          sanitizeTeamSubcategoryPicks(prev, teams, playableSubcategories)
+        );
+      }
       const firstIncompleteIdx = teams.findIndex(
-        (t) => (teamSubcategoryIds[t.id] || []).length < SUBCATEGORIES_PER_TEAM
+        (t) =>
+          (teamSubcategoryIds[t.id] || []).filter((id) => playableIdSet.has(id))
+            .length < SUBCATEGORIES_PER_TEAM
       );
       if (firstIncompleteIdx >= 0) {
         setSelectingTeamIndex(firstIncompleteIdx);
@@ -1938,7 +1950,7 @@ export default function App() {
       <div
         id="top"
         dir="rtl"
-        className="min-h-screen flex flex-col bg-[#F3F5E9] text-[#252824]"
+        className="min-h-screen flex flex-col bg-[#F3F5E9] text-[#1B1F1C]"
       >
       <AnimatePresence>
         {showInitialLoadingScreen && (

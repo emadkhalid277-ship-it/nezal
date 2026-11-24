@@ -645,6 +645,22 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
 
   // Start game handler
   const handleStartChallenge = () => {
+    if (!isGameLocked) {
+      const hasComingSoonPick = teams.some((t) =>
+        (teamSubcategoryIds[t.id] || []).some((subId) => {
+          const sub = subByIdMap.get(subId);
+          return sub ? isSubComingSoon(sub) : false;
+        })
+      );
+      if (hasComingSoonPick) {
+        setValidationMessage(
+          'إحدى الفئات المختارة حالياً في وضع «قريباً» ولا يمكن بدء مباراة جديدة بها. يرجى استبدالها بفئة متاحة.'
+        );
+        scrollToSection('step-subcategories');
+        return;
+      }
+    }
+
     if (!isAllTeamsComplete) {
       const incompleteIdx = teams.findIndex(
         (t) => (teamSubcategoryIds[t.id] || []).length < SUBCATEGORIES_PER_TEAM
@@ -782,7 +798,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                       }}
                       title={`إزالة ${subObj.name}`}
                       aria-label={`إزالة ${subObj.name}`}
-                      className="absolute top-1 left-1 w-6 h-6 rounded-lg bg-[#1B1F1C]/85 hover:bg-rose-600 text-white flex items-center justify-center shadow-xs cursor-pointer transition-colors z-10"
+                      className="absolute top-1 left-1 w-7 h-7 rounded-lg bg-[#1B1F1C]/85 hover:bg-rose-600 text-white flex items-center justify-center shadow-xs cursor-pointer transition-colors z-10 after:content-[''] after:absolute after:-inset-2"
                     >
                       <X className="w-3.5 h-3.5 stroke-[2.5]" />
                     </button>
@@ -797,7 +813,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 className={`min-h-[78px] sm:min-h-[84px] rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 transition-colors ${
                   isCurrent
                     ? 'border-[#F07842]/60 bg-[#FEF2EC]/60 text-[#F07842]'
-                    : 'border-[#D4D9CC] bg-[#FFFFFF]/70 text-[#777B73]'
+                    : 'border-[#D4D9CC] bg-[#FFFFFF]/70 text-[#666B62]'
                 }`}
                 title={`الخانة ${slotIdx + 1} لـ ${teamDisplayName}`}
               >
@@ -815,7 +831,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-5 md:py-10 space-y-6 md:space-y-8">
+      <div className="max-w-[1320px] mx-auto px-3 sm:px-6 pt-4 pb-20 lg:py-10 space-y-5 md:space-y-8">
         {/* Floating Toast for Coming Soon Clicks */}
         {comingSoonToast && (
           <div
@@ -1213,21 +1229,21 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               </div>
 
               <div className="relative w-full lg:w-80">
-                <Search className="w-4 h-4 text-[#777B73] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-[#666B62] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ابحث بالاسم أو الوصف..."
                   aria-label="ابحث عن فئة فرعية"
-                  className="w-full min-h-[44px] pr-10 pl-9 py-2.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs sm:text-sm font-medium text-[#1B1F1C] placeholder:text-[#777B73] focus:outline-none focus:border-[#F07842] transition-colors"
+                  className="w-full min-h-[44px] pr-10 pl-9 py-2.5 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs sm:text-sm font-medium text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-none focus:border-[#F07842] transition-colors"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
                     aria-label="مسح البحث"
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 min-w-[32px] min-h-[32px] flex items-center justify-center text-[#777B73] hover:text-[#1B1F1C] cursor-pointer"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#666B62] hover:text-[#1B1F1C] cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1368,7 +1384,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
 
                               <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col justify-between gap-2 bg-[#F7F8F1]">
                                 <div className="space-y-1">
-                                  <h3 className="font-display text-sm sm:text-[15px] font-bold text-[#252824] leading-snug line-clamp-2">
+                                  <h3 className="font-display text-sm sm:text-[15px] font-bold text-[#1B1F1C] leading-snug line-clamp-2">
                                     {sub.name}
                                   </h3>
                                   {sub.description && (
@@ -1570,7 +1586,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
 
                           <div className="flex-1 w-full p-3 sm:p-3.5 flex flex-col justify-between gap-2 bg-[#F7F8F1]">
                             <div className="space-y-1">
-                              <h3 className="font-display text-sm sm:text-[15px] font-bold text-[#252824] leading-snug line-clamp-2">
+                              <h3 className="font-display text-sm sm:text-[15px] font-bold text-[#1B1F1C] leading-snug line-clamp-2">
                                 {mainCat.name}
                               </h3>
                               {(mainCat.description || mainCat.tagline) && (
@@ -1790,7 +1806,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 return (
                   <div
                     key={team.id}
-                    className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 sm:space-y-5"
+                    className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 sm:space-y-5"
                   >
                     <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3.5">
                       <div className="flex items-center gap-2.5">
@@ -1828,7 +1844,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                           <button
                             type="button"
                             onClick={() => handleFocusTeamCategories(index)}
-                            className="text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer"
+                            className="min-h-[40px] px-1 text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                             <span>
@@ -1858,9 +1874,9 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                                     )
                                   }
                                   aria-label={`إزالة ${sub.name}`}
-                                  className="text-[#666B62] hover:text-rose-600 cursor-pointer"
+                                  className="relative min-w-[32px] min-h-[32px] -ml-1 flex items-center justify-center rounded-md text-[#666B62] hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors after:content-[''] after:absolute after:-inset-1.5"
                                 >
-                                  <X className="w-3 h-3" />
+                                  <X className="w-3.5 h-3.5" />
                                 </button>
                               )}
                             </span>
@@ -1918,13 +1934,13 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                                   isGameLocked ? `${c.name} (مقفل)` : c.name
                                 }
                                 aria-label={c.name}
-                                className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-transform ${
+                                className={`min-w-[40px] min-h-[40px] w-10 h-10 rounded-xl flex items-center justify-center transition-transform ${
                                   isGameLocked
                                     ? 'cursor-not-allowed'
                                     : 'cursor-pointer'
                                 } ${
                                   selected
-                                    ? 'scale-110 ring-2 ring-offset-2 ring-[#1B1F1C]'
+                                    ? 'scale-105 ring-2 ring-offset-2 ring-[#1B1F1C]'
                                     : isGameLocked
                                     ? 'opacity-40'
                                     : 'opacity-85 hover:opacity-100'
@@ -1996,7 +2012,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                                     handleRemovePlayer(team.id, pIdx)
                                   }
                                   aria-label={`حذف ${player}`}
-                                  className="text-[#777B73] hover:text-rose-600 cursor-pointer"
+                                  className="relative min-w-[32px] min-h-[32px] -ml-1 flex items-center justify-center rounded-md text-[#666B62] hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors after:content-[''] after:absolute after:-inset-1.5"
                                 >
                                   <X className="w-3.5 h-3.5" />
                                 </button>
@@ -2149,6 +2165,75 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
               </div>
             </div>
           </section>
+        </div>
+
+        {/* Slim Thumb-Zone Mobile Sticky Bar (stays strictly compact <= 48px) */}
+        <div
+          data-testid="mobile-category-sticky-bar"
+          className="fixed bottom-0 inset-x-0 z-30 lg:hidden bg-[#FFFFFF]/95 backdrop-blur-sm border-t border-[#E5E8DD] px-3 py-0.5 shadow-lg"
+        >
+          <div className="max-w-[1320px] mx-auto flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {currentTeam && (
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: currentTeam.color }}
+                  />
+                  <span className="font-display text-xs font-bold text-[#1B1F1C] truncate max-w-[105px]">
+                    {currentTeam.name || `الفريق ${safeSelectingTeamIndex + 1}`}
+                  </span>
+                  <span className="font-mono tabular-nums text-[11px] font-bold text-[#F07842] shrink-0">
+                    ({currentTeamPicks.length}/{SUBCATEGORIES_PER_TEAM})
+                  </span>
+                </div>
+              )}
+
+              {!isGameLocked && teams.length >= 2 && (
+                <button
+                  type="button"
+                  onClick={handleToggleBetweenTeams}
+                  aria-label="تبديل الفريق النشط"
+                  className="min-h-[42px] px-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#E5E8DD] text-[11px] font-bold text-[#14543D] flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                >
+                  <ArrowLeftRight className="w-3 h-3 text-[#F07842]" />
+                  <span>تبديل</span>
+                </button>
+              )}
+            </div>
+
+            {isGameLocked ? (
+              <button
+                type="button"
+                disabled={isNavigating}
+                onClick={handleReturnToBoard}
+                className="min-h-[44px] px-3.5 rounded-xl bg-[#14543D] text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>العودة للوحة</span>
+              </button>
+            ) : isAllTeamsComplete ? (
+              <button
+                type="button"
+                onClick={handleStartChallenge}
+                className="min-h-[44px] px-4 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>ابدأ اللعب</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => scrollToSection('step-team-setup')}
+                className="min-h-[44px] px-3.5 rounded-xl bg-[#1B1F1C] text-white text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <span className="font-mono tabular-nums">
+                  {totalSelectedCount}/{totalRequiredCount}
+                </span>
+                <span>الفرق ↓</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </MotionConfig>

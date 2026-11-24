@@ -7,10 +7,10 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
-  ShieldAlert,
   TrendingUp,
   Users,
 } from 'lucide-react';
+import { AlertBanner, ConfirmDialog, StatusBadge } from './ui';
 import {
   QuestionDedupSettings,
   SeenQuestionRecord,
@@ -414,12 +414,12 @@ export const AdminSeenQuestionsSection: React.FC<
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="font-display text-xl font-bold text-[#252824]">
+          <h2 className="font-display text-xl font-bold text-[#1B1F1C]">
             منع تكرار الأسئلة وسجل المشاهدات
           </h2>
-          <p className="text-xs text-[#777B73] leading-relaxed">
+          <p className="text-xs text-[#52574E] leading-relaxed">
             يتابع النظام الأسئلة التي ظهرت فعلياً لكل حساب مستخدم (UID) بشكل دائم، ويستبعدها في المباريات القادمة المحلية والأونلاين، مع تحكم كامل للإدارة في حالة نفاد الأسئلة.
           </p>
         </div>
@@ -428,7 +428,7 @@ export const AdminSeenQuestionsSection: React.FC<
           type="button"
           onClick={loadSeenAnalytics}
           disabled={loading}
-          className="px-4 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap"
+          className="min-h-[42px] px-4 py-2 rounded-xl border border-[#E5E8DD] bg-[#F7F8F1] hover:bg-[#E5E8DD]/70 text-xs font-bold text-[#14543D] flex items-center justify-center gap-2 cursor-pointer shrink-0 whitespace-nowrap transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span>تحديث السجلات</span>
@@ -436,80 +436,73 @@ export const AdminSeenQuestionsSection: React.FC<
       </div>
 
       {statusMessage && (
-        <div
-          role="status"
-          className="bg-[#EAF2EE] border border-[#14543D]/30 rounded-xl px-5 py-3.5 flex items-center justify-between gap-3 text-xs font-semibold text-[#14543D]"
+        <AlertBanner
+          tone={statusMessage.startsWith('تعذر') ? 'error' : 'success'}
+          onDismiss={() => setStatusMessage(null)}
         >
-          <span>{statusMessage}</span>
-          <button
-            type="button"
-            onClick={() => setStatusMessage(null)}
-            className="text-[#14543D]/70 hover:text-[#14543D] cursor-pointer"
-          >
-            إغلاق
-          </button>
-        </div>
+          {statusMessage}
+        </AlertBanner>
       )}
 
       {loadError && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl px-5 py-3.5 text-xs font-semibold text-rose-800">
+        <AlertBanner tone="error" onDismiss={() => setLoadError(null)}>
           {loadError}
-        </div>
+        </AlertBanner>
       )}
 
       {/* 1. Admin Settings Form */}
       <form
         onSubmit={handleSaveSettings}
-        className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-5 text-xs"
+        className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-5 text-xs"
       >
         <div className="border-b border-[#E5E8DD] pb-3">
-          <h3 className="font-display text-base font-bold text-[#252824]">
+          <h3 className="font-display text-base font-bold text-[#1B1F1C]">
             إعدادات التعامل عند انتهاء الأسئلة والمشاهدين
           </h3>
-          <p className="text-xs text-[#777B73] mt-0.5">
+          <p className="text-xs text-[#52574E] mt-0.5">
             تُطبق هذه الإعدادات فوراً على جميع المباريات دون مسح سجل أي لاعب.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-4 flex items-center justify-between gap-4">
             <div className="space-y-1">
-              <div className="font-display text-sm font-bold text-[#252824]">
+              <div className="font-display text-sm font-bold text-[#1B1F1C]">
                 إعادة الأسئلة القديمة بعد انتهاء الجديدة
               </div>
-              <p className="text-[11px] text-[#777B73] leading-relaxed">
+              <p className="text-[11px] text-[#52574E] leading-relaxed">
                 عند التعطيل (الافتراضي): تظهر رسالة «خلصت الأسئلة الجديدة في هذي الفئة» ولا يتكرر أي سؤال. عند التفعيل: يُسمح بعرض أسئلة سابقة فقط بعد نفاد كل الأسئلة الجديدة.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setAllowRepeatAfterExhaustion((v) => !v)}
-              className={`px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
+              className={`min-h-[40px] px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
                 allowRepeatAfterExhaustion
                   ? 'bg-[#14543D] text-white'
-                  : 'bg-[#FFFFFF] text-[#777B73] border border-[#E5E8DD]'
+                  : 'bg-[#FFFFFF] text-[#52574E] border border-[#E5E8DD] hover:border-[#F07842]/50'
               }`}
             >
               {allowRepeatAfterExhaustion ? 'مسموح بعد النفاد' : 'ممنوع تماماً'}
             </button>
           </div>
 
-          <div className="bg-[#F3F5E9]/70 border border-[#E5E8DD] rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-4 flex items-center justify-between gap-4">
             <div className="space-y-1">
-              <div className="font-display text-sm font-bold text-[#252824]">
+              <div className="font-display text-sm font-bold text-[#1B1F1C]">
                 تسجيل الأسئلة للمشاهدين (أونلاين)
               </div>
-              <p className="text-[11px] text-[#777B73] leading-relaxed">
+              <p className="text-[11px] text-[#52574E] leading-relaxed">
                 عند التعطيل (الافتراضي): لا تُحتسب الأسئلة في سجل المشاهدين الذين دخلوا للمتابعة فقط. عند التفعيل: تُسجل الأسئلة المعروضة للمشاهدين المسجلين أيضاً.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setTrackSpectators((v) => !v)}
-              className={`px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
+              className={`min-h-[40px] px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
                 trackSpectators
                   ? 'bg-[#14543D] text-white'
-                  : 'bg-[#FFFFFF] text-[#777B73] border border-[#E5E8DD]'
+                  : 'bg-[#FFFFFF] text-[#52574E] border border-[#E5E8DD] hover:border-[#F07842]/50'
               }`}
             >
               {trackSpectators ? 'احتساب المشاهدين' : 'استبعاد المشاهدين'}
@@ -521,7 +514,7 @@ export const AdminSeenQuestionsSection: React.FC<
           <button
             type="submit"
             disabled={savingSettings}
-            className="px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-2 cursor-pointer"
+            className="min-h-[44px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-colors"
           >
             <Check className="w-4 h-4" />
             <span>
@@ -534,83 +527,83 @@ export const AdminSeenQuestionsSection: React.FC<
       {/* 2. Summary KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-1">
-          <div className="text-xs text-[#777B73] flex items-center gap-1.5">
+          <div className="text-xs text-[#52574E] flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-[#14543D]" />
             <span>إجمالي الأسئلة المعتمدة</span>
           </div>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
             {approvedQuestions.length}
           </div>
         </div>
 
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-1">
-          <div className="text-xs text-[#777B73] flex items-center gap-1.5">
+          <div className="text-xs text-[#52574E] flex items-center gap-1.5">
             <Eye className="w-4 h-4 text-[#F07842]" />
             <span>سجلات المشاهدة الفريدة</span>
           </div>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
             {seenRecords.length}
           </div>
         </div>
 
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-1">
-          <div className="text-xs text-[#777B73] flex items-center gap-1.5">
+          <div className="text-xs text-[#52574E] flex items-center gap-1.5">
             <Users className="w-4 h-4 text-[#14543D]" />
             <span>حسابات لديها سجل</span>
           </div>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
             {totalUniquePlayersWithHistory}
           </div>
         </div>
 
         <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-1">
-          <div className="text-xs text-[#777B73] flex items-center gap-1.5">
+          <div className="text-xs text-[#52574E] flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 text-[#F07842]" />
             <span>أسئلة ظهرت للاعبين</span>
           </div>
-          <div className="font-mono tabular-nums text-2xl font-bold text-[#252824]">
+          <div className="font-mono tabular-nums text-2xl font-bold text-[#1B1F1C]">
             {totalUniqueQuestionsShown}
           </div>
         </div>
       </div>
 
       {/* 3. Per-User Seen History & Admin Reset */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-4">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
           <div className="space-y-0.5">
-            <h3 className="font-display text-base font-bold text-[#252824]">
+            <h3 className="font-display text-base font-bold text-[#1B1F1C]">
               سجل الأسئلة المشاهدة لكل مستخدم
             </h3>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               مربوط بمعرّف الحساب (UID). يمكنك استعراض المتبقي لكل لاعب أو تصفير سجله بعد التأكيد.
             </p>
           </div>
 
           <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-[#777B73] absolute right-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[#666B62] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
               placeholder="بحث بالاسم أو البريد أو UID..."
-              className="w-full pr-9 pl-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824]"
+              className="w-full min-h-[40px] pr-9 pl-3 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15 transition-colors"
             />
           </div>
         </div>
 
         {loading ? (
-          <div className="py-10 text-center text-xs text-[#777B73]">
+          <div className="py-10 text-center text-xs text-[#52574E]">
             جاري تحميل سجل المستخدمين...
           </div>
         ) : filteredUserRows.length === 0 ? (
-          <div className="py-10 text-center text-xs text-[#777B73]">
+          <div className="py-10 text-center text-xs text-[#52574E]">
             لا توجد حسابات مطابقة لبحثك.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
               <thead>
-                <tr className="bg-[#F3F5E9] text-[#777B73] border-b border-[#E5E8DD]">
+                <tr className="bg-[#F7F8F1] text-[#52574E] border-b border-[#E5E8DD]">
                   <th className="py-2.5 px-3 font-bold">المستخدم</th>
                   <th className="py-2.5 px-3 font-bold">الأسئلة المشاهدة</th>
                   <th className="py-2.5 px-3 font-bold">إجمالي مرات الظهور</th>
@@ -621,25 +614,25 @@ export const AdminSeenQuestionsSection: React.FC<
               </thead>
               <tbody className="divide-y divide-[#E5E8DD]">
                 {filteredUserRows.slice(0, 40).map((u) => (
-                  <tr key={u.uid} className="hover:bg-[#F3F5E9]/40">
+                  <tr key={u.uid} className="hover:bg-[#F7F8F1]/60 transition-colors">
                     <td className="py-2.5 px-3">
-                      <div className="font-bold text-[#252824]">
+                      <div className="font-bold text-[#1B1F1C]">
                         {u.displayName}
                       </div>
-                      <div className="text-[11px] text-[#777B73]">
+                      <div className="text-[11px] text-[#52574E]">
                         {u.email} · <span className="font-mono">{u.uid.slice(0, 10)}</span>
                       </div>
                     </td>
                     <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#14543D]">
                       {u.seenUniqueCount}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#252824]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#1B1F1C]">
                       {u.totalAppearances}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#52574E]">
                       {u.categoriesTouchedCount}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#52574E]">
                       {formatDateTimeAr(u.lastSeenAtMs)}
                     </td>
                     <td className="py-2.5 px-3">
@@ -647,7 +640,7 @@ export const AdminSeenQuestionsSection: React.FC<
                         <button
                           type="button"
                           onClick={() => setSelectedUserIdForBreakdown(u.uid)}
-                          className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-colors whitespace-nowrap ${
+                          className={`min-h-[36px] px-3 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-colors whitespace-nowrap ${
                             selectedUserIdForBreakdown === u.uid
                               ? 'bg-[#14543D] text-white border-[#14543D]'
                               : 'bg-[#FFFFFF] text-[#14543D] border-[#E5E8DD] hover:bg-[#EAF2EE]'
@@ -659,7 +652,7 @@ export const AdminSeenQuestionsSection: React.FC<
                           type="button"
                           disabled={u.seenUniqueCount === 0}
                           onClick={() => setResetTargetUser(u)}
-                          className="px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40 whitespace-nowrap"
+                          className="min-h-[36px] px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap transition-colors"
                         >
                           <RotateCcw className="w-3 h-3" />
                           <span>تصفير السجل</span>
@@ -675,13 +668,13 @@ export const AdminSeenQuestionsSection: React.FC<
       </div>
 
       {/* 4. Remaining Unseen Questions per Category */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-4">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
           <div className="space-y-0.5">
-            <h3 className="font-display text-base font-bold text-[#252824]">
+            <h3 className="font-display text-base font-bold text-[#1B1F1C]">
               الأسئلة المتبقية في كل فئة
             </h3>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               {selectedUserRow
                 ? `يعرض المتبقي لحساب: ${selectedUserRow.displayName} (${selectedUserRow.email})`
                 : 'يعرض إجمالي الأسئلة التي لم يشاهدها أي لاعب بعد (أو اختر لاعباً محدداً للمقارنة).'}
@@ -690,11 +683,12 @@ export const AdminSeenQuestionsSection: React.FC<
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-[#777B73]" />
+              <Filter className="w-3.5 h-3.5 text-[#52574E]" />
               <select
                 value={selectedUserIdForBreakdown}
                 onChange={(e) => setSelectedUserIdForBreakdown(e.target.value)}
-                className="px-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs font-bold text-[#252824]"
+                aria-label="اختيار الحساب للمقارنة"
+                className="min-h-[40px] px-3 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
               >
                 <option value="global">النظرة العامة (جميع اللاعبين)</option>
                 {userRows.map((u) => (
@@ -706,13 +700,13 @@ export const AdminSeenQuestionsSection: React.FC<
             </div>
 
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-[#777B73] absolute right-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-[#666B62] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
                 placeholder="تصفية الفئات..."
-                className="pr-8 pl-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824]"
+                className="min-h-[40px] pr-8 pl-3 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
               />
             </div>
           </div>
@@ -720,8 +714,8 @@ export const AdminSeenQuestionsSection: React.FC<
 
         <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
           <table className="w-full text-right text-xs">
-            <thead className="sticky top-0 bg-[#F3F5E9] z-10">
-              <tr className="text-[#777B73] border-b border-[#E5E8DD]">
+            <thead className="sticky top-0 bg-[#F7F8F1] z-10">
+              <tr className="text-[#52574E] border-b border-[#E5E8DD]">
                 <th className="py-2.5 px-3 font-bold">الفئة الفرعية</th>
                 <th className="py-2.5 px-3 font-bold">الفئة الرئيسية</th>
                 <th className="py-2.5 px-3 font-bold">الإجمالي</th>
@@ -732,17 +726,17 @@ export const AdminSeenQuestionsSection: React.FC<
             </thead>
             <tbody className="divide-y divide-[#E5E8DD]">
               {subcategoryBreakdown.map((stat) => (
-                <tr key={stat.subcategoryId} className="hover:bg-[#F3F5E9]/40">
-                  <td className="py-2.5 px-3 font-bold text-[#252824]">
+                <tr key={stat.subcategoryId} className="hover:bg-[#F7F8F1]/60 transition-colors">
+                  <td className="py-2.5 px-3 font-bold text-[#1B1F1C]">
                     {stat.subcategoryName}
                   </td>
-                  <td className="py-2.5 px-3 text-[#777B73]">
+                  <td className="py-2.5 px-3 text-[#52574E]">
                     {stat.mainCategory}
                   </td>
-                  <td className="py-2.5 px-3 font-mono tabular-nums text-[#252824]">
+                  <td className="py-2.5 px-3 font-mono tabular-nums text-[#1B1F1C]">
                     {stat.totalQuestions}
                   </td>
-                  <td className="py-2.5 px-3 font-mono tabular-nums text-[#777B73]">
+                  <td className="py-2.5 px-3 font-mono tabular-nums text-[#52574E]">
                     {stat.seenQuestions}
                   </td>
                   <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#14543D]">
@@ -750,13 +744,11 @@ export const AdminSeenQuestionsSection: React.FC<
                   </td>
                   <td className="py-2.5 px-3">
                     {stat.totalQuestions === 0 ? (
-                      <span className="text-[#777B73]">لا توجد أسئلة</span>
+                      <StatusBadge tone="neutral">لا توجد أسئلة</StatusBadge>
                     ) : stat.isExhausted ? (
-                      <span className="font-bold text-[#F07842]">
-                        خلصت الأسئلة الجديدة
-                      </span>
+                      <StatusBadge tone="orange">خلصت الأسئلة الجديدة</StatusBadge>
                     ) : (
-                      <span className="font-bold text-[#14543D]">متاح</span>
+                      <StatusBadge tone="green">متاح</StatusBadge>
                     )}
                   </td>
                 </tr>
@@ -767,38 +759,38 @@ export const AdminSeenQuestionsSection: React.FC<
       </div>
 
       {/* 5. Most Frequently Appeared Questions */}
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-6 space-y-4">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
           <div className="space-y-0.5">
-            <h3 className="font-display text-base font-bold text-[#252824]">
+            <h3 className="font-display text-base font-bold text-[#1B1F1C]">
               الأسئلة الأكثر ظهوراً للاعبين
             </h3>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               أكثر 30 سؤالاً تم عرضها فعلياً عبر جميع الحسابات في المباريات المحلية والأونلاين.
             </p>
           </div>
 
           <div className="relative w-full sm:w-72">
-            <Search className="w-3.5 h-3.5 text-[#777B73] absolute right-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-[#666B62] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={topQuestionSearch}
               onChange={(e) => setTopQuestionSearch(e.target.value)}
               placeholder="بحث في الأسئلة الأكثر ظهوراً..."
-              className="w-full pr-8 pl-3 py-2 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs text-[#252824]"
+              className="w-full min-h-[40px] pr-8 pl-3 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs text-[#1B1F1C] placeholder:text-[#666B62] focus:outline-none focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15"
             />
           </div>
         </div>
 
         {topAppearedQuestions.length === 0 ? (
-          <div className="py-10 text-center text-xs text-[#777B73]">
+          <div className="py-10 text-center text-xs text-[#52574E]">
             لم يتم تسجيل ظهور أي أسئلة بعد.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
               <thead>
-                <tr className="bg-[#F3F5E9] text-[#777B73] border-b border-[#E5E8DD]">
+                <tr className="bg-[#F7F8F1] text-[#52574E] border-b border-[#E5E8DD]">
                   <th className="py-2.5 px-3 font-bold w-12">#</th>
                   <th className="py-2.5 px-3 font-bold">السؤال</th>
                   <th className="py-2.5 px-3 font-bold">الفئة</th>
@@ -810,19 +802,19 @@ export const AdminSeenQuestionsSection: React.FC<
               </thead>
               <tbody className="divide-y divide-[#E5E8DD]">
                 {topAppearedQuestions.map((item, idx) => (
-                  <tr key={item.questionId} className="hover:bg-[#F3F5E9]/40">
-                    <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#777B73]">
+                  <tr key={item.questionId} className="hover:bg-[#F7F8F1]/60 transition-colors">
+                    <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#52574E]">
                       {idx + 1}
                     </td>
                     <td className="py-2.5 px-3 max-w-md">
-                      <div className="font-bold text-[#252824] line-clamp-2">
+                      <div className="font-bold text-[#1B1F1C] line-clamp-2">
                         {item.questionText}
                       </div>
-                      <div className="font-mono text-[10px] text-[#777B73]">
+                      <div className="font-mono text-[10px] text-[#666B62]">
                         {item.questionId}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-[#252824] font-semibold">
+                    <td className="py-2.5 px-3 text-[#1B1F1C] font-semibold">
                       {item.category}
                     </td>
                     <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#F07842]">
@@ -831,10 +823,10 @@ export const AdminSeenQuestionsSection: React.FC<
                     <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#14543D]">
                       {item.totalAppearances}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#252824]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#1B1F1C]">
                       {item.uniqueUsersCount}
                     </td>
-                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#777B73]">
+                    <td className="py-2.5 px-3 font-mono tabular-nums text-[#52574E]">
                       {formatDateTimeAr(item.lastSeenAtMs)}
                     </td>
                   </tr>
@@ -846,63 +838,42 @@ export const AdminSeenQuestionsSection: React.FC<
       </div>
 
       {/* 6. Admin-only Confirmation Modal for Resetting a Player's Seen History */}
-      {resetTargetUser && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252824]/70 backdrop-blur-xs"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl">
-            <div className="bg-rose-700 text-white px-6 py-4 flex items-center gap-2.5">
-              <ShieldAlert className="w-5 h-5 shrink-0" />
-              <h3 className="font-display text-base font-bold">
-                تأكيد تصفير سجل الأسئلة للاعب
-              </h3>
-            </div>
-
-            <div className="p-6 space-y-4 text-xs leading-relaxed text-[#252824]">
-              <p>
+      <ConfirmDialog
+        isOpen={Boolean(resetTargetUser)}
+        onClose={() => {
+          if (!resettingUser) setResetTargetUser(null);
+        }}
+        onConfirm={handleConfirmResetUser}
+        title="تأكيد تصفير سجل الأسئلة للاعب"
+        confirmLabel={resettingUser ? 'جاري التصفير...' : 'نعم، صفّر السجل الآن'}
+        cancelLabel="إلغاء"
+        tone="danger"
+        loading={resettingUser}
+        message={
+          resetTargetUser ? (
+            <div className="space-y-3 text-xs leading-relaxed">
+              <p className="text-[#1B1F1C]">
                 هل أنت متأكد من رغبتك في حذف سجل الأسئلة المشاهدة بالكامل للحساب التالي؟ بعد التصفير ستظهر له الأسئلة السابقة من جديد وكأنه لم يشاهدها.
               </p>
-
-              <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-4 space-y-1">
-                <div className="font-bold text-sm text-[#252824]">
+              <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-3.5 space-y-1">
+                <div className="font-bold text-sm text-[#1B1F1C]">
                   {resetTargetUser.displayName}
                 </div>
-                <div className="text-[#777B73]">
+                <div className="text-[#52574E]">
                   {resetTargetUser.email} ·{' '}
                   <span className="font-mono">{resetTargetUser.uid}</span>
                 </div>
                 <div className="font-bold text-rose-700 pt-1">
-                  عدد الأسئلة المسجلة التي سيتم حذفها: {resetTargetUser.seenUniqueCount}
+                  عدد الأسئلة المسجلة التي سيتم حذفها:{' '}
+                  <span className="font-mono tabular-nums">
+                    {resetTargetUser.seenUniqueCount}
+                  </span>
                 </div>
               </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  disabled={resettingUser}
-                  onClick={() => setResetTargetUser(null)}
-                  className="px-4 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] font-bold text-[#252824] cursor-pointer"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="button"
-                  disabled={resettingUser}
-                  onClick={handleConfirmResetUser}
-                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>
-                    {resettingUser ? 'جاري التصفير...' : 'نعم، صفّر السجل الآن'}
-                  </span>
-                </button>
-              </div>
             </div>
-          </div>
-        </div>
-      )}
+          ) : null
+        }
+      />
     </div>
   );
 };

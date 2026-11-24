@@ -151,9 +151,9 @@ export const CircularCountdownTimer: React.FC<CircularCountdownTimerProps> = ({
       <div
         className={`relative flex items-center justify-center rounded-full transition-shadow duration-300 ${
           isUrgent
-            ? 'animate-pulse ring-4 ring-rose-500/20'
+            ? 'ring-4 ring-rose-500/25'
             : isWarning
-            ? 'ring-4 ring-[#F07842]/15'
+            ? 'ring-4 ring-[#F07842]/20'
             : ''
         }`}
         style={{ width: size, height: size }}

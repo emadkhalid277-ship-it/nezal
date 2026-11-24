@@ -5,7 +5,6 @@ import {
   UserPlus,
   Search,
   Check,
-  X,
   Play,
   Eye,
   UserMinus,
@@ -14,7 +13,6 @@ import {
   ShieldOff,
   BellRing,
   Clock,
-  AlertCircle,
   Radio,
   Unlock,
   ArrowLeft,
@@ -54,6 +52,7 @@ import {
   updateAcceptsInvitesSetting,
 } from '../services/socialService';
 import { createOnlineRoom } from '../services/multiplayerService';
+import { AlertBanner, EmptyState, StatusBadge, UI_CLASSES } from '../components/ui';
 
 interface FriendsPageProps {
   user: User | null;
@@ -487,10 +486,10 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           <Users className="w-8 h-8" />
         </div>
         <div className="space-y-2">
-          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#1B1F1C]">
             قائمة الأصدقاء والدعوات
           </h1>
-          <p className="text-sm text-[#777B73] max-w-md mx-auto">
+          <p className="text-sm text-[#52574E] max-w-md mx-auto">
             سجّل الدخول لإضافة أصدقائك، متابعة حالتهم المباشرة، ودعوتهم للعب أو مشاهدة مبارياتك أونلاين.
           </p>
         </div>
@@ -498,14 +497,14 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           <button
             type="button"
             onClick={onOpenAuthModal}
-            className="w-full sm:w-auto px-7 py-3 min-h-[46px] rounded-2xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-sm font-bold cursor-pointer transition-colors"
+            className={`${UI_CLASSES.btnGreen} w-full sm:w-auto px-7 min-h-[46px] rounded-2xl`}
           >
             تسجيل الدخول / حساب جديد
           </button>
           <button
             type="button"
             onClick={onNavigateHome}
-            className="w-full sm:w-auto px-6 py-3 min-h-[46px] rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824] text-sm font-bold cursor-pointer"
+            className={`${UI_CLASSES.btnOutline} w-full sm:w-auto px-6 min-h-[46px] rounded-2xl text-[#52574E]`}
           >
             العودة للرئيسية
           </button>
@@ -526,7 +525,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
         ? 'bg-sky-500'
         : status === 'in_match'
         ? 'bg-[#F07842]'
-        : 'bg-[#777B73]/45';
+        : 'bg-[#666B62]/45';
     const textClass =
       status === 'online'
         ? 'text-emerald-700'
@@ -534,7 +533,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
         ? 'text-sky-700'
         : status === 'in_match'
         ? 'text-[#D9602B]'
-        : 'text-[#777B73]';
+        : 'text-[#666B62]';
 
     return (
       <div className="flex items-center gap-2 flex-wrap">
@@ -543,9 +542,9 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           <span>{formatPresenceLabel(status)}</span>
         </span>
         {roomCode && (status === 'in_lobby' || status === 'in_match') && (
-          <span className="text-[11px] font-mono font-bold text-[#14543D] bg-[#EAF2EE] px-2 py-0.5 rounded-md">
+          <StatusBadge tone="green" className="font-mono text-[11px] py-0.5 px-2">
             غرفة {roomCode}
-          </span>
+          </StatusBadge>
         )}
       </div>
     );
@@ -559,15 +558,15 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           <button
             type="button"
             onClick={onNavigateHome}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#777B73] hover:text-[#14543D] cursor-pointer mb-1"
+            className="inline-flex items-center gap-1.5 min-h-[36px] text-xs font-bold text-[#52574E] hover:text-[#14543D] cursor-pointer mb-1 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
             <span>العودة للرئيسية</span>
           </button>
-          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#252824]">
+          <h1 className="font-display text-2xl md:text-3xl font-bold text-[#1B1F1C]">
             الأصدقاء واللعب الجماعي
           </h1>
-          <p className="text-sm text-[#777B73]">
+          <p className="text-sm text-[#52574E]">
             ابحث عن اللاعبين باسم المستخدم، تابع حالة أصدقائك المباشرة، وأرسل دعوات اللعب أو المشاهدة.
           </p>
         </div>
@@ -577,7 +576,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <button
               type="button"
               onClick={() => onEnterRoom(activeOnlineRoomCode, 'player')}
-              className="px-4 py-2.5 rounded-xl bg-[#EAF2EE] border border-[#14543D]/25 text-xs font-bold text-[#14543D] hover:bg-[#DDECE4] flex items-center gap-2 cursor-pointer"
+              className="min-h-[42px] px-4 py-2 rounded-xl bg-[#EAF2EE] border border-[#14543D]/25 text-xs font-bold text-[#14543D] hover:bg-[#DDECE4] flex items-center gap-2 cursor-pointer transition-colors"
             >
               <Radio className="w-4 h-4 text-[#F07842]" />
               <span>غرفتك الحالية: <span className="font-mono">{activeOnlineRoomCode}</span></span>
@@ -588,7 +587,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             type="button"
             disabled={busyAction === 'toggle_invites'}
             onClick={handleToggleAcceptsInvites}
-            className={`px-4 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
+            className={`min-h-[42px] px-4 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
               acceptsInvites
                 ? 'bg-[#FFFFFF] border-[#E5E8DD] text-[#14543D] hover:border-[#14543D]'
                 : 'bg-[#FEF2EC] border-[#F07842]/40 text-[#D9602B]'
@@ -612,25 +611,25 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
       {/* CLEAN UNBOXED SUMMARY METRICS */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 border-b border-[#E5E8DD] pb-5 sm:pb-6">
         <div>
-          <div className="text-xs font-medium text-[#777B73]">إجمالي الأصدقاء</div>
-          <div className="font-display text-3xl font-bold text-[#252824] tabular-nums mt-1">
+          <div className="text-xs font-medium text-[#52574E]">إجمالي الأصدقاء</div>
+          <div className="font-display text-3xl font-bold text-[#1B1F1C] tabular-nums mt-1">
             {resolvedFriends.length}
           </div>
         </div>
         <div>
-          <div className="text-xs font-medium text-[#777B73]">المتصلون الآن</div>
+          <div className="text-xs font-medium text-[#52574E]">المتصلون الآن</div>
           <div className="font-display text-3xl font-bold text-[#14543D] tabular-nums mt-1">
             {onlineFriends.length}
           </div>
         </div>
         <div>
-          <div className="text-xs font-medium text-[#777B73]">غير المتصلين</div>
-          <div className="font-display text-3xl font-bold text-[#777B73] tabular-nums mt-1">
+          <div className="text-xs font-medium text-[#52574E]">غير المتصلين</div>
+          <div className="font-display text-3xl font-bold text-[#666B62] tabular-nums mt-1">
             {offlineFriends.length}
           </div>
         </div>
         <div>
-          <div className="text-xs font-medium text-[#777B73]">طلبات ودعوات واردة</div>
+          <div className="text-xs font-medium text-[#52574E]">طلبات ودعوات واردة</div>
           <div className="font-display text-3xl font-bold text-[#F07842] tabular-nums mt-1">
             {incomingRequests.length + incomingInvites.length}
           </div>
@@ -639,29 +638,12 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
 
       {/* FEEDBACK BANNER */}
       {feedbackBanner && (
-        <div
-          className={`p-4 rounded-2xl border text-sm font-bold flex items-center justify-between gap-3 ${
-            feedbackBanner.type === 'success'
-              ? 'bg-[#EAF2EE] border-[#14543D]/25 text-[#14543D]'
-              : 'bg-rose-50 border-rose-200 text-rose-800'
-          }`}
+        <AlertBanner
+          tone={feedbackBanner.type === 'success' ? 'success' : 'error'}
+          onDismiss={() => setFeedbackBanner(null)}
         >
-          <div className="flex items-center gap-2">
-            {feedbackBanner.type === 'success' ? (
-              <Check className="w-4 h-4 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0" />
-            )}
-            <span>{feedbackBanner.text}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setFeedbackBanner(null)}
-            className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+          {feedbackBanner.text}
+        </AlertBanner>
       )}
 
       {/* MAIN TWO-COLUMN GRID */}
@@ -676,7 +658,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
               className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'friends'
                   ? 'bg-[#14543D] text-white'
-                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
+                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
               }`}
             >
               <Users className="w-4 h-4" />
@@ -690,7 +672,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
               className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'requests'
                   ? 'bg-[#14543D] text-white'
-                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
+                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
               }`}
             >
               <UserPlus className="w-4 h-4" />
@@ -708,7 +690,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
               className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'invites'
                   ? 'bg-[#14543D] text-white'
-                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
+                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
               }`}
             >
               <BellRing className="w-4 h-4" />
@@ -726,7 +708,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
               className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'blocked'
                   ? 'bg-[#14543D] text-white'
-                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#777B73] hover:text-[#252824]'
+                  : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
               }`}
             >
               <Ban className="w-4 h-4" />
@@ -752,10 +734,10 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                       key={f.id}
                       type="button"
                       onClick={() => setPresenceFilter(f.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors tabular-nums ${
+                      className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors tabular-nums ${
                         presenceFilter === f.id
                           ? 'bg-[#EAF2EE] text-[#14543D]'
-                          : 'text-[#777B73] hover:bg-[#F3F5E9]'
+                          : 'text-[#52574E] hover:bg-[#F7F8F1]'
                       }`}
                     >
                       {f.label}
@@ -764,29 +746,29 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                 </div>
 
                 <div className="relative sm:w-56">
-                  <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-[#777B73]" />
+                  <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-[#666B62]" />
                   <input
                     type="text"
                     value={friendFilterText}
                     onChange={(e) => setFriendFilterText(e.target.value)}
                     placeholder="تصفية الأصدقاء..."
-                    className="w-full pr-9 pl-3 py-2 rounded-xl border border-[#E5E8DD] focus:border-[#14543D] text-xs font-bold text-[#252824] outline-none"
+                    aria-label="تصفية الأصدقاء"
+                    className="w-full min-h-[40px] pr-9 pl-3 py-2 rounded-xl border border-[#E5E8DD] bg-[#F7F8F1] focus:bg-white focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15 text-xs font-bold text-[#1B1F1C] placeholder:text-[#666B62] outline-none transition-colors"
                   />
                 </div>
               </div>
 
               {displayedFriends.length === 0 ? (
-                <div className="py-12 text-center space-y-2 text-[#777B73]">
-                  <Users className="w-10 h-10 mx-auto opacity-30" />
-                  <p className="text-sm font-bold text-[#252824]">
-                    {resolvedFriends.length === 0
+                <EmptyState
+                  icon={<Users className="w-6 h-6" />}
+                  title={
+                    resolvedFriends.length === 0
                       ? 'قائمة أصدقائك فارغة حالياً'
-                      : 'لا يوجد أصدقاء ضمن هذا التصنيف'}
-                  </p>
-                  <p className="text-xs">
-                    استخدم مربع البحث لإيجاد اللاعبين وإرسال طلبات الصداقة.
-                  </p>
-                </div>
+                      : 'لا يوجد أصدقاء ضمن هذا التصنيف'
+                  }
+                  description="استخدم مربع البحث لإيجاد اللاعبين وإرسال طلبات الصداقة."
+                  className="border-0 py-8"
+                />
               ) : (
                 <div className="divide-y divide-[#E5E8DD]">
                   {displayedFriends.map((friend) => (
@@ -807,7 +789,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           </div>
                         )}
                         <div className="min-w-0 space-y-1">
-                          <div className="font-display text-sm font-bold text-[#252824] truncate">
+                          <div className="font-display text-sm font-bold text-[#1B1F1C] truncate">
                             {friend.displayName}
                           </div>
                           {renderPresenceBadge(friend.status, friend.currentRoomCode)}
@@ -816,8 +798,8 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
 
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {confirmRemoveUid === friend.uid ? (
-                          <div className="flex items-center gap-1.5 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
-                            <span className="text-[11px] font-bold text-rose-800">
+                          <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
+                            <span className="text-xs font-bold text-rose-800">
                               تأكيد الإزالة؟
                             </span>
                             <button
@@ -826,21 +808,21 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               onClick={() =>
                                 handleRemoveFriend(friend.uid, friend.displayName)
                               }
-                              className="px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[11px] font-bold cursor-pointer"
+                              className="min-h-[36px] px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer transition-colors"
                             >
                               نعم
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmRemoveUid(null)}
-                              className="px-2 py-0.5 rounded-lg bg-white text-[#777B73] text-[11px] font-bold cursor-pointer"
+                              className="min-h-[36px] px-3 rounded-lg bg-white border border-[#E5E8DD] text-[#52574E] text-xs font-bold cursor-pointer transition-colors"
                             >
                               لا
                             </button>
                           </div>
                         ) : confirmBlockUid === friend.uid ? (
-                          <div className="flex items-center gap-1.5 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
-                            <span className="text-[11px] font-bold text-rose-800">
+                          <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
+                            <span className="text-xs font-bold text-rose-800">
                               حظر وإزالة؟
                             </span>
                             <button
@@ -853,14 +835,14 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                   friend.photoURL
                                 )
                               }
-                              className="px-2 py-0.5 rounded-lg bg-rose-700 text-white text-[11px] font-bold cursor-pointer"
+                              className="min-h-[36px] px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold cursor-pointer transition-colors"
                             >
                               حظر
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmBlockUid(null)}
-                              className="px-2 py-0.5 rounded-lg bg-white text-[#777B73] text-[11px] font-bold cursor-pointer"
+                              className="min-h-[36px] px-3 rounded-lg bg-white border border-[#E5E8DD] text-[#52574E] text-xs font-bold cursor-pointer transition-colors"
                             >
                               إلغاء
                             </button>
@@ -879,7 +861,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                   ? 'إرسال دعوة للعب أونلاين'
                                   : 'أوقف هذا اللاعب استقبال الدعوات'
                               }
-                              className="px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] disabled:opacity-45 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] disabled:opacity-45 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               <Play className="w-3.5 h-3.5" />
                               <span>دعوة للعب</span>
@@ -899,7 +881,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                   ? 'إرسال دعوة لمشاهدة المباراة'
                                   : 'أوقف هذا اللاعب استقبال الدعوات'
                               }
-                              className="px-3.5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] disabled:opacity-45 text-[#252824] text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD] disabled:opacity-45 text-[#1B1F1C] border border-[#E5E8DD] text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               <Eye className="w-3.5 h-3.5 text-[#F07842]" />
                               <span>دعوة للمشاهدة</span>
@@ -912,7 +894,8 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                 setConfirmRemoveUid(friend.uid);
                               }}
                               title="إزالة الصديق"
-                              className="p-2 rounded-xl border border-[#E5E8DD] text-[#777B73] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 cursor-pointer transition-colors"
+                              aria-label={`إزالة ${friend.displayName} من الأصدقاء`}
+                              className="min-w-[40px] min-h-[40px] rounded-xl border border-[#E5E8DD] text-[#52574E] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
                             >
                               <UserMinus className="w-4 h-4" />
                             </button>
@@ -924,7 +907,8 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                 setConfirmBlockUid(friend.uid);
                               }}
                               title="حظر المستخدم"
-                              className="p-2 rounded-xl border border-[#E5E8DD] text-[#777B73] hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50 cursor-pointer transition-colors"
+                              aria-label={`حظر ${friend.displayName}`}
+                              className="min-w-[40px] min-h-[40px] rounded-xl border border-[#E5E8DD] text-[#52574E] hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
                             >
                               <Ban className="w-4 h-4" />
                             </button>
@@ -944,13 +928,13 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
               {/* Incoming Requests */}
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 md:p-6 space-y-4 shadow-xs">
                 <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
-                  <h2 className="font-display text-base font-bold text-[#252824]">
+                  <h2 className="font-display text-base font-bold text-[#1B1F1C]">
                     طلبات الصداقة الواردة ({incomingRequests.length})
                   </h2>
                 </div>
 
                 {incomingRequests.length === 0 ? (
-                  <p className="text-xs text-[#777B73] py-6 text-center">
+                  <p className="text-xs text-[#666B62] py-6 text-center">
                     لا توجد طلبات صداقة واردة حالياً.
                   </p>
                 ) : (
@@ -965,10 +949,10 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             {(req.fromName || 'ن')[0]?.toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <div className="text-sm font-bold text-[#252824] truncate">
+                            <div className="text-sm font-bold text-[#1B1F1C] truncate">
                               {req.fromName || 'لاعب نِزال'}
                             </div>
-                            <div className="text-[11px] text-[#777B73]">
+                            <div className="text-[11px] text-[#52574E]">
                               يريد إضافتك إلى قائمة أصدقائه
                             </div>
                           </div>
@@ -979,7 +963,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             type="button"
                             disabled={busyAction === `acc_req_${req.id}`}
                             onClick={() => handleAcceptRequest(req)}
-                            className="px-3.5 py-2 min-h-[38px] rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            className="px-3.5 py-2 min-h-[40px] rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Check className="w-3.5 h-3.5" />
                             <span>قبول</span>
@@ -988,7 +972,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             type="button"
                             disabled={busyAction === `rej_req_${req.id}`}
                             onClick={() => handleRejectRequest(req)}
-                            className="px-3.5 py-2 min-h-[38px] rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#777B73] hover:text-rose-700 text-xs font-bold cursor-pointer"
+                            className="px-3.5 py-2 min-h-[40px] rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer transition-colors"
                           >
                             رفض
                           </button>
@@ -1002,13 +986,13 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
               {/* Outgoing Requests */}
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 md:p-6 space-y-4 shadow-xs">
                 <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
-                  <h2 className="font-display text-base font-bold text-[#252824]">
+                  <h2 className="font-display text-base font-bold text-[#1B1F1C]">
                     طلبات الصداقة المرسلة ({outgoingRequests.length})
                   </h2>
                 </div>
 
                 {outgoingRequests.length === 0 ? (
-                  <p className="text-xs text-[#777B73] py-6 text-center">
+                  <p className="text-xs text-[#666B62] py-6 text-center">
                     لا توجد طلبات صداقة مرسلة بانتظار الرد.
                   </p>
                 ) : (
@@ -1019,14 +1003,14 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                         className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-xl bg-[#F3F5E9] text-[#252824] flex items-center justify-center font-bold text-sm shrink-0">
+                          <div className="w-10 h-10 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-[#1B1F1C] flex items-center justify-center font-bold text-sm shrink-0">
                             {(req.toName || 'ن')[0]?.toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <div className="text-sm font-bold text-[#252824] truncate">
+                            <div className="text-sm font-bold text-[#1B1F1C] truncate">
                               {req.toName || 'لاعب نِزال'}
                             </div>
-                            <div className="text-[11px] text-[#777B73] inline-flex items-center gap-1">
+                            <div className="text-[11px] text-[#52574E] inline-flex items-center gap-1">
                               <Clock className="w-3 h-3" />
                               <span>بانتظار الموافقة</span>
                             </div>
@@ -1037,7 +1021,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           type="button"
                           disabled={busyAction === `can_req_${req.id}`}
                           onClick={() => handleCancelRequest(req)}
-                          className="px-3.5 py-2 min-h-[38px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#777B73] hover:text-rose-700 cursor-pointer shrink-0"
+                          className="px-3.5 py-2 min-h-[40px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#52574E] hover:text-rose-700 cursor-pointer shrink-0 transition-colors"
                         >
                           إلغاء الطلب
                         </button>
@@ -1054,12 +1038,12 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <div className="space-y-5">
               {/* Incoming Invites */}
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 md:p-6 space-y-4 shadow-xs">
-                <h2 className="font-display text-base font-bold text-[#252824] border-b border-[#E5E8DD] pb-3">
+                <h2 className="font-display text-base font-bold text-[#1B1F1C] border-b border-[#E5E8DD] pb-3">
                   دعوات اللعب والمشاهدة الواردة ({incomingInvites.length})
                 </h2>
 
                 {incomingInvites.length === 0 ? (
-                  <p className="text-xs text-[#777B73] py-6 text-center">
+                  <p className="text-xs text-[#666B62] py-6 text-center">
                     لا توجد دعوات واردة نشطة حالياً.
                   </p>
                 ) : (
@@ -1073,20 +1057,14 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                         >
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                              <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                  isSpectate
-                                    ? 'bg-[#EAF2EE] text-[#14543D]'
-                                    : 'bg-[#FEF2EC] text-[#D9602B]'
-                                }`}
-                              >
+                              <StatusBadge tone={isSpectate ? 'green' : 'orange'}>
                                 {isSpectate ? 'دعوة للمشاهدة' : 'دعوة للعب'}
-                              </span>
-                              <span className="text-sm font-bold text-[#252824]">
+                              </StatusBadge>
+                              <span className="text-sm font-bold text-[#1B1F1C]">
                                 {inv.fromName || 'صديق'}
                               </span>
                             </div>
-                            <div className="text-xs text-[#777B73]">
+                            <div className="text-xs text-[#52574E]">
                               رمز الغرفة:{' '}
                               <span className="font-mono font-bold text-[#14543D]">
                                 {inv.roomCode}
@@ -1099,7 +1077,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               type="button"
                               disabled={busyAction === `acc_inv_${inv.id}`}
                               onClick={() => handleAcceptInvite(inv)}
-                              className="px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                              className="min-h-[40px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               {isSpectate ? (
                                 <>
@@ -1117,7 +1095,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               type="button"
                               disabled={busyAction === `rej_inv_${inv.id}`}
                               onClick={() => handleRejectInvite(inv)}
-                              className="px-3.5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#777B73] hover:text-rose-700 text-xs font-bold cursor-pointer"
+                              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer transition-colors"
                             >
                               رفض
                             </button>
@@ -1131,12 +1109,12 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
 
               {/* Outgoing Invites */}
               <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 md:p-6 space-y-4 shadow-xs">
-                <h2 className="font-display text-base font-bold text-[#252824] border-b border-[#E5E8DD] pb-3">
+                <h2 className="font-display text-base font-bold text-[#1B1F1C] border-b border-[#E5E8DD] pb-3">
                   الدعوات التي أرسلتها ({outgoingInvites.length})
                 </h2>
 
                 {outgoingInvites.length === 0 ? (
-                  <p className="text-xs text-[#777B73] py-6 text-center">
+                  <p className="text-xs text-[#666B62] py-6 text-center">
                     لا توجد دعوات مرسلة نشطة حالياً.
                   </p>
                 ) : (
@@ -1147,10 +1125,10 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                         className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div className="space-y-0.5">
-                          <div className="text-sm font-bold text-[#252824]">
+                          <div className="text-sm font-bold text-[#1B1F1C]">
                             إلى: {inv.toName || 'صديق'}
                           </div>
-                          <div className="text-xs text-[#777B73]">
+                          <div className="text-xs text-[#52574E]">
                             {inv.inviteType === 'spectate' ? 'مشاهدة' : 'لعب'} • غرفة{' '}
                             <span className="font-mono font-bold text-[#14543D]">
                               {inv.roomCode}
@@ -1162,7 +1140,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           type="button"
                           disabled={busyAction === `can_inv_${inv.id}`}
                           onClick={() => handleCancelInvite(inv)}
-                          className="px-3.5 py-2 min-h-[38px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 text-xs font-bold text-[#777B73] hover:text-rose-700 cursor-pointer shrink-0"
+                          className="px-3.5 py-2 min-h-[40px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#52574E] hover:text-rose-700 cursor-pointer shrink-0 transition-colors"
                         >
                           إلغاء الدعوة
                         </button>
@@ -1177,12 +1155,12 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           {/* TAB 4: BLOCKED USERS */}
           {activeTab === 'blocked' && (
             <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 md:p-6 space-y-4 shadow-xs">
-              <h2 className="font-display text-base font-bold text-[#252824] border-b border-[#E5E8DD] pb-3">
+              <h2 className="font-display text-base font-bold text-[#1B1F1C] border-b border-[#E5E8DD] pb-3">
                 الحسابات المحظورة ({blockedUsers.length})
               </h2>
 
               {blockedUsers.length === 0 ? (
-                <p className="text-xs text-[#777B73] py-8 text-center">
+                <p className="text-xs text-[#666B62] py-8 text-center">
                   لم تقم بحظر أي حساب.
                 </p>
               ) : (
@@ -1197,10 +1175,10 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           <Ban className="w-4 h-4" />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-sm font-bold text-[#252824] truncate">
+                          <div className="text-sm font-bold text-[#1B1F1C] truncate">
                             {blk.blockedName || 'مستخدم'}
                           </div>
-                          <div className="text-[11px] text-[#777B73]">
+                          <div className="text-[11px] text-[#52574E]">
                             لا يمكنه إرسال طلبات صداقة أو دعوات لك
                           </div>
                         </div>
@@ -1212,7 +1190,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                         onClick={() =>
                           handleUnblockUser(blk.blockedUid, blk.blockedName)
                         }
-                        className="px-3.5 py-2 min-h-[38px] self-start sm:self-center rounded-xl bg-[#F3F5E9] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer shrink-0"
+                        className="px-3.5 py-2 min-h-[40px] self-start sm:self-center rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
                       >
                         <Unlock className="w-3.5 h-3.5" />
                         <span>إلغاء الحظر</span>
@@ -1230,30 +1208,31 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           <div className="space-y-1 border-b border-[#E5E8DD] pb-4">
             <div className="flex items-center gap-2 text-[#14543D]">
               <UserPlus className="w-4 h-4 text-[#F07842]" />
-              <h2 className="font-display text-base font-bold text-[#252824]">
+              <h2 className="font-display text-base font-bold text-[#1B1F1C]">
                 البحث عن لاعبين
               </h2>
             </div>
-            <p className="text-xs text-[#777B73]">
+            <p className="text-xs text-[#52574E]">
               ابحث باسم المستخدم لإرسال طلب صداقة دون كشف أي بيانات شخصية.
             </p>
           </div>
 
           <form onSubmit={handleSearchPlayers} className="space-y-2.5">
             <div className="relative">
-              <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-[#777B73]" />
+              <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-[#666B62]" />
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="اكتب اسم المستخدم..."
-                className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-[#E5E8DD] focus:border-[#14543D] text-xs font-bold text-[#252824] outline-none"
+                aria-label="البحث عن لاعب باسم المستخدم"
+                className="w-full min-h-[44px] pr-10 pl-4 py-2.5 rounded-xl border border-[#E5E8DD] bg-[#F7F8F1] focus:bg-white focus:border-[#F07842] focus:ring-2 focus:ring-[#F07842]/15 text-xs font-bold text-[#1B1F1C] placeholder:text-[#666B62] outline-none transition-colors"
               />
             </div>
             <button
               type="submit"
               disabled={searching || !searchInput.trim()}
-              className="w-full py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] disabled:opacity-50 text-white text-xs font-bold cursor-pointer transition-colors"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] disabled:opacity-50 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               {searching ? 'جاري البحث...' : 'بحث عن لاعب'}
             </button>
@@ -1262,12 +1241,12 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           {/* Search Results */}
           {hasSearched && (
             <div className="space-y-2.5 pt-2 border-t border-[#E5E8DD]">
-              <div className="text-[11px] font-bold text-[#777B73] tabular-nums">
+              <div className="text-[11px] font-bold text-[#52574E] tabular-nums">
                 نتائج البحث ({searchResults.length})
               </div>
 
               {searchResults.length === 0 ? (
-                <p className="text-xs text-[#777B73] py-6 text-center">
+                <p className="text-xs text-[#666B62] py-6 text-center">
                   لم يتم العثور على لاعبين بهذا الاسم.
                 </p>
               ) : (
@@ -1282,49 +1261,49 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                     return (
                       <div
                         key={player.uid}
-                        className="p-3 rounded-2xl border border-[#E5E8DD] bg-[#F3F5E9]/45 flex items-center justify-between gap-2.5"
+                        className="p-3 rounded-2xl border border-[#E5E8DD] bg-[#F7F8F1] flex items-center justify-between gap-2.5"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-9 h-9 rounded-xl bg-[#14543D] text-white flex items-center justify-center text-xs font-bold shrink-0">
                             {player.displayName[0]?.toUpperCase() || 'ن'}
                           </div>
                           <div className="min-w-0">
-                            <div className="text-xs font-bold text-[#252824] truncate">
+                            <div className="text-xs font-bold text-[#1B1F1C] truncate">
                               {player.displayName}
                             </div>
-                            <div className="text-[10px] text-[#777B73]">
+                            <div className="text-[10px] text-[#52574E]">
                               {formatPresenceLabel(status)}
                             </div>
                           </div>
                         </div>
 
                         {isBlocked ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 text-[11px] font-bold shrink-0">
+                          <StatusBadge tone="danger" className="shrink-0">
                             محظور
-                          </span>
+                          </StatusBadge>
                         ) : isFriend ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-[#EAF2EE] text-[#14543D] text-[11px] font-bold shrink-0">
+                          <StatusBadge tone="green" className="shrink-0">
                             صديق ✓
-                          </span>
+                          </StatusBadge>
                         ) : incomingReq ? (
                           <button
                             type="button"
                             disabled={busyAction === `acc_req_${incomingReq.id}`}
                             onClick={() => handleAcceptRequest(incomingReq)}
-                            className="px-3 py-1.5 rounded-xl bg-[#F07842] text-white text-[11px] font-bold cursor-pointer shrink-0"
+                            className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-[11px] font-bold cursor-pointer shrink-0 transition-colors"
                           >
                             قبول الطلب
                           </button>
                         ) : isOutgoingPending ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-[#E5E8DD] text-[#777B73] text-[11px] font-bold shrink-0">
+                          <StatusBadge tone="neutral" className="shrink-0">
                             تم الإرسال
-                          </span>
+                          </StatusBadge>
                         ) : (
                           <button
                             type="button"
                             disabled={busyAction === `add_${player.uid}`}
                             onClick={() => handleSendFriendRequest(player)}
-                            className="px-3 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                            className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
                           >
                             <UserPlus className="w-3 h-3" />
                             <span>إضافة صديق</span>

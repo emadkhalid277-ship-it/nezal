@@ -9,8 +9,9 @@
     --bg-secondary: #FFFFFF;
     --color-orange: #F07842;
     --color-green: #14543D;
-    --text-main: #252824;
-    --text-secondary: #777B73;
+    --text-main: #1B1F1C;
+    --text-secondary: #52574E;
+    --text-muted: #666B62;
     --border-color: #E5E8DD;
   }
 
@@ -19,7 +20,7 @@
     direction: rtl;
     scroll-behavior: smooth;
     background-color: #F3F5E9;
-    color: #252824;
+    color: #1B1F1C;
     overflow-x: clip;
     -webkit-text-size-adjust: 100%;
   }
@@ -34,6 +35,16 @@
   a,
   [role="button"] {
     touch-action: manipulation;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid #F07842;
+    outline-offset: 2px;
   }
 
   h1, h2, h3, h4, .font-display {

@@ -401,6 +401,21 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
     await onCancel();
   };
 
+  const canCloseModal =
+    (!activeStatusValue || activeStatusValue === 'waiting_scan') && canControl;
+
+  useEffect(() => {
+    if (!canCloseModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        void handleCancelAndExit();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canCloseModal]);
+
   const handleCommitDecision = async (awardedTeamIndex: number | null) => {
     if (!canControl || committing) return;
     const finalStats =
@@ -469,13 +484,16 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 bg-[#1B1F1C]/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`ولا كلمة: ${contentMeta.label}`}
       dir="rtl"
     >
       <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl overflow-hidden max-w-xl w-full max-h-[94dvh] flex flex-col shadow-2xl">
         {/* Top Modal Header */}
-        <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-4 flex items-start justify-between gap-3 shrink-0">
+        <div className="bg-[#1B1F1C] text-white px-3.5 sm:px-6 py-3 sm:py-4 flex items-start justify-between gap-3 shrink-0">
           <div className="space-y-1.5 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-bold">
               <span
                 className="px-2.5 py-1 rounded-lg text-white inline-flex items-center gap-1.5 shadow-xs"
                 style={{ backgroundColor: activeTeam.color || '#14543D' }}
@@ -488,7 +506,7 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                 {activeLevelMeta.levelLabel} · {activePointsPerWord} نقطة
               </span>
             </div>
-            <h3 className="font-display text-lg sm:text-xl font-bold text-white">
+            <h3 className="font-display text-base sm:text-xl font-bold text-white">
               {contentMeta.label}
             </h3>
           </div>
@@ -498,14 +516,14 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
               type="button"
               onClick={handleCancelAndExit}
               aria-label="إغلاق الجولة"
-              className="min-w-[40px] min-h-[40px] rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+              className="min-w-[44px] min-h-[44px] rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center cursor-pointer shrink-0 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1">
           {errorMsg && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs sm:text-sm font-bold text-rose-800">
               {errorMsg}
@@ -637,16 +655,16 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                   </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                  <div className="bg-white p-3.5 rounded-2xl border border-[#E5E8DD] shadow-sm">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-4">
+                  <div className="bg-white p-3 rounded-2xl border border-[#E5E8DD] shadow-sm">
                     {qrDataUrl ? (
                       <img
                         src={qrDataUrl}
                         alt="رمز QR لجولة ولا كلمة"
-                        className="w-52 h-52 sm:w-56 sm:h-56 object-contain"
+                        className="w-44 h-44 sm:w-56 sm:h-56 object-contain"
                       />
                     ) : (
-                      <div className="w-52 h-52 flex items-center justify-center text-xs text-[#777B73]">
+                      <div className="w-44 h-44 sm:w-52 sm:h-52 flex items-center justify-center text-xs text-[#666B62]">
                         جاري توليد رمز QR...
                       </div>
                     )}
@@ -687,8 +705,8 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
 
           {/* PHASE 2B: ACTIVE CHARADES ROUND (SECRET WORD NEVER EXPOSED HERE) */}
           {activeStatusValue === 'active' && (
-            <div className="space-y-5">
-              <div className="rounded-2xl bg-gradient-to-br from-[#1B1F1C] via-[#1B2620] to-[#14543D] text-white p-5 sm:p-6 space-y-5 shadow-md">
+            <div className="space-y-4 sm:space-y-5">
+              <div className="rounded-2xl bg-gradient-to-br from-[#1B1F1C] via-[#1B2620] to-[#14543D] text-white p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-md">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-white/85">
                   <div className="flex items-center gap-2">
                     <Lock className="w-4 h-4 text-[#F07842] shrink-0" />
@@ -710,8 +728,8 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
                         void syncHostNow();
                       }
                     }}
-                    size={156}
-                    strokeWidth={11}
+                    size={136}
+                    strokeWidth={10}
                     variant="dark"
                     connectionWarning={streamWarning}
                   />
