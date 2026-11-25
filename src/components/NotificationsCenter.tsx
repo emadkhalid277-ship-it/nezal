@@ -233,42 +233,48 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
       </button>
 
       {isOpen && (
-        <div className="fixed sm:absolute left-3 right-3 sm:right-auto sm:left-0 mt-2 sm:w-96 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] shadow-2xl z-50 overflow-hidden text-right">
-          {/* Header */}
-          <div className="px-4 py-3 bg-[#F7F8F1] border-b border-[#E5E8DD] flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-[#F07842]" />
-              <span className="font-display text-sm font-bold text-[#1B1F1C]">
-                مركز الإشعارات
-              </span>
-              {unreadCount > 0 && (
-                <span className="text-[11px] font-bold text-[#14543D] tabular-nums">
-                  ({unreadCount} جديد)
+        <>
+          <div
+            aria-hidden="true"
+            onClick={() => setIsOpen(false)}
+            className="sm:hidden fixed inset-0 top-[50px] bg-[#1B1F1C]/25 z-40"
+          />
+          <div className="fixed sm:absolute top-[56px] sm:top-auto left-3 right-3 sm:right-auto sm:left-0 sm:mt-2 sm:w-96 rounded-2xl bg-[#FFFFFF] border border-[#E5E8DD] shadow-2xl z-50 overflow-hidden text-right">
+            {/* Header */}
+            <div className="px-4 py-2.5 sm:py-3 bg-[#F7F8F1] border-b border-[#E5E8DD] flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-[#F07842]" />
+                <span className="font-display text-sm font-bold text-[#1B1F1C]">
+                  مركز الإشعارات
                 </span>
-              )}
-            </div>
+                {unreadCount > 0 && (
+                  <span className="text-[11px] font-bold text-[#14543D] tabular-nums">
+                    ({unreadCount} جديد)
+                  </span>
+                )}
+              </div>
 
-            <div className="flex items-center gap-1.5">
-              {unreadCount > 0 && (
+              <div className="flex items-center gap-1.5">
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => markAllNotificationsRead(notifications)}
+                    className="inline-flex items-center gap-1 min-h-[44px] sm:min-h-[32px] px-2 rounded-lg text-[11px] font-bold text-[#14543D] hover:text-[#F07842] hover:bg-[#FFFFFF] cursor-pointer transition-colors"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    <span>تحديد الكل كمقروء</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => markAllNotificationsRead(notifications)}
-                  className="inline-flex items-center gap-1 min-h-[32px] px-2 rounded-lg text-[11px] font-bold text-[#14543D] hover:text-[#F07842] hover:bg-[#FFFFFF] cursor-pointer transition-colors"
+                  onClick={() => setIsOpen(false)}
+                  aria-label="إغلاق الإشعارات"
+                  className="sm:hidden min-w-[44px] min-h-[44px] rounded-xl hover:bg-[#E5E8DD]/50 text-[#52574E] flex items-center justify-center cursor-pointer"
                 >
-                  <CheckCheck className="w-3.5 h-3.5" />
-                  <span>تحديد الكل كمقروء</span>
+                  <X className="w-4 h-4" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                aria-label="إغلاق الإشعارات"
-                className="sm:hidden min-w-[34px] min-h-[34px] rounded-lg hover:bg-[#E5E8DD]/50 text-[#52574E] flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              </div>
             </div>
-          </div>
 
           {actionError && (
             <div className="mx-3 mt-3">
@@ -339,7 +345,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                         }}
                         title="حذف الإشعار"
                         aria-label="حذف الإشعار"
-                        className="min-w-[36px] min-h-[36px] flex items-center justify-center text-[#52574E] hover:text-rose-600 hover:bg-rose-50 rounded-xl cursor-pointer shrink-0 transition-colors"
+                        className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center text-[#52574E] hover:text-rose-600 hover:bg-rose-50 rounded-xl cursor-pointer shrink-0 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -355,7 +361,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                           type="button"
                           disabled={isBusy}
                           onClick={() => handleFriendDecision(notif, true)}
-                          className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
+                          className="min-h-[44px] sm:min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
                         >
                           <Check className="w-3.5 h-3.5" />
                           <span>قبول</span>
@@ -364,7 +370,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                           type="button"
                           disabled={isBusy}
                           onClick={() => handleFriendDecision(notif, false)}
-                          className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer disabled:opacity-50 transition-colors"
+                          className="min-h-[44px] sm:min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer disabled:opacity-50 transition-colors"
                         >
                           رفض
                         </button>
@@ -381,7 +387,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                           type="button"
                           disabled={isBusy}
                           onClick={() => handleInviteDecision(notif, true)}
-                          className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
+                          className="min-h-[44px] sm:min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
                         >
                           {notif.inviteType === ('spectate' as GameInviteType) ? (
                             <>
@@ -399,7 +405,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                           type="button"
                           disabled={isBusy}
                           onClick={() => handleInviteDecision(notif, false)}
-                          className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer disabled:opacity-50 transition-colors"
+                          className="min-h-[44px] sm:min-h-[36px] px-3.5 py-1.5 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer disabled:opacity-50 transition-colors"
                         >
                           رفض
                         </button>
@@ -419,13 +425,14 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                 setIsOpen(false);
                 onNavigate('friends');
               }}
-              className="w-full min-h-[40px] py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842] text-xs font-bold text-[#14543D] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              className="w-full min-h-[44px] sm:min-h-[40px] py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:border-[#F07842] text-xs font-bold text-[#14543D] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
             >
               <Users className="w-3.5 h-3.5 text-[#F07842]" />
               <span>فتح صفحة الأصدقاء</span>
             </button>
           </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

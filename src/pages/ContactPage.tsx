@@ -143,7 +143,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                   <button
                     type="button"
                     onClick={() => onNavigate('admin')}
-                    className="min-h-[36px] px-2 font-bold text-[#14543D] hover:text-[#F07842] cursor-pointer shrink-0"
+                    className="min-h-[44px] sm:min-h-[36px] px-2 font-bold text-[#14543D] hover:text-[#F07842] cursor-pointer shrink-0"
                   >
                     إعداد الرابط
                   </button>
@@ -185,7 +185,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                   <button
                     type="button"
                     onClick={() => onNavigate('admin')}
-                    className="min-h-[36px] px-2 font-bold text-[#F07842] hover:text-[#14543D] cursor-pointer shrink-0"
+                    className="min-h-[44px] sm:min-h-[36px] px-2 font-bold text-[#F07842] hover:text-[#14543D] cursor-pointer shrink-0"
                   >
                     إعداد البريد
                   </button>
@@ -226,7 +226,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigate('admin')}
-                  className="min-h-[36px] font-bold text-[#14543D] hover:text-[#F07842] cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[36px] px-2 font-bold text-[#14543D] hover:text-[#F07842] cursor-pointer"
                 >
                   إدارة حسابات التواصل
                 </button>

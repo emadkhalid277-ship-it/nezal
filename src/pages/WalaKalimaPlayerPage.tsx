@@ -496,7 +496,7 @@ export const WalaKalimaPlayerPage: React.FC<WalaKalimaPlayerPageProps> = ({
             type="button"
             onClick={() => setShowRules((prev) => !prev)}
             aria-expanded={showRules}
-            className="w-full min-h-[40px] px-3.5 py-2 flex items-center justify-between gap-2 text-[11px] font-bold text-[#1B1F1C] cursor-pointer hover:bg-[#F7F8F1] transition-colors"
+            className="w-full min-h-[44px] px-3.5 py-2 flex items-center justify-between gap-2 text-[11px] font-bold text-[#1B1F1C] cursor-pointer hover:bg-[#F7F8F1] transition-colors"
           >
             <span className="flex items-center gap-1.5 truncate text-[#52574E]">
               <MicOff className="w-3.5 h-3.5 text-rose-600 shrink-0" />

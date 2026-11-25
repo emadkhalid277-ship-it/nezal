@@ -377,12 +377,404 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // GameSessions collection (Saving played matches, live game progress, and scores)
+    function isOnlineRoomDocId(sessionId) {
+      return sessionId.matches('^room_.*');
+    }
+
+    function isValidOnlineDuelRoom(data, sessionId) {
+      return data.keys().hasAll([
+          'id',
+          'code',
+          'mode',
+          'hostId',
+          'hostUid',
+          'hostName',
+          'status',
+          'maxPlayers',
+          'timerDuration',
+          'teams',
+          'players',
+          'selectedSubcategoryIds',
+          'teamSubcategoryIds',
+          'categoryConfirmations',
+          'activeTurnRole',
+          'turnNumber',
+          'activeTeamIndex',
+          'usedTileKeys',
+          'roundUsedQuestionIds',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'code',
+          'mode',
+          'hostId',
+          'hostUid',
+          'hostName',
+          'guestId',
+          'guestUid',
+          'guestName',
+          'status',
+          'maxPlayers',
+          'allowPlayerTeamSelection',
+          'timerDuration',
+          'teams',
+          'players',
+          'spectators',
+          'selectedSubcategoryIds',
+          'teamSubcategoryIds',
+          'categoryConfirmations',
+          'activeTurnRole',
+          'turnNumber',
+          'activeTeamIndex',
+          'usedTileKeys',
+          'roundUsedQuestionIds',
+          'activeQuestion',
+          'lastResolvedTurn',
+          'eventLog',
+          'winnerTeamId',
+          'winnerTeamName',
+          'winnerScore',
+          'lastActionMessage',
+          'lastActionAt',
+          'hostLastSeen',
+          'playerRequests',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 4 && data.id.size() <= 16 &&
+        data.code is string && data.code == data.id &&
+        sessionId == 'room_' + data.code &&
+        data.mode == 'host_vs_guest' &&
+        isValidId(data.hostId) &&
+        data.hostUid == data.hostId &&
+        data.hostName is string && data.hostName.size() >= 1 && data.hostName.size() <= 80 &&
+        (!('guestUid' in data) || data.guestUid == null || isValidId(data.guestUid)) &&
+        (!('guestId' in data) || data.guestId == null || isValidId(data.guestId)) &&
+        (!('guestName' in data) || data.guestName == null || (data.guestName is string && data.guestName.size() <= 80)) &&
+        data.status in [
+          'waiting_for_opponent',
+          'selecting_categories',
+          'ready',
+          'playing',
+          'completed',
+          'finished',
+          'lobby',
+          'waiting',
+          'in_game'
+        ] &&
+        data.maxPlayers is int && data.maxPlayers == 2 &&
+        data.timerDuration is int && data.timerDuration >= 15 && data.timerDuration <= 180 &&
+        data.teams is list && data.teams.size() == 2 &&
+        data.players is map && data.players.size() >= 1 && data.players.size() <= 2 &&
+        (!('spectators' in data) || (data.spectators is map && data.spectators.size() <= 30)) &&
+        data.selectedSubcategoryIds is list && data.selectedSubcategoryIds.size() <= 6 &&
+        data.teamSubcategoryIds is map && data.teamSubcategoryIds.size() <= 4 &&
+        data.categoryConfirmations is map &&
+        data.categoryConfirmations.host is bool &&
+        data.categoryConfirmations.guest is bool &&
+        data.activeTurnRole in ['host', 'guest'] &&
+        data.turnNumber is int && data.turnNumber >= 1 && data.turnNumber <= 1000 &&
+        data.activeTeamIndex is int && data.activeTeamIndex in [0, 1] &&
+        data.usedTileKeys is list && data.usedTileKeys.size() <= 35 &&
+        data.roundUsedQuestionIds is list && data.roundUsedQuestionIds.size() <= 60 &&
+        (!('activeQuestion' in data) || data.activeQuestion == null || data.activeQuestion is map) &&
+        (!('lastResolvedTurn' in data) || data.lastResolvedTurn == null || data.lastResolvedTurn is map) &&
+        (!('eventLog' in data) || (data.eventLog is list && data.eventLog.size() <= 85)) &&
+        (!('winnerScore' in data) || (isNumberVal(data.winnerScore) && data.winnerScore >= 0 && data.winnerScore <= 50000)) &&
+        (!('lastActionMessage' in data) || (data.lastActionMessage is string && data.lastActionMessage.size() <= 500)) &&
+        isNumberVal(data.createdAt) &&
+        isNumberVal(data.updatedAt) &&
+        data.updatedAt >= data.createdAt;
+    }
+
+    function isRoomParticipant(roomData) {
+      return isSignedIn() && (
+        request.auth.uid == roomData.hostUid ||
+        (roomData.guestUid != null && request.auth.uid == roomData.guestUid)
+      );
+    }
+
+    function isActiveTurnOwner(roomData) {
+      return isSignedIn() && (
+        (roomData.activeTurnRole == 'host' && request.auth.uid == roomData.hostUid) ||
+        (roomData.activeTurnRole == 'guest' && roomData.guestUid != null && request.auth.uid == roomData.guestUid)
+      );
+    }
+
+    // GameSessions collection (Online Host-vs-Guest Duel rooms `room_*`, local history `session-*`, social fallback `soc_*`)
     match /gameSessions/{sessionId} {
-      allow get, list: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if isAdmin();
+      allow get: if isValidId(sessionId) && (
+        isOnlineRoomDocId(sessionId) ? isSignedIn() : true
+      );
+
+      allow list: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.hostUid == request.auth.uid ||
+          resource.data.guestUid == request.auth.uid ||
+          resource.data.userId == request.auth.uid
+        )
+      ) || (!('mode' in resource.data) || resource.data.mode != 'host_vs_guest');
+
+      allow create: if isValidId(sessionId) && (
+        (
+          isOnlineRoomDocId(sessionId) &&
+          isSignedIn() &&
+          isValidOnlineDuelRoom(incoming(), sessionId) &&
+          incoming().hostUid == request.auth.uid &&
+          (!('guestUid' in incoming()) || incoming().guestUid == null) &&
+          incoming().status == 'waiting_for_opponent' &&
+          incoming().teams[0].score == 0 &&
+          incoming().teams[1].score == 0 &&
+          incoming().usedTileKeys.size() == 0
+        ) || (
+          !isOnlineRoomDocId(sessionId) &&
+          !('mode' in incoming() && incoming().mode == 'host_vs_guest')
+        )
+      );
+
+      allow update: if isValidId(sessionId) && (
+        (
+          isOnlineRoomDocId(sessionId) &&
+          isSignedIn() &&
+          isValidOnlineDuelRoom(incoming(), sessionId) && (
+            isAdmin() ||
+            (
+              incoming().id == existing().id &&
+              incoming().code == existing().code &&
+              incoming().mode == existing().mode &&
+              incoming().createdAt == existing().createdAt && (
+                // 1. Spectator join / heartbeat / leave (only modifies spectators[uid] & updatedAt)
+                (
+                  incoming().diff(existing()).affectedKeys().hasOnly(['spectators', 'updatedAt']) &&
+                  incoming().hostUid == existing().hostUid &&
+                  incoming().guestUid == existing().guestUid &&
+                  (
+                    !('spectators' in existing())
+                      ? incoming().spectators.keys().hasOnly([request.auth.uid])
+                      : incoming().spectators.diff(existing().spectators).affectedKeys().hasOnly([request.auth.uid])
+                  )
+                ) ||
+                // 2. Guest joins open room or Host/Guest reconnects
+                (
+                  incoming().hostUid == existing().hostUid &&
+                  incoming().teams[0].score == existing().teams[0].score &&
+                  incoming().teams[1].score == existing().teams[1].score &&
+                  (
+                    // Open guest slot join (not finished)
+                    (
+                      !(existing().status in ['finished', 'completed']) &&
+                      (!('guestUid' in existing()) || existing().guestUid == null || existing().guestUid == request.auth.uid) &&
+                      request.auth.uid != existing().hostUid &&
+                      incoming().guestUid == request.auth.uid &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'mode', 'hostUid', 'guestId', 'guestUid', 'guestName',
+                        'teams', 'players', 'status', 'eventLog',
+                        'lastActionMessage', 'lastActionAt', 'updatedAt'
+                      ])
+                    ) ||
+                    // Existing participant reconnect
+                    (
+                      isRoomParticipant(existing()) &&
+                      incoming().guestUid == existing().guestUid &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'mode', 'hostUid', 'guestId', 'guestUid', 'guestName',
+                        'teams', 'players', 'status', 'eventLog',
+                        'lastActionMessage', 'lastActionAt', 'hostLastSeen', 'updatedAt'
+                      ])
+                    )
+                  )
+                ) ||
+                // 3. Participant heartbeat or lobby leave
+                (
+                  isRoomParticipant(existing()) && (
+                    // Heartbeat
+                    (
+                      incoming().hostUid == existing().hostUid &&
+                      incoming().guestUid == existing().guestUid &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'players', 'hostLastSeen', 'eventLog',
+                        'lastActionMessage', 'lastActionAt', 'updatedAt'
+                      ])
+                    ) ||
+                    // Guest leaving during lobby releases slot cleanly
+                    (
+                      !(existing().status in ['playing', 'in_game', 'finished', 'completed']) &&
+                      existing().guestUid != null &&
+                      request.auth.uid == existing().guestUid &&
+                      incoming().hostUid == existing().hostUid &&
+                      incoming().guestUid == null &&
+                      incoming().status == 'waiting_for_opponent' &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'guestId', 'guestUid', 'guestName', 'players',
+                        'teamSubcategoryIds', 'categoryConfirmations', 'status',
+                        'eventLog', 'lastActionMessage', 'lastActionAt', 'updatedAt'
+                      ])
+                    )
+                  )
+                ) ||
+                // 4. Lobby category toggle & explicit confirmation (blocked once playing/finished)
+                (
+                  !(existing().status in ['playing', 'in_game', 'finished', 'completed']) &&
+                  isRoomParticipant(existing()) &&
+                  incoming().hostUid == existing().hostUid &&
+                  incoming().guestUid == existing().guestUid &&
+                  incoming().diff(existing()).affectedKeys().hasOnly([
+                    'teamSubcategoryIds', 'categoryConfirmations', 'status',
+                    'eventLog', 'lastActionMessage', 'lastActionAt', 'updatedAt'
+                  ]) && (
+                    (
+                      request.auth.uid == existing().hostUid &&
+                      incoming().categoryConfirmations.guest == existing().categoryConfirmations.guest &&
+                      (
+                        !('team_2' in existing().teamSubcategoryIds)
+                          ? (!('team_2' in incoming().teamSubcategoryIds) || incoming().teamSubcategoryIds.team_2.size() == 0)
+                          : incoming().teamSubcategoryIds.team_2 == existing().teamSubcategoryIds.team_2
+                      )
+                    ) ||
+                    (
+                      existing().guestUid != null &&
+                      request.auth.uid == existing().guestUid &&
+                      incoming().categoryConfirmations.host == existing().categoryConfirmations.host &&
+                      (
+                        !('team_1' in existing().teamSubcategoryIds)
+                          ? (!('team_1' in incoming().teamSubcategoryIds) || incoming().teamSubcategoryIds.team_1.size() == 0)
+                          : incoming().teamSubcategoryIds.team_1 == existing().teamSubcategoryIds.team_1
+                      )
+                    )
+                  )
+                ) ||
+                // 5. Host starts match (requires both confirmed & 6 unique categories)
+                (
+                  !(existing().status in ['playing', 'in_game', 'finished', 'completed']) &&
+                  request.auth.uid == existing().hostUid &&
+                  existing().guestUid != null &&
+                  existing().categoryConfirmations.host == true &&
+                  existing().categoryConfirmations.guest == true &&
+                  incoming().hostUid == existing().hostUid &&
+                  incoming().guestUid == existing().guestUid &&
+                  incoming().status == 'playing' &&
+                  incoming().selectedSubcategoryIds.size() == 6 &&
+                  incoming().usedTileKeys.size() == 0 &&
+                  incoming().activeTurnRole == 'host' &&
+                  incoming().turnNumber == 1 &&
+                  incoming().diff(existing()).affectedKeys().hasOnly([
+                    'status', 'selectedSubcategoryIds', 'teamSubcategoryIds',
+                    'activeTurnRole', 'turnNumber', 'activeTeamIndex',
+                    'usedTileKeys', 'roundUsedQuestionIds', 'activeQuestion',
+                    'lastResolvedTurn', 'winnerTeamId', 'winnerTeamName',
+                    'winnerScore', 'eventLog', 'lastActionMessage', 'lastActionAt', 'updatedAt'
+                  ])
+                ) ||
+                // 6. Active Duel Gameplay (categories & confirmations are strictly immutable here)
+                (
+                  existing().status in ['playing', 'in_game'] &&
+                  incoming().hostUid == existing().hostUid &&
+                  incoming().guestUid == existing().guestUid && (
+                    // 6a. Select Question or Wala Kalima Sync (Active Turn Owner ONLY)
+                    (
+                      isActiveTurnOwner(existing()) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'activeQuestion', 'eventLog', 'lastActionMessage', 'lastActionAt', 'updatedAt'
+                      ])
+                    ) ||
+                    // 6b. Submit Answer or Wala Kalima Commit (Active Turn Owner ONLY, atomic score + turn flip)
+                    (
+                      isActiveTurnOwner(existing()) &&
+                      incoming().activeTurnRole != existing().activeTurnRole &&
+                      incoming().turnNumber == existing().turnNumber + 1 &&
+                      incoming().usedTileKeys.size() == existing().usedTileKeys.size() + 1 &&
+                      incoming().teams[0].score >= existing().teams[0].score &&
+                      incoming().teams[0].score <= existing().teams[0].score + 2000 &&
+                      incoming().teams[1].score >= existing().teams[1].score &&
+                      incoming().teams[1].score <= existing().teams[1].score + 2000 &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'teams', 'usedTileKeys', 'roundUsedQuestionIds', 'activeQuestion',
+                        'activeTurnRole', 'activeTeamIndex', 'turnNumber', 'lastResolvedTurn',
+                        'eventLog', 'status', 'winnerTeamId', 'winnerTeamName', 'winnerScore',
+                        'lastActionMessage', 'lastActionAt', 'updatedAt'
+                      ])
+                    ) ||
+                    // 6c. Timeout / Skip Question (Either participant if timer expired or active player skipping, 0 score change)
+                    (
+                      isRoomParticipant(existing()) &&
+                      incoming().activeTurnRole != existing().activeTurnRole &&
+                      incoming().turnNumber == existing().turnNumber + 1 &&
+                      incoming().usedTileKeys.size() == existing().usedTileKeys.size() + 1 &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'usedTileKeys', 'roundUsedQuestionIds', 'activeQuestion',
+                        'activeTurnRole', 'activeTeamIndex', 'turnNumber', 'lastResolvedTurn',
+                        'eventLog', 'status', 'winnerTeamId', 'winnerTeamName', 'winnerScore',
+                        'lastActionMessage', 'lastActionAt', 'updatedAt'
+                      ])
+                    ) ||
+                    // 6d. Dismiss Resolved Question Modal (Either participant)
+                    (
+                      isRoomParticipant(existing()) &&
+                      existing().activeQuestion != null &&
+                      incoming().activeQuestion == null &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['activeQuestion', 'updatedAt'])
+                    ) ||
+                    // 6e. Host Early Finish Match
+                    (
+                      request.auth.uid == existing().hostUid &&
+                      incoming().status == 'finished' &&
+                      incoming().activeQuestion == null &&
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'status', 'activeQuestion', 'winnerTeamId', 'winnerTeamName',
+                        'winnerScore', 'eventLog', 'lastActionMessage', 'lastActionAt', 'updatedAt'
+                      ])
+                    )
+                  )
+                ) ||
+                // 7. Host Restart Match (from finished/playing/ready -> clean 0-score lobby)
+                (
+                  request.auth.uid == existing().hostUid &&
+                  incoming().hostUid == existing().hostUid &&
+                  incoming().guestUid == existing().guestUid &&
+                  incoming().teams[0].score == 0 &&
+                  incoming().teams[1].score == 0 &&
+                  incoming().usedTileKeys.size() == 0 &&
+                  incoming().categoryConfirmations.host == false &&
+                  incoming().categoryConfirmations.guest == false &&
+                  incoming().activeTurnRole == 'host' &&
+                  incoming().turnNumber == 1 &&
+                  incoming().diff(existing()).affectedKeys().hasOnly([
+                    'status', 'teams', 'usedTileKeys', 'roundUsedQuestionIds',
+                    'selectedSubcategoryIds', 'categoryConfirmations', 'activeQuestion',
+                    'lastResolvedTurn', 'activeTurnRole', 'activeTeamIndex', 'turnNumber',
+                    'winnerTeamId', 'winnerTeamName', 'winnerScore', 'eventLog',
+                    'lastActionMessage', 'lastActionAt', 'updatedAt'
+                  ])
+                ) ||
+                // 8. Guest Claim Host Role when host goes offline/stale
+                (
+                  existing().guestUid != null &&
+                  request.auth.uid == existing().guestUid &&
+                  incoming().hostUid == request.auth.uid &&
+                  incoming().guestUid == existing().hostUid &&
+                  incoming().diff(existing()).affectedKeys().hasOnly([
+                    'hostId', 'hostUid', 'hostName', 'guestId', 'guestUid', 'guestName',
+                    'teams', 'teamSubcategoryIds', 'categoryConfirmations',
+                    'activeTurnRole', 'activeTeamIndex', 'hostLastSeen', 'players',
+                    'lastActionMessage', 'lastActionAt', 'updatedAt'
+                  ])
+                )
+              )
+            )
+          )
+        ) || (
+          !isOnlineRoomDocId(sessionId) &&
+          !('mode' in existing() && existing().mode == 'host_vs_guest') &&
+          !('mode' in incoming() && incoming().mode == 'host_vs_guest')
+        )
+      );
+
+      allow delete: if isValidId(sessionId) && (
+        isAdmin() ||
+        (!isOnlineRoomDocId(sessionId) && isSignedIn() && existing().userId == request.auth.uid)
+      );
     }
 
     // MainCategories collection (Publicly readable, Admin-only write for full main category management)

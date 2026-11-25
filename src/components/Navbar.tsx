@@ -132,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 e.preventDefault();
                 handleSelect('home');
               }}
-              className="flex items-center gap-2 sm:gap-3 py-0.5 group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] rounded-xl"
+              className="flex items-center gap-2 sm:gap-3 min-h-[44px] sm:min-h-0 py-0.5 group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] rounded-xl"
             >
               <span className="h-9 w-11 sm:h-11 sm:w-[66px] md:h-12 md:w-[72px] rounded-xl bg-[#124833] overflow-hidden flex items-center justify-center shrink-0 ring-1 ring-[#14543D]/25 group-hover:ring-[#F07842] shadow-xs transition-all">
                 <img

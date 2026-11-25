@@ -228,7 +228,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
         <button
           type="button"
           onClick={onNavigateHome}
-          className="min-h-[40px] px-4 py-2 text-xs font-bold text-[#52574E] hover:text-[#1B1F1C] bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl hover:bg-[#F7F8F1] transition-colors cursor-pointer"
+          className="min-h-[44px] sm:min-h-[40px] px-4 py-2 text-xs font-bold text-[#52574E] hover:text-[#1B1F1C] bg-[#FFFFFF] border border-[#E5E8DD] rounded-xl hover:bg-[#F7F8F1] transition-colors cursor-pointer"
         >
           العودة للرئيسية
         </button>
@@ -259,7 +259,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
             <button
               type="button"
               onClick={handleResetFilters}
-              className="inline-flex items-center gap-1.5 min-h-[36px] text-xs text-[#F07842] hover:text-[#D9632E] font-bold cursor-pointer self-start sm:self-center"
+              className="inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-[36px] px-2 text-xs text-[#F07842] hover:text-[#D9632E] font-bold cursor-pointer self-start sm:self-center"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>إعادة تعيين الفلاتر</span>
@@ -283,7 +283,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="مسح البحث"
-              className="absolute left-1.5 top-1/2 -translate-y-1/2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#666B62] hover:text-[#1B1F1C] cursor-pointer"
+              className="absolute left-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded-lg text-[#666B62] hover:text-[#1B1F1C] cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -301,7 +301,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setModeFilter('all')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[44px] sm:min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   modeFilter === 'all'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
                     : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -314,7 +314,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setModeFilter('local')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[44px] sm:min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   modeFilter === 'local'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
                     : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -327,7 +327,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setModeFilter('online')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[44px] sm:min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   modeFilter === 'online'
                     ? 'bg-[#FFFFFF] text-[#F07842] shadow-xs'
                     : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -348,7 +348,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[44px] sm:min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                   statusFilter === 'all'
                     ? 'bg-[#FFFFFF] text-[#14543D] shadow-xs'
                     : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -360,7 +360,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter('completed')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[44px] sm:min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   statusFilter === 'completed'
                     ? 'bg-[#FFFFFF] text-emerald-700 shadow-xs'
                     : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -373,7 +373,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter('in_progress')}
-                className={`flex items-center justify-center gap-1 py-2 min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
+                className={`flex items-center justify-center gap-1 py-2 min-h-[44px] sm:min-h-[40px] px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer tabular-nums ${
                   statusFilter === 'in_progress'
                     ? 'bg-[#FFFFFF] text-amber-700 shadow-xs'
                     : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -552,7 +552,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
                     onClick={() => setConfirmDeleteId(m.id)}
                     title="حذف من السجل"
                     aria-label="حذف المباراة من السجل"
-                    className="min-w-[40px] min-h-[40px] text-rose-600 hover:text-rose-700 rounded-xl hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors self-end sm:self-center"
+                    className="min-w-[44px] min-h-[44px] text-rose-600 hover:text-rose-700 rounded-xl hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors self-end sm:self-center"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -560,7 +560,7 @@ export const MyMatchesPage: React.FC<MyMatchesPageProps> = ({
 
                 {/* Teams & Scores Grid */}
                 {Array.isArray(m.teams) && m.teams.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-4 gap-3">
                     {m.teams.map((t) => {
                       const isWinner = isCompleted && m.winnerTeamName === t.name;
                       return (

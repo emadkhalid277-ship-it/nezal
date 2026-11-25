@@ -363,7 +363,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   setTimeFilter('all');
                   setPlayerPage(1);
                 }}
-                className="px-3 py-2 rounded-lg border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD]/60 text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
+                className="min-h-[44px] sm:min-h-[38px] px-3 py-2 rounded-lg border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD]/60 text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-[#F07842]" />
                 <span>إعادة الضبط</span>
@@ -374,7 +374,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
               type="button"
               disabled={refreshing}
               onClick={loadData}
-              className="px-4 py-2 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-[#F3F5E9] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors disabled:opacity-50"
+              className="min-h-[44px] sm:min-h-[38px] px-4 py-2 rounded-lg bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-[#F3F5E9] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors disabled:opacity-50"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 text-[#14543D] ${
@@ -391,7 +391,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
           {/* Mode Filter */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-[#52574E]">نوع اللعب:</span>
-            <div className="flex items-center bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
+            <div className="flex flex-wrap items-center gap-1 bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
               {(
                 [
                   { id: 'all', label: 'جميع المباريات' },
@@ -406,7 +406,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                     setModeFilter(opt.id);
                     setPlayerPage(1);
                   }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     modeFilter === opt.id
                       ? 'bg-[#14543D] text-white'
                       : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -421,7 +421,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
           {/* Time Window Filter */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-[#52574E]">الفترة الزمنية:</span>
-            <div className="flex items-center bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
+            <div className="flex flex-wrap items-center gap-1 bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
               {(
                 [
                   { id: '7d', label: 'آخر 7 أيام' },
@@ -437,7 +437,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                     setTimeFilter(opt.id);
                     setPlayerPage(1);
                   }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     timeFilter === opt.id
                       ? 'bg-[#1B1F1C] text-white'
                       : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -558,7 +558,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 تطور عدد المباريات (المحلية والأونلاين)
               </h3>
             </div>
-            <div className="flex items-center bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD] self-start sm:self-center">
+            <div className="flex flex-wrap items-center gap-1 bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD] self-start sm:self-center">
               {(
                 [
                   { id: 'daily', label: 'يومي' },
@@ -570,7 +570,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   key={g.id}
                   type="button"
                   onClick={() => setTimelineGranularity(g.id)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`min-h-[44px] sm:min-h-[32px] px-3 sm:px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     timelineGranularity === g.id
                       ? 'bg-[#FFFFFF] text-[#14543D]'
                       : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -1019,7 +1019,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setLeaderboardTab(tab.id)}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   leaderboardTab === tab.id
                     ? 'bg-[#14543D] text-white'
                     : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -1129,7 +1129,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Mode filter specifically for Category Ranking */}
-            <div className="flex items-center bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
+            <div className="flex flex-wrap items-center gap-1 bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
               {(
                 [
                   { id: 'all', label: 'الكل' },
@@ -1141,7 +1141,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   key={m.id}
                   type="button"
                   onClick={() => setCategoryModeView(m.id)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     categoryModeView === m.id
                       ? 'bg-[#FFFFFF] text-[#14543D]'
                       : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -1152,7 +1152,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
               ))}
             </div>
 
-            <div className="flex items-center bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
+            <div className="flex flex-wrap items-center gap-1 bg-[#F3F5E9] p-1 rounded-lg border border-[#E5E8DD]">
               {(
                 [
                   { id: 'all', label: `الكل (${analytics.categoryStats.length})` },
@@ -1164,7 +1164,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   key={s.id}
                   type="button"
                   onClick={() => setCategoryListScope(s.id)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     categoryListScope === s.id
                       ? 'bg-[#1B1F1C] text-white'
                       : 'text-[#52574E] hover:text-[#1B1F1C]'
@@ -1266,7 +1266,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   setIncludeUnclassifiedGuests((v) => !v);
                   setPlayerPage(1);
                 }}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+                className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
                   includeUnclassifiedGuests
                     ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
                     : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#E5E8DD]/60'
@@ -1313,7 +1313,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 key={s.id}
                 type="button"
                 onClick={() => handleToggleSort(s.id)}
-                className={`px-3 py-1.5 rounded-lg font-bold border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-lg font-bold border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   playerSortField === s.id
                     ? 'bg-[#14543D] text-white border-[#14543D]'
                     : 'bg-[#FFFFFF] border-[#E5E8DD] text-[#1B1F1C] hover:bg-[#F3F5E9]'
@@ -1342,7 +1342,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                   setTimeFilter('all');
                   setPlayerPage(1);
                 }}
-                className="px-4 py-2 rounded-lg bg-[#14543D] text-white text-xs font-bold cursor-pointer"
+                className="min-h-[44px] sm:min-h-[38px] px-4 py-2 rounded-lg bg-[#14543D] text-white text-xs font-bold cursor-pointer"
               >
                 عرض جميع اللاعبين
               </button>
@@ -1507,7 +1507,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 type="button"
                 disabled={playerPage <= 1}
                 onClick={() => setPlayerPage((p) => Math.max(1, p - 1))}
-                className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F7F8F1] font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-40 transition-colors"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F7F8F1] font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-40 transition-colors"
               >
                 السابق
               </button>
@@ -1517,7 +1517,7 @@ export const AdminPlayerAnalytics: React.FC<AdminPlayerAnalyticsProps> = ({
                 onClick={() =>
                   setPlayerPage((p) => Math.min(totalPlayerPages, p + 1))
                 }
-                className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F7F8F1] font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-40 transition-colors"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F7F8F1] font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-40 transition-colors"
               >
                 التالي
               </button>

@@ -215,7 +215,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
+      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
       aria-label={`ضبط ومعاينة صورة الفئة: ${categoryLabel}`}
@@ -226,7 +226,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-3xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+        className="w-full max-w-3xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-2xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
       >
         {/* Modal Header */}
         <div className="bg-[#14543D] text-white px-5 sm:px-6 py-4 flex items-center justify-between gap-3 shrink-0">
@@ -242,7 +242,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="min-w-[40px] min-h-[40px] rounded-xl text-white/85 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors shrink-0"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl text-white/85 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors shrink-0"
             aria-label="إغلاق"
           >
             <X className="w-5 h-5" />
@@ -276,7 +276,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 <button
                   type="button"
                   onClick={() => filePickerRef.current?.click()}
-                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>اختيار صورة أخرى</span>
@@ -326,7 +326,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                     setOffset({ x: 0, y: 0 });
                   }}
                   title="إعادة ضبط التوسيط"
-                  className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#FFFFFF] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
+                  className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg bg-[#FFFFFF] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>توسيط</span>
@@ -381,12 +381,12 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 sm:px-6 py-4 bg-[#F7F8F1] border-t border-[#E5E8DD] flex items-center justify-end gap-3 shrink-0">
+        <div className="px-5 sm:px-6 py-4 bg-[#F7F8F1] border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="min-h-[42px] px-5 py-2 rounded-xl bg-[#FFFFFF] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-50 transition-colors"
+            className="min-h-[44px] sm:min-h-[42px] px-5 py-2 rounded-xl bg-[#FFFFFF] hover:bg-[#E5E8DD]/70 border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-50 transition-colors"
           >
             إلغاء
           </button>
@@ -394,7 +394,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             type="button"
             onClick={handleConfirm}
             disabled={saving || !imageElement}
-            className="min-h-[42px] px-6 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="min-h-[44px] sm:min-h-[42px] px-6 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Check className="w-4 h-4" />
             <span>

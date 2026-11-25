@@ -114,7 +114,7 @@ export const PWAInstallBanner: React.FC = () => {
       <div
         role="region"
         aria-label="تثبيت تطبيق نِزال"
-        className="fixed bottom-4 left-3 right-3 sm:left-6 sm:right-auto sm:max-w-sm z-40 bg-[#FFFFFF] border border-[#14543D]/25 rounded-2xl p-4 shadow-xl flex items-start gap-3"
+        className="fixed bottom-[68px] sm:bottom-4 left-3 right-3 sm:left-6 sm:right-auto sm:max-w-sm z-40 bg-[#FFFFFF] border border-[#14543D]/25 rounded-2xl p-4 shadow-xl flex items-start gap-3"
       >
         <div className="w-11 h-11 rounded-xl bg-[#14543D] flex items-center justify-center shrink-0 overflow-hidden p-1">
           <img
@@ -140,7 +140,7 @@ export const PWAInstallBanner: React.FC = () => {
               type="button"
               onClick={dismissBanner}
               aria-label="إغلاق إشعار التثبيت"
-              className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-xl text-[#52574E] hover:bg-[#F3F5E9] hover:text-[#1B1F1C] cursor-pointer shrink-0 transition-colors"
+              className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded-xl text-[#52574E] hover:bg-[#F3F5E9] hover:text-[#1B1F1C] cursor-pointer shrink-0 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -150,7 +150,7 @@ export const PWAInstallBanner: React.FC = () => {
             <button
               type="button"
               onClick={() => void triggerInstall()}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
               <span>{isIOS ? 'طريقة التثبيت' : 'تثبيت الآن'}</span>
@@ -158,7 +158,7 @@ export const PWAInstallBanner: React.FC = () => {
             <button
               type="button"
               onClick={dismissBanner}
-              className="min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold text-[#52574E] hover:text-[#1B1F1C] hover:bg-[#F3F5E9] cursor-pointer transition-colors"
+              className="min-h-[44px] sm:min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold text-[#52574E] hover:text-[#1B1F1C] hover:bg-[#F3F5E9] cursor-pointer transition-colors"
             >
               لاحقاً
             </button>

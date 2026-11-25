@@ -25,7 +25,7 @@ export const OfflineIndicator: React.FC = () => {
     <div
       role="status"
       aria-live="polite"
-      className={`sticky top-[61px] sm:top-[69px] z-30 w-full px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 border-b transition-colors text-center ${
+      className={`sticky top-[50px] sm:top-[64px] z-30 w-full px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 border-b transition-colors text-center ${
         isOnline
           ? 'bg-[#EAF2EE] border-[#14543D]/20 text-[#14543D]'
           : 'bg-[#FEF2EC] border-[#F07842]/35 text-[#9A3412]'

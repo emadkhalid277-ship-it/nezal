@@ -258,7 +258,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
               ? 'تفعيل الفئة وإزالة شارة قريباً'
               : 'تعطيل مؤقت بشارة قريباً'
           }
-          className={`min-h-[36px] sm:min-h-[34px] px-2 rounded-lg border cursor-pointer transition-colors flex items-center gap-1 ${
+          className={`min-h-[44px] min-w-[44px] sm:min-h-[34px] sm:min-w-[34px] px-2.5 sm:px-2 rounded-lg border cursor-pointer transition-colors flex items-center justify-center gap-1 ${
             sub.isComingSoon
               ? 'bg-[#FEF2EC] border-[#F07842]/35 text-[#F07842] hover:bg-[#FDE4D7]'
               : 'bg-[#FFFFFF] border-[#E5E8DD] text-[#52574E] hover:text-[#F07842] hover:border-[#F07842]/40'
@@ -275,7 +275,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
               ? 'تغيير صورة الفئة الفرعية من الجهاز'
               : 'اختيار صورة للفئة الفرعية من الجهاز'
           }
-          className="min-h-[36px] sm:min-h-[34px] px-2.5 py-1 text-[11px] font-bold text-[#F07842] bg-[#FEF2EC] hover:bg-[#FDE4D7] border border-[#F07842]/25 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
+          className="min-h-[44px] sm:min-h-[34px] px-3 sm:px-2.5 py-1 text-xs sm:text-[11px] font-bold text-[#F07842] bg-[#FEF2EC] hover:bg-[#FDE4D7] border border-[#F07842]/25 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
         >
           <ImageIcon className="w-3.5 h-3.5 shrink-0" />
           <span>{sub.imageUrl ? 'تغيير الصورة' : 'إضافة صورة'}</span>
@@ -285,7 +285,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           disabled={actionLoading}
           onClick={() => onMoveOrder(sub, 'up')}
           title="تقديم الترتيب"
-          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#52574E] hover:text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
+          className="min-h-[44px] min-w-[44px] sm:min-h-[34px] sm:min-w-[34px] flex items-center justify-center text-[#52574E] hover:text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
         >
           <ArrowUp className="w-3.5 h-3.5" />
         </button>
@@ -294,7 +294,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           disabled={actionLoading}
           onClick={() => onMoveOrder(sub, 'down')}
           title="تأخير الترتيب"
-          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#52574E] hover:text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
+          className="min-h-[44px] min-w-[44px] sm:min-h-[34px] sm:min-w-[34px] flex items-center justify-center text-[#52574E] hover:text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
         >
           <ArrowDown className="w-3.5 h-3.5" />
         </button>
@@ -305,7 +305,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           title={
             sub.isActive ? 'إخفاء الفئة الفرعية' : 'إظهار الفئة الفرعية'
           }
-          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#14543D] bg-[#EAF2EE]/70 hover:bg-[#EAF2EE] rounded-lg cursor-pointer transition-colors"
+          className="min-h-[44px] min-w-[44px] sm:min-h-[34px] sm:min-w-[34px] flex items-center justify-center text-[#14543D] bg-[#EAF2EE]/70 hover:bg-[#EAF2EE] rounded-lg cursor-pointer transition-colors"
         >
           {sub.isActive ? (
             <Eye className="w-3.5 h-3.5" />
@@ -317,7 +317,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           type="button"
           onClick={() => onEdit(sub)}
           title="تعديل أو إعادة تسمية أو نقل الفئة"
-          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
+          className="min-h-[44px] min-w-[44px] sm:min-h-[34px] sm:min-w-[34px] flex items-center justify-center text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] rounded-lg cursor-pointer transition-colors"
         >
           <Edit3 className="w-3.5 h-3.5" />
         </button>
@@ -326,7 +326,7 @@ const SubcategoryAdminRow = React.memo<SubcategoryAdminRowProps>(
           disabled={actionLoading}
           onClick={() => onDelete(sub)}
           title="حذف الفئة الفرعية"
-          className="min-h-[36px] sm:min-h-[34px] min-w-[34px] flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer transition-colors"
+          className="min-h-[44px] min-w-[44px] sm:min-h-[34px] sm:min-w-[34px] flex items-center justify-center text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg cursor-pointer transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -2751,7 +2751,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     key={item.id}
                     type="button"
                     onClick={() => handleSelectAdminTab(item.id)}
-                    className={`w-full min-h-[42px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                    className={`w-full min-h-[44px] sm:min-h-[42px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                       isActive
                         ? 'bg-[#FEF2EC] text-[#1B1F1C] border border-[#F07842]/35'
                         : 'text-[#52574E] hover:bg-[#F3F5E9]/80 hover:text-[#1B1F1C] border border-transparent'
@@ -3467,7 +3467,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                   handleMoveMainCategoryOrder(mainCat, 'up')
                                 }
                                 title="تقديم ترتيب الظهور"
-                                className="min-w-[34px] min-h-[34px] rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                                className="min-w-[44px] min-h-[44px] sm:min-w-[34px] sm:min-h-[34px] rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] disabled:opacity-35 flex items-center justify-center cursor-pointer"
                               >
                                 <ArrowUp className="w-3.5 h-3.5" />
                               </button>
@@ -3481,7 +3481,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                   handleMoveMainCategoryOrder(mainCat, 'down')
                                 }
                                 title="تأخير ترتيب الظهور"
-                                className="min-w-[34px] min-h-[34px] rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] disabled:opacity-35 flex items-center justify-center cursor-pointer"
+                                className="min-w-[44px] min-h-[44px] sm:min-w-[34px] sm:min-h-[34px] rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] disabled:opacity-35 flex items-center justify-center cursor-pointer"
                               >
                                 <ArrowDown className="w-3.5 h-3.5" />
                               </button>
@@ -3489,7 +3489,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 type="button"
                                 onClick={() => setPreviewMainCategory(mainCat)}
                                 title="معاينة شكل الفئة في الموقع"
-                                className="min-h-[34px] px-2.5 rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[11px] font-bold text-[#1B1F1C] cursor-pointer"
+                                className="min-h-[44px] sm:min-h-[34px] px-3 sm:px-2.5 rounded-lg bg-[#F3F5E9] hover:bg-[#E5E8DD] text-xs sm:text-[11px] font-bold text-[#1B1F1C] cursor-pointer"
                               >
                                 معاينة
                               </button>
@@ -3571,7 +3571,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             <button
                               type="button"
                               onClick={() => openEditMainCategoryModal(mainCat)}
-                              className="min-h-[40px] py-2 px-3 rounded-xl bg-[#1B1F1C] hover:bg-[#2E3430] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              className="min-h-[44px] sm:min-h-[40px] py-2 px-3 rounded-xl bg-[#1B1F1C] hover:bg-[#2E3430] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                               <span>تعديل</span>
@@ -3586,7 +3586,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                   mainCat,
                                 })
                               }
-                              className="min-h-[40px] py-2 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              className="min-h-[44px] sm:min-h-[40px] py-2 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <Crop className="w-3.5 h-3.5" />
                               <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
@@ -3598,7 +3598,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               type="button"
                               disabled={actionLoading}
                               onClick={() => handleToggleMainCategoryComingSoon(mainCat)}
-                              className={`min-h-[38px] py-1.5 px-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer border ${
+                              className={`min-h-[44px] sm:min-h-[38px] py-1.5 px-2 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer border ${
                                 mainCat.isComingSoon
                                   ? 'bg-[#EAF2EE] hover:bg-[#D7E6DF] text-[#14543D] border-[#14543D]/25'
                                   : 'bg-[#FEF2EC] hover:bg-[#FDE4D7] text-[#D9602B] border-[#F07842]/25'
@@ -3612,7 +3612,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               type="button"
                               disabled={actionLoading}
                               onClick={() => handleToggleMainCategoryActive(mainCat)}
-                              className="min-h-[38px] py-1.5 px-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-[#1B1F1C] text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                              className="min-h-[44px] sm:min-h-[38px] py-1.5 px-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] text-[#1B1F1C] text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
                             >
                               {mainCat.isActive ? (
                                 <>
@@ -3632,7 +3632,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               disabled={actionLoading}
                               onClick={() => openDeleteMainCategoryDialog(mainCat)}
                               title="حذف الفئة الرئيسية"
-                              className="min-h-[38px] py-1.5 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                              className="min-h-[44px] sm:min-h-[38px] py-1.5 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5 shrink-0" />
                               <span>حذف</span>
@@ -3694,7 +3694,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setSubMainFilter('الكل')}
-                    className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                       subMainFilter === 'الكل'
                         ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
                         : 'bg-[#F3F5E9] text-[#52574E] border-[#E5E8DD] hover:text-[#1B1F1C]'
@@ -3712,7 +3712,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         key={mainCat.id}
                         type="button"
                         onClick={() => setSubMainFilter(mainCat.id)}
-                        className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                        className={`min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
                           activeFilter
                             ? 'bg-[#F07842] text-white border-[#F07842]'
                             : 'bg-[#FFFFFF] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -3780,7 +3780,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             <button
                               type="button"
                               onClick={() => openAddSubcategoryModal(mainCat)}
-                              className="min-h-[36px] px-3 py-1.5 text-xs font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 text-xs font-bold text-[#1B1F1C] bg-[#F3F5E9] hover:bg-[#E5E8DD] border border-[#E5E8DD] rounded-xl flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
                             >
                               <Plus className="w-3.5 h-3.5 text-[#F07842]" />
                               <span>إضافة هنا</span>
@@ -3887,7 +3887,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 mainCat,
                               })
                             }
-                            className="flex-1 min-h-[40px] py-2 px-3 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3531] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            className="flex-1 min-h-[44px] sm:min-h-[40px] py-2 px-3 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3531] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                           >
                             <Crop className="w-3.5 h-3.5" />
                             <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
@@ -3899,7 +3899,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               disabled={actionLoading}
                               onClick={() => handleRemoveMainCategoryImage(mainCat)}
                               title="حذف الصورة الحالية"
-                              className="min-w-[40px] min-h-[40px] rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] flex items-center justify-center transition-colors cursor-pointer"
+                              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] flex items-center justify-center transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -3942,7 +3942,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setImgMainFilter('الكل')}
-                    className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                       imgMainFilter === 'الكل'
                         ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
                         : 'bg-[#F3F5E9] text-[#52574E] border-[#E5E8DD]'
@@ -3959,7 +3959,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         key={mc.id}
                         type="button"
                         onClick={() => setImgMainFilter(mc.id)}
-                        className={`min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                        className={`min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                           activeImgMain
                             ? 'bg-[#F07842] text-white border-[#F07842]'
                             : 'bg-[#FFFFFF] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#F3F5E9]'
@@ -4028,7 +4028,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                   subCat: sub,
                                 })
                               }
-                              className="flex-1 min-h-[40px] py-2 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              className="flex-1 min-h-[44px] sm:min-h-[40px] py-2 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                             >
                               <Upload className="w-3.5 h-3.5" />
                               <span>{hasImg ? 'تغيير الصورة' : 'رفع صورة'}</span>
@@ -4040,7 +4040,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 disabled={actionLoading}
                                 onClick={() => handleRemoveSubcategoryImage(sub)}
                                 title="حذف صورة الفئة الفرعية"
-                                className="min-w-[40px] min-h-[40px] rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] flex items-center justify-center transition-colors cursor-pointer"
+                                className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl bg-[#FFFFFF] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] flex items-center justify-center transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -4114,7 +4114,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         setMainCategoryFilter('الكل');
                         setCategoryFilter('الكل');
                       }}
-                      className="text-xs font-bold text-[#F07842] hover:underline cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[32px] px-2 text-xs font-bold text-[#F07842] hover:underline cursor-pointer inline-flex items-center"
                     >
                       عرض جميع الفئات
                     </button>
@@ -4245,7 +4245,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowDuplicatesOnly((prev) => !prev)}
-                      className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                      className={`min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                         showDuplicatesOnly
                           ? 'bg-[#F07842] text-white border-[#F07842]'
                           : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:bg-[#E5E8DD]'
@@ -4258,7 +4258,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       type="button"
                       disabled={actionLoading}
                       onClick={handleConvertExistingToDirect}
-                      className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#EAF2EE] hover:bg-[#D5E6DD] text-[#14543D] border border-[#C5DDD1] flex items-center gap-1.5 cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#EAF2EE] hover:bg-[#D5E6DD] text-[#14543D] border border-[#C5DDD1] flex items-center gap-1.5 cursor-pointer"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       <span>توحيد إلى أسئلة مباشرة</span>
@@ -4267,7 +4267,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <button
                       type="button"
                       onClick={handleExportJSON}
-                      className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>تصدير JSON</span>
@@ -4276,7 +4276,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     <button
                       type="button"
                       onClick={handleExportCSV}
-                      className="min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] border border-[#E5E8DD] flex items-center gap-1.5 cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>تصدير CSV</span>
@@ -4293,7 +4293,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={actionLoading}
-                      className="min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#1B1F1C] hover:bg-[#2F3531] text-white flex items-center gap-1.5 cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#1B1F1C] hover:bg-[#2F3531] text-white flex items-center gap-1.5 cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5 text-[#F07842]" />
                       <span>استيراد JSON / CSV</span>
@@ -4320,7 +4320,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         disabled={actionLoading}
                         onClick={() => requestBulkStatus('approved')}
-                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-[#14543D] hover:bg-[#0E3F2D] text-white rounded-lg cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-[#14543D] hover:bg-[#0E3F2D] text-white rounded-lg cursor-pointer transition-colors"
                       >
                         اعتماد المحدد
                       </button>
@@ -4328,7 +4328,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         disabled={actionLoading}
                         onClick={() => requestBulkStatus('rejected')}
-                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-[#F07842] hover:bg-[#D9632E] text-white rounded-lg cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-[#F07842] hover:bg-[#D9632E] text-white rounded-lg cursor-pointer transition-colors"
                       >
                         رفض المحدد
                       </button>
@@ -4336,14 +4336,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         disabled={actionLoading}
                         onClick={requestBulkDelete}
-                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg cursor-pointer transition-colors"
                       >
                         حذف المحدد ({selectedIds.length})
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedIds([])}
-                        className="min-h-[38px] px-3 py-1.5 text-xs font-bold bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C] rounded-lg cursor-pointer"
+                        className="min-h-[44px] sm:min-h-[38px] px-3 py-1.5 text-xs font-bold bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C] rounded-lg cursor-pointer"
                       >
                         إلغاء التحديد
                       </button>
@@ -4392,7 +4392,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       <button
                         type="button"
                         onClick={openAddModal}
-                        className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] text-white text-xs font-bold cursor-pointer"
+                        className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] text-white text-xs font-bold cursor-pointer"
                       >
                         إضافة سؤال جديد
                       </button>
@@ -4729,11 +4729,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               </div>
                             ) : null}
 
-                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
                               <button
                                 type="button"
                                 onClick={() => setPreviewQuestion(q)}
-                                className="min-h-[40px] px-3 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1 cursor-pointer"
+                                className="min-h-[44px] px-3.5 rounded-xl bg-[#F3F5E9] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-1 cursor-pointer"
                               >
                                 <Eye className="w-3.5 h-3.5" />
                                 <span>معاينة</span>
@@ -4741,7 +4741,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               <button
                                 type="button"
                                 onClick={() => openEditModal(q)}
-                                className="min-h-[40px] px-3 rounded-xl bg-[#1B1F1C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                                className="min-h-[44px] px-3.5 rounded-xl bg-[#1B1F1C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                                 <span>تعديل</span>
@@ -4750,7 +4750,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleSingleStatusChange(q.id, 'approved')}
-                                  className="min-h-[40px] px-3 rounded-xl bg-[#EAF2EE] text-[#14543D] text-xs font-bold flex items-center gap-1 cursor-pointer"
+                                  className="min-h-[44px] px-3.5 rounded-xl bg-[#EAF2EE] text-[#14543D] text-xs font-bold flex items-center gap-1 cursor-pointer"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   <span>اعتماد</span>
@@ -4759,7 +4759,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               <button
                                 type="button"
                                 onClick={() => requestSingleDelete(q)}
-                                className="min-h-[40px] px-3 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1 cursor-pointer mr-auto"
+                                className="min-h-[44px] px-3.5 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold flex items-center gap-1 cursor-pointer mr-auto"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span>حذف</span>
@@ -4798,7 +4798,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           setQuestionsPage((p) => Math.max(1, p - 1));
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] text-[#1B1F1C] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[38px] px-4 sm:px-3.5 py-1.5 text-xs font-bold rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] text-[#1B1F1C] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
                       >
                         السابق
                       </button>
@@ -4816,7 +4816,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           setQuestionsPage((p) => Math.min(totalQuestionPages, p + 1));
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className="min-h-[38px] px-3.5 py-1.5 text-xs font-bold rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] text-[#1B1F1C] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[38px] px-4 sm:px-3.5 py-1.5 text-xs font-bold rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] text-[#1B1F1C] hover:bg-[#F3F5E9] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
                       >
                         التالي
                       </button>
@@ -5017,7 +5017,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   type="button"
                   onClick={loadContributions}
                   disabled={loadingContributions}
-                  className="min-h-[42px] px-4 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-2 cursor-pointer self-start md:self-auto shrink-0 transition-colors"
+                  className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl border border-[#E5E8DD] bg-[#F3F5E9] hover:bg-[#E5E8DD] text-xs font-bold text-[#1B1F1C] flex items-center gap-2 cursor-pointer self-start md:self-auto shrink-0 transition-colors"
                 >
                   <RefreshCw
                     className={`w-4 h-4 text-[#F07842] ${loadingContributions ? 'animate-spin' : ''}`}
@@ -5032,7 +5032,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setContributionFilter('all')}
-                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
                       contributionFilter === 'all'
                         ? 'bg-[#1B1F1C] text-white'
                         : 'bg-[#F3F5E9] text-[#52574E] hover:text-[#1B1F1C]'
@@ -5043,7 +5043,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setContributionFilter('pending')}
-                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       contributionFilter === 'pending'
                         ? 'bg-[#F07842] text-white'
                         : 'bg-[#FEF2EC] text-[#D9602B] hover:bg-[#FDE4D7]'
@@ -5057,7 +5057,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setContributionFilter('approved')}
-                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       contributionFilter === 'approved'
                         ? 'bg-[#14543D] text-white'
                         : 'bg-[#EAF2EE] text-[#14543D] hover:bg-[#D7E6DF]'
@@ -5071,7 +5071,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setContributionFilter('rejected')}
-                    className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    className={`min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       contributionFilter === 'rejected'
                         ? 'bg-rose-600 text-white'
                         : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
@@ -5245,7 +5245,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           <button
                             type="button"
                             onClick={() => setPreviewContribution(item)}
-                            className="min-h-[38px] px-3 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer transition-colors"
+                            className="min-h-[44px] sm:min-h-[38px] px-3 py-1.5 rounded-xl border border-[#E5E8DD] bg-[#FFFFFF] hover:bg-[#F3F5E9] text-xs font-bold text-[#1B1F1C] flex items-center gap-1.5 cursor-pointer transition-colors"
                           >
                             <Eye className="w-3.5 h-3.5 text-[#F07842]" />
                             <span>معاينة</span>
@@ -5257,7 +5257,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 type="button"
                                 onClick={() => handleOpenRejectModal(item)}
                                 disabled={actionLoading}
-                                className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-xs font-bold text-rose-700 flex items-center gap-1.5 cursor-pointer transition-colors"
+                                className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-xs font-bold text-rose-700 flex items-center gap-1.5 cursor-pointer transition-colors"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                                 <span>رفض</span>
@@ -5267,7 +5267,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                                 type="button"
                                 onClick={() => handleApproveContribution(item)}
                                 disabled={actionLoading}
-                                className="min-h-[38px] px-4 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
+                                className="min-h-[44px] sm:min-h-[38px] px-4 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-colors"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>اعتماد ونشر</span>
@@ -5280,7 +5280,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                               type="button"
                               onClick={() => handleApproveContribution(item)}
                               disabled={actionLoading}
-                              className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#14543D] bg-[#FFFFFF] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               <span>إعادة اعتماد</span>
@@ -5345,7 +5345,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 1: ADD / EDIT MAIN CATEGORY MODAL */}
       {mainModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label={
@@ -5359,7 +5359,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+            className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-2xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
             <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <h3 className="font-display text-base sm:text-lg font-bold">
@@ -5370,7 +5370,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setMainModalOpen(false)}
-                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 sm:px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>إغلاق</span>
@@ -5420,7 +5420,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <label className="block font-bold text-[#1B1F1C]">
                         ترتيب ظهور الفئة
@@ -5553,7 +5553,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           mainCat: editingMainCategory || undefined,
                         })
                       }
-                      className="flex-1 min-h-[42px] py-2.5 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      className="flex-1 min-h-[44px] sm:min-h-[42px] py-2.5 px-3 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <Crop className="w-3.5 h-3.5" />
                       <span>
@@ -5566,7 +5566,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         onClick={() => setMainFormImageUrl('')}
                         title="إزالة الصورة"
-                        className="min-h-[42px] px-3 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] cursor-pointer"
+                        className="min-w-[44px] min-h-[44px] sm:min-h-[42px] px-3 rounded-xl bg-[#F3F5E9] hover:bg-rose-50 text-rose-700 border border-[#E5E8DD] flex items-center justify-center cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -5583,7 +5583,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     onClick={() =>
                       openDeleteMainCategoryDialog(editingMainCategory)
                     }
-                    className="min-h-[42px] px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1.5 cursor-pointer"
+                    className="min-h-[44px] sm:min-h-[42px] px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1.5 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>حذف الفئة</span>
@@ -5592,18 +5592,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   <div />
                 )}
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setMainModalOpen(false)}
-                    className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] font-bold cursor-pointer"
+                    className="min-h-[44px] sm:min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] font-bold cursor-pointer"
                   >
                     إلغاء
                   </button>
                   <button
                     type="submit"
                     disabled={actionLoading}
-                    className="min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer transition-colors"
+                    className="min-h-[44px] sm:min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer transition-colors"
                   >
                     {actionLoading ? 'جاري الحفظ...' : 'حفظ التعديلات'}
                   </button>
@@ -5617,7 +5617,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 2: WEBSITE CARD PREVIEW MODAL FOR MAIN CATEGORY */}
       {previewMainCategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label={`معاينة الفئة الرئيسية: ${previewMainCategory.name}`}
@@ -5625,7 +5625,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-[#F3F5E9] border border-[#E5E8DD] rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5"
+            className="w-full max-w-md bg-[#F3F5E9] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-y-auto max-h-[94dvh] sm:max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5"
           >
             <div className="flex items-center justify-between border-b border-[#E5E8DD] pb-3">
               <div>
@@ -5639,7 +5639,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewMainCategory(null)}
-                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 sm:px-3 py-1.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer"
               >
                 إغلاق
               </button>
@@ -5694,14 +5694,14 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   setPreviewMainCategory(null);
                   openEditMainCategoryModal(target);
                 }}
-                className="flex-1 min-h-[42px] py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold cursor-pointer transition-colors"
+                className="flex-1 min-h-[44px] sm:min-h-[42px] py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold cursor-pointer transition-colors"
               >
                 تعديل هذه الفئة
               </button>
               <button
                 type="button"
                 onClick={() => setPreviewMainCategory(null)}
-                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer"
+                className="min-h-[44px] sm:min-h-[42px] px-5 py-2.5 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] cursor-pointer"
               >
                 تم
               </button>
@@ -5713,7 +5713,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 3: SAFE DELETE MAIN CATEGORY CONFIRMATION & REASSIGNMENT DIALOG */}
       {deletingMainCategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label={`تأكيد حذف الفئة الرئيسية ${deletingMainCategory.name}`}
@@ -5723,7 +5723,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-y-auto max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5 text-xs"
+            className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-y-auto max-h-[94dvh] sm:max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5 text-xs"
           >
             <div className="flex items-start gap-3">
               <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
@@ -5821,11 +5821,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
             )}
 
-            <div className="pt-3 border-t border-[#E5E8DD] flex items-center justify-end gap-3">
+            <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setDeletingMainCategory(null)}
-                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-bold cursor-pointer"
+                className="min-h-[44px] sm:min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-bold cursor-pointer"
               >
                 إلغاء
               </button>
@@ -5833,7 +5833,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 type="button"
                 disabled={actionLoading}
                 onClick={handleConfirmDeleteMainCategory}
-                className="min-h-[42px] px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
+                className="min-h-[44px] sm:min-h-[42px] px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
               >
                 {actionLoading ? 'جاري التنفيذ...' : 'تأكيد حذف الفئة'}
               </button>
@@ -5845,7 +5845,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 4: ADD / EDIT SUBCATEGORY MODAL */}
       {subModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/60 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label={
@@ -5859,7 +5859,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col"
+            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
             <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <h3 className="font-display text-base sm:text-lg font-bold">
@@ -5870,7 +5870,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setSubModalOpen(false)}
-                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 sm:px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>إغلاق</span>
@@ -5951,7 +5951,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="block font-bold text-[#1B1F1C]">
                     ترتيب العرض (Sort Order)
@@ -6044,7 +6044,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             subCat: editingSubcategory || undefined,
                           })
                         }
-                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>
@@ -6061,7 +6061,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             setSubFormImageUrl('');
                             setSubModalFeedback(null);
                           }}
-                          className="min-h-[40px] px-3 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-rose-50 text-rose-700 font-bold cursor-pointer"
+                          className="min-h-[44px] sm:min-h-[40px] px-3 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-rose-50 text-rose-700 font-bold cursor-pointer"
                         >
                           إزالة الصورة
                         </button>
@@ -6074,18 +6074,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-[#E5E8DD] flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setSubModalOpen(false)}
-                  className="min-h-[42px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[42px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer transition-colors"
+                  className="min-h-[44px] sm:min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer transition-colors"
                 >
                   {actionLoading ? 'جاري الحفظ...' : 'حفظ الفئة الفرعية'}
                 </button>
@@ -6098,7 +6098,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 5: SAFE DELETE SUBCATEGORY CONFIRMATION DIALOG */}
       {deletingSubcategory && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label={`تأكيد حذف الفئة الفرعية ${deletingSubcategory.name}`}
@@ -6108,7 +6108,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-2xl overflow-hidden shadow-2xl p-6 space-y-5 text-xs"
+            className="w-full max-w-lg bg-[#FFFFFF] border-2 border-rose-200 rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-y-auto max-h-[94dvh] sm:max-h-[92dvh] shadow-2xl p-4 sm:p-6 space-y-5 text-xs"
           >
             <div className="flex items-start gap-3">
               <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
@@ -6213,11 +6213,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
             )}
 
-            <div className="pt-3 border-t border-[#E5E8DD] flex items-center justify-end gap-3">
+            <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setDeletingSubcategory(null)}
-                className="min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-bold cursor-pointer"
+                className="min-h-[44px] sm:min-h-[42px] px-5 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-bold cursor-pointer"
               >
                 إلغاء
               </button>
@@ -6225,7 +6225,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 type="button"
                 disabled={actionLoading}
                 onClick={handleConfirmDeleteSubcategory}
-                className="min-h-[42px] px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
+                className="min-h-[44px] sm:min-h-[42px] px-6 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer"
               >
                 {actionLoading ? 'جاري الحذف...' : 'تأكيد الحذف'}
               </button>
@@ -6237,7 +6237,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL 6: ADD / EDIT QUESTION MODAL */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/60 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/60 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label={editingQuestionId ? 'تعديل بيانات السؤال' : 'إضافة سؤال جديد'}
@@ -6247,7 +6247,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-xl max-h-[92dvh] flex flex-col"
+            className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
             <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <h3 className="font-display text-base sm:text-lg font-bold">
@@ -6257,7 +6257,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 type="button"
                 disabled={actionLoading}
                 onClick={handleCloseQuestionModal}
-                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 sm:px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>إغلاق</span>
@@ -6307,7 +6307,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       setFormMediaType('text');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
+                    className={`px-3 py-2.5 min-h-[44px] sm:min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'text'
                         ? 'bg-[#1B1F1C] text-white border-[#1B1F1C]'
                         : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#1B1F1C]/40'
@@ -6324,7 +6324,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       setFormMediaType('image');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
+                    className={`px-3 py-2.5 min-h-[44px] sm:min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'image'
                         ? 'bg-[#F07842] text-white border-[#F07842]'
                         : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#F07842]/40'
@@ -6341,7 +6341,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       setFormMediaType('audio');
                       setQuestionModalError(null);
                     }}
-                    className={`px-3 py-2.5 min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
+                    className={`px-3 py-2.5 min-h-[44px] sm:min-h-[42px] rounded-xl border text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60 ${
                       formMediaType === 'audio'
                         ? 'bg-[#14543D] text-white border-[#14543D]'
                         : 'bg-[#F3F5E9] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#14543D]/40'
@@ -6447,7 +6447,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         disabled={actionLoading}
                         onClick={() => questionImageInputRef.current?.click()}
-                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                        className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>
@@ -6462,7 +6462,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           type="button"
                           disabled={actionLoading}
                           onClick={handleRemoveQuestionImage}
-                          className="min-h-[40px] px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
+                          className="min-h-[44px] sm:min-h-[40px] px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>إزالة الصورة</span>
@@ -6562,7 +6562,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         type="button"
                         disabled={actionLoading}
                         onClick={() => questionAudioInputRef.current?.click()}
-                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                        className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>
@@ -6577,7 +6577,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                           type="button"
                           disabled={actionLoading}
                           onClick={handleRemoveQuestionAudio}
-                          className="min-h-[40px] px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
+                          className="min-h-[44px] sm:min-h-[40px] px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>إزالة المقطع</span>
@@ -6647,7 +6647,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                             key={String(opt.value)}
                             type="button"
                             onClick={() => setFormAudioMaxPlays(opt.value)}
-                            className={`min-h-[36px] px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                            className={`min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
                               isSelected
                                 ? 'bg-[#F07842] text-white border-[#F07842]'
                                 : 'bg-[#FFFFFF] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#F07842]/50'
@@ -6743,19 +6743,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-[#E5E8DD] flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-3">
                 <button
                   type="button"
                   disabled={actionLoading}
                   onClick={handleCloseQuestionModal}
-                  className="min-h-[42px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer disabled:opacity-50"
+                  className="min-h-[44px] sm:min-h-[42px] px-4 py-2.5 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer disabled:opacity-50"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  className="min-h-[44px] sm:min-h-[42px] px-6 py-2.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {actionLoading
                     ? pendingQuestionImageFile
@@ -6774,7 +6774,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: REJECT CONTRIBUTION REASON */}
       {rejectModalContribution && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label="رفض مساهمة السؤال"
@@ -6784,7 +6784,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-2xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
             <div className="bg-rose-700 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
@@ -6794,7 +6794,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setRejectModalContribution(null)}
-                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 sm:px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>إغلاق</span>
@@ -6822,11 +6822,11 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 />
               </div>
 
-              <div className="pt-3 border-t border-[#E5E8DD] flex items-center justify-end gap-2.5">
+              <div className="pt-3 border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setRejectModalContribution(null)}
-                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -6834,7 +6834,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   type="button"
                   onClick={handleConfirmReject}
                   disabled={actionLoading}
-                  className="min-h-[42px] px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
+                  className="min-h-[44px] sm:min-h-[42px] px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
                 >
                   {actionLoading ? 'جاري الحفظ...' : 'تأكيد الرفض'}
                 </button>
@@ -6847,7 +6847,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: PREVIEW QUESTION IN GAME BOARD (CONTRIBUTION) */}
       {previewContribution && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label="معاينة السؤال كما يظهر في لوحة المنافسة"
@@ -6855,7 +6855,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-2xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
             <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
@@ -6865,7 +6865,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewContribution(null)}
-                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 sm:px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>إغلاق</span>
@@ -6917,7 +6917,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setPreviewContribution(null)}
-                  className="min-h-[42px] px-6 py-2 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3531] text-white font-bold text-xs cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[42px] px-6 py-2 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3531] text-white font-bold text-xs cursor-pointer"
                 >
                   إغلاق المعاينة
                 </button>
@@ -6930,7 +6930,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: QUESTION BANK PREVIEW MODAL */}
       {previewQuestion && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label="معاينة السؤال والإجابة"
@@ -6938,7 +6938,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+            className="w-full max-w-xl bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-2xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
             <div className="bg-[#1B1F1C] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
@@ -6948,7 +6948,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               <button
                 type="button"
                 onClick={() => setPreviewQuestion(null)}
-                className="min-h-[38px] px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
+                className="min-h-[44px] sm:min-h-[38px] px-3.5 sm:px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>إغلاق</span>
@@ -7054,7 +7054,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       setPreviewQuestion(null);
                       openEditModal(target);
                     }}
-                    className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                    className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                     <span>تعديل السؤال</span>
@@ -7068,7 +7068,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         setPreviewQuestion(null);
                         handleSingleStatusChange(targetId, 'approved');
                       }}
-                      className="min-h-[42px] px-4 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white font-bold flex items-center gap-1.5 cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>اعتماد</span>
@@ -7083,7 +7083,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                         setPreviewQuestion(null);
                         handleSingleStatusChange(targetId, 'rejected');
                       }}
-                      className="min-h-[42px] px-4 py-2 rounded-xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#D9602B] hover:bg-[#FDE4D7] font-bold flex items-center gap-1.5 cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#FEF2EC] border border-[#F07842]/40 text-[#D9602B] hover:bg-[#FDE4D7] font-bold flex items-center gap-1.5 cursor-pointer"
                     >
                       <XCircle className="w-3.5 h-3.5" />
                       <span>رفض</span>
@@ -7094,7 +7094,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setPreviewQuestion(null)}
-                  className="min-h-[42px] px-5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] font-bold cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[42px] px-5 py-2 rounded-xl bg-[#F3F5E9] hover:bg-[#E5E8DD] text-[#1B1F1C] font-bold cursor-pointer"
                 >
                   إغلاق
                 </button>
@@ -7107,7 +7107,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: CONFIRM BULK STATUS UPDATE */}
       {bulkStatusConfirmModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label={
@@ -7121,10 +7121,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl"
+            className="w-full max-w-md bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-2xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
             <div
-              className={`px-5 py-4 flex items-center justify-between text-white ${
+              className={`px-5 py-4 flex items-center justify-between text-white shrink-0 ${
                 bulkStatusConfirmModal.status === 'approved'
                   ? 'bg-[#14543D]'
                   : 'bg-[#F07842]'
@@ -7146,13 +7146,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 type="button"
                 disabled={actionLoading}
                 onClick={() => setBulkStatusConfirmModal(null)}
-                className="min-h-[36px] px-2.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
+                className="min-h-[44px] sm:min-h-[36px] px-3 sm:px-2.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
               >
                 إغلاق
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs text-right">
+            <div className="p-4 sm:p-5 space-y-4 text-xs text-right overflow-y-auto">
               <div className="bg-[#F3F5E9] border border-[#E5E8DD] rounded-xl p-4 space-y-1.5">
                 <div className="font-bold text-[#1B1F1C] text-sm">
                   {bulkStatusConfirmModal.status === 'approved'
@@ -7168,12 +7168,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-[#E5E8DD] flex items-center justify-end gap-2.5">
+              <div className="pt-2 border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-2.5">
                 <button
                   type="button"
                   disabled={actionLoading}
                   onClick={() => setBulkStatusConfirmModal(null)}
-                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -7181,7 +7181,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   type="button"
                   disabled={actionLoading}
                   onClick={executeConfirmedBulkStatus}
-                  className={`min-h-[42px] px-5 py-2 rounded-xl text-white font-bold cursor-pointer disabled:opacity-60 transition-colors ${
+                  className={`min-h-[44px] sm:min-h-[42px] px-5 py-2 rounded-xl text-white font-bold cursor-pointer disabled:opacity-60 transition-colors ${
                     bulkStatusConfirmModal.status === 'approved'
                       ? 'bg-[#14543D] hover:bg-[#0E3F2D]'
                       : 'bg-[#F07842] hover:bg-[#D9632E]'
@@ -7202,7 +7202,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       {/* MODAL: CONFIRM QUESTION(S) PERMANENT DELETE */}
       {deleteConfirmModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/70 backdrop-blur-xs"
           role="dialog"
           aria-modal="true"
           aria-label="تأكيد الحذف النهائي للأسئلة"
@@ -7215,9 +7215,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl overflow-hidden shadow-2xl max-h-[92dvh] flex flex-col"
+            className="w-full max-w-lg bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-2xl overflow-hidden shadow-2xl max-h-[94dvh] sm:max-h-[92dvh] flex flex-col"
           >
-            <div className="bg-rose-700 text-white px-5 py-4 flex items-center justify-between">
+            <div className="bg-rose-700 text-white px-5 py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <AlertTriangle className="w-4 h-4" />
                 <span>تأكيد الحذف النهائي للأسئلة</span>
@@ -7229,13 +7229,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   setDeleteConfirmModal(null);
                   setDeleteModalError(null);
                 }}
-                className="min-h-[36px] px-2.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
+                className="min-h-[44px] sm:min-h-[36px] px-3 sm:px-2.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-bold cursor-pointer"
               >
                 إغلاق
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs text-right overflow-y-auto">
+            <div className="p-4 sm:p-5 space-y-4 text-xs text-right overflow-y-auto">
               <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-1.5">
                 <div className="font-bold text-rose-900 text-sm">
                   {deleteConfirmModal.scopeLabel}
@@ -7268,7 +7268,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                 </div>
               )}
 
-              <div className="pt-2 border-t border-[#E5E8DD] flex items-center justify-end gap-2.5">
+              <div className="pt-2 border-t border-[#E5E8DD] flex flex-wrap items-center justify-end gap-2.5">
                 <button
                   type="button"
                   disabled={actionLoading}
@@ -7276,7 +7276,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     setDeleteConfirmModal(null);
                     setDeleteModalError(null);
                   }}
-                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#F3F5E9] text-[#1B1F1C] font-semibold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -7284,7 +7284,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   type="button"
                   disabled={actionLoading}
                   onClick={handleExecuteConfirmedDelete}
-                  className="min-h-[42px] px-5 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer disabled:opacity-60"
+                  className="min-h-[44px] sm:min-h-[42px] px-5 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold cursor-pointer disabled:opacity-60"
                 >
                   {actionLoading
                     ? 'جاري تنفيذ الحذف...'

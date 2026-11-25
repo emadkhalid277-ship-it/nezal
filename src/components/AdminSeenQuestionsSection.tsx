@@ -428,7 +428,7 @@ export const AdminSeenQuestionsSection: React.FC<
           type="button"
           onClick={loadSeenAnalytics}
           disabled={loading}
-          className="min-h-[42px] px-4 py-2 rounded-xl border border-[#E5E8DD] bg-[#F7F8F1] hover:bg-[#E5E8DD]/70 text-xs font-bold text-[#14543D] flex items-center justify-center gap-2 cursor-pointer shrink-0 whitespace-nowrap transition-colors disabled:opacity-50"
+          className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl border border-[#E5E8DD] bg-[#F7F8F1] hover:bg-[#E5E8DD]/70 text-xs font-bold text-[#14543D] flex items-center justify-center gap-2 cursor-pointer shrink-0 whitespace-nowrap transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span>تحديث السجلات</span>
@@ -465,7 +465,7 @@ export const AdminSeenQuestionsSection: React.FC<
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div className="space-y-1">
               <div className="font-display text-sm font-bold text-[#1B1F1C]">
                 إعادة الأسئلة القديمة بعد انتهاء الجديدة
@@ -477,7 +477,7 @@ export const AdminSeenQuestionsSection: React.FC<
             <button
               type="button"
               onClick={() => setAllowRepeatAfterExhaustion((v) => !v)}
-              className={`min-h-[40px] px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
+              className={`min-h-[44px] sm:min-h-[40px] w-full sm:w-auto px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
                 allowRepeatAfterExhaustion
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] text-[#52574E] border border-[#E5E8DD] hover:border-[#F07842]/50'
@@ -487,7 +487,7 @@ export const AdminSeenQuestionsSection: React.FC<
             </button>
           </div>
 
-          <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="bg-[#F7F8F1] border border-[#E5E8DD] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div className="space-y-1">
               <div className="font-display text-sm font-bold text-[#1B1F1C]">
                 تسجيل الأسئلة للمشاهدين (أونلاين)
@@ -499,7 +499,7 @@ export const AdminSeenQuestionsSection: React.FC<
             <button
               type="button"
               onClick={() => setTrackSpectators((v) => !v)}
-              className={`min-h-[40px] px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
+              className={`min-h-[44px] sm:min-h-[40px] w-full sm:w-auto px-4 py-2 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
                 trackSpectators
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] text-[#52574E] border border-[#E5E8DD] hover:border-[#F07842]/50'
@@ -640,7 +640,7 @@ export const AdminSeenQuestionsSection: React.FC<
                         <button
                           type="button"
                           onClick={() => setSelectedUserIdForBreakdown(u.uid)}
-                          className={`min-h-[36px] px-3 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-colors whitespace-nowrap ${
+                          className={`min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-colors whitespace-nowrap ${
                             selectedUserIdForBreakdown === u.uid
                               ? 'bg-[#14543D] text-white border-[#14543D]'
                               : 'bg-[#FFFFFF] text-[#14543D] border-[#E5E8DD] hover:bg-[#EAF2EE]'
@@ -652,7 +652,7 @@ export const AdminSeenQuestionsSection: React.FC<
                           type="button"
                           disabled={u.seenUniqueCount === 0}
                           onClick={() => setResetTargetUser(u)}
-                          className="min-h-[36px] px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap transition-colors"
+                          className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap transition-colors"
                         >
                           <RotateCcw className="w-3 h-3" />
                           <span>تصفير السجل</span>

@@ -483,13 +483,13 @@ export const WalaKalimaBoardModal: React.FC<WalaKalimaBoardModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#1B1F1C]/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4"
+      className="fixed inset-0 z-50 bg-[#1B1F1C]/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={`ولا كلمة: ${contentMeta.label}`}
       dir="rtl"
     >
-      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl overflow-hidden max-w-xl w-full max-h-[94dvh] flex flex-col shadow-2xl">
+      <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-3xl overflow-hidden max-w-xl w-full max-h-[94dvh] flex flex-col shadow-2xl">
         {/* Top Modal Header */}
         <div className="bg-[#1B1F1C] text-white px-3.5 sm:px-6 py-3 sm:py-4 flex items-start justify-between gap-3 shrink-0">
           <div className="space-y-1.5 min-w-0">

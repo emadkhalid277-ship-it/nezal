@@ -42,6 +42,41 @@ export interface RoomTeam {
   score: number;
 }
 
+export type TurnRole = 'host' | 'guest';
+
+export type RoomEventType =
+  | 'room_created'
+  | 'player_joined'
+  | 'player_reconnected'
+  | 'player_disconnected'
+  | 'categories_updated'
+  | 'categories_confirmed'
+  | 'match_started'
+  | 'question_selected'
+  | 'answer_submitted'
+  | 'question_timeout'
+  | 'match_finished'
+  | 'match_restarted';
+
+export interface RoomEventEntry {
+  id: string;
+  type: RoomEventType;
+  timestamp: number;
+  actorRole?: TurnRole | 'system';
+  actorName?: string;
+  tileKey?: string;
+  subcategoryName?: string;
+  points?: number;
+  questionText?: string;
+  submittedAnswer?: string;
+  correctAnswer?: string;
+  isCorrect?: boolean;
+  earnedPoints?: number;
+  nextTurnRole?: TurnRole;
+  nextTurnName?: string;
+  message: string;
+}
+
 export interface ActiveQuestionState {
   tileKey: string;
   questionId: string;
@@ -61,6 +96,17 @@ export interface ActiveQuestionState {
   isAnswerRevealed: boolean;
   openedAt: number;
   openedByHostId: string;
+  openedByRole?: TurnRole;
+  openedByUid?: string;
+  openedByName?: string;
+  submissionStatus?: 'awaiting_answer' | 'resolved';
+  submittedByRole?: TurnRole | null;
+  submittedByUid?: string | null;
+  submittedByName?: string | null;
+  submittedAnswer?: string | null;
+  isCorrect?: boolean | null;
+  earnedPoints?: number;
+  resolvedAt?: number | null;
   isWalaKalima?: boolean;
   walaKalimaMeta?: {
     sessionId: string;
@@ -98,8 +144,13 @@ export interface PlayerRequest {
 export interface OnlineGameRoom {
   id: string; // 6-char room code
   code: string;
+  mode?: 'host_vs_guest';
   hostId: string;
+  hostUid?: string;
   hostName: string;
+  guestId?: string | null;
+  guestUid?: string | null;
+  guestName?: string | null;
   status: RoomStatus;
   maxPlayers: number;
   allowPlayerTeamSelection: boolean;
@@ -109,10 +160,18 @@ export interface OnlineGameRoom {
   spectators?: Record<string, RoomSpectator>;
   selectedSubcategoryIds: string[];
   teamSubcategoryIds: Record<string, string[]>;
+  categoryConfirmations?: {
+    host: boolean;
+    guest: boolean;
+  };
+  activeTurnRole?: TurnRole;
+  turnNumber?: number;
   activeTeamIndex: number;
   usedTileKeys: string[];
   roundUsedQuestionIds: string[];
   activeQuestion: ActiveQuestionState | null;
+  lastResolvedTurn?: RoomEventEntry | null;
+  eventLog?: RoomEventEntry[];
   winnerTeamId: string | null;
   winnerTeamName: string | null;
   winnerScore: number;

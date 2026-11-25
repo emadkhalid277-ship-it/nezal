@@ -1126,7 +1126,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
             <button
               type="button"
               onClick={onGoToCategories}
-              className="px-3.5 py-1.5 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3530] text-white font-bold cursor-pointer"
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-[#1B1F1C] hover:bg-[#2F3530] text-white font-bold cursor-pointer"
             >
               تغيير الفئات
             </button>
@@ -1135,14 +1135,14 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
 
         {/* 2. DYNAMIC SUBCATEGORIES GAME BOARD (Responsive across Mobile, Tablet, Laptop & Large TV) */}
         {boardColumns.length === 0 ? (
-          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-12 text-center space-y-4">
+          <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-8 sm:p-12 text-center space-y-4">
             <p className="font-display text-lg font-bold text-[#1B1F1C]">
               لم يتم اختيار أي فئات فرعية للوحة اللعب بعد
             </p>
             <button
               type="button"
               onClick={onGoToCategories}
-              className="px-6 py-3 text-xs font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl cursor-pointer"
+              className="min-h-[44px] px-6 py-3 text-xs font-bold text-white bg-[#F07842] hover:bg-[#D9632E] rounded-xl cursor-pointer"
             >
               اختر الفئات الفرعية الآن
             </button>
@@ -1150,10 +1150,10 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
         ) : (
           <section
             aria-label="لوحة الأسئلة حسب الفئات الفرعية المختارة"
-            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-3 sm:p-5 lg:p-6 shadow-xs space-y-4"
+            className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl p-3 sm:p-5 lg:p-6 shadow-xs space-y-4"
           >
-            {/* MOBILE 2-COLUMN BOARD (Zero horizontal scrolling on phones) */}
-            <div className="grid grid-cols-2 gap-3 md:hidden" data-testid="mobile-game-board">
+            {/* MOBILE & TABLET VERTICAL GRID BOARD (2 cols on phone, 3 cols on tablet — Zero horizontal scrolling) */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 lg:hidden" data-testid="mobile-game-board">
               {boardColumns.map((col) => {
                 const isColExhausted = exhaustedSubKeySet.has(
                   col.subId || col.subName
@@ -1294,8 +1294,8 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
               })}
             </div>
 
-            {/* DESKTOP & TABLET MULTI-COLUMN BOARD */}
-            <div className="hidden md:block space-y-3" data-testid="desktop-game-board">
+            {/* DESKTOP CLASSIC MULTI-COLUMN BOARD (>= 1024px) */}
+            <div className="hidden lg:block space-y-3" data-testid="desktop-game-board">
               {boardColumns.length > 4 && (
                 <div className="flex items-center justify-between text-xs text-[#52574E] pb-1">
                   <span>
@@ -1467,14 +1467,14 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
         {/* 3. ACTIVE QUESTION STAGE MODAL */}
         {activeSelection && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/75 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
             aria-labelledby="active-question-heading"
           >
             <motion.div
               {...getQuestionCardFeedbackAnimation(feedbackBanner?.type, effects)}
-              className={`relative w-full max-w-3xl max-h-[94dvh] flex flex-col bg-[#FFFFFF] border rounded-3xl overflow-hidden shadow-2xl transition-colors duration-200 ${
+              className={`relative w-full max-w-3xl max-h-[94dvh] flex flex-col bg-[#FFFFFF] border rounded-t-3xl rounded-b-none sm:rounded-3xl overflow-hidden shadow-2xl transition-colors duration-200 ${
                 feedbackBanner?.type === 'correct' && effects.correct
                   ? 'border-emerald-500 ring-4 ring-emerald-500/30'
                   : feedbackBanner?.type === 'wrong' && effects.wrong
@@ -1681,7 +1681,7 @@ export const GameBoardPage: React.FC<GameBoardPageProps> = ({
                               activeSelection.question.imageUrl || null
                             )
                           }
-                          className="absolute bottom-2 left-2 min-h-[36px] px-3 py-1.5 rounded-lg bg-[#1B1F1C]/85 hover:bg-[#1B1F1C] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                          className="absolute bottom-2 left-2 min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg bg-[#1B1F1C]/85 hover:bg-[#1B1F1C] text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
                           title="تكبير الصورة"
                         >
                           <ZoomIn className="w-3.5 h-3.5" />

@@ -291,7 +291,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     setError(null);
                     setSuccessMessage(null);
                   }}
-                  className="min-h-[36px] px-1 text-[11px] font-bold text-[#F07842] hover:underline cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[36px] px-2 inline-flex items-center text-[11px] font-bold text-[#F07842] hover:underline cursor-pointer"
                 >
                   نسيت كلمة المرور؟
                 </button>

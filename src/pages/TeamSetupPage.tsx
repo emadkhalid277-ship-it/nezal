@@ -388,7 +388,7 @@ export const TeamSetupPage: React.FC<TeamSetupPageProps> = ({
                     <button
                       type="button"
                       onClick={() => onBackToCategories(index)}
-                      className="min-h-[40px] px-2.5 text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer transition-colors"
+                      className="min-h-[44px] sm:min-h-[40px] px-2.5 text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer transition-colors"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>

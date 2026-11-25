@@ -242,7 +242,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <button
                     type="button"
                     onClick={() => goTo('home')}
-                    className="group inline-flex items-center gap-2 min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
+                    className="group inline-flex items-center gap-2 min-h-[44px] sm:min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 text-[#F07842]/70 group-hover:text-[#F07842] transition-colors" />
                     <span>الرئيسية</span>
@@ -252,7 +252,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <button
                     type="button"
                     onClick={goToHowToPlay}
-                    className="group inline-flex items-center gap-2 min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
+                    className="group inline-flex items-center gap-2 min-h-[44px] sm:min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 text-[#F07842]/70 group-hover:text-[#F07842] transition-colors" />
                     <span>طريقة اللعب</span>
@@ -262,7 +262,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveModal('faq')}
-                    className="group inline-flex items-center gap-2 min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
+                    className="group inline-flex items-center gap-2 min-h-[44px] sm:min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 text-[#F07842]/70 group-hover:text-[#F07842] transition-colors" />
                     <span>الأسئلة الشائعة</span>
@@ -272,7 +272,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <button
                     type="button"
                     onClick={() => goTo('contact')}
-                    className="group inline-flex items-center gap-2 min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
+                    className="group inline-flex items-center gap-2 min-h-[44px] sm:min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 text-[#F07842]/70 group-hover:text-[#F07842] transition-colors" />
                     <span>تواصل معنا</span>
@@ -304,7 +304,7 @@ export const Footer: React.FC<FooterProps> = ({
                     <button
                       type="button"
                       onClick={() => goTo('home')}
-                      className="font-display text-2xl font-bold text-[#FFFFFF] hover:text-[#F07842] transition-colors cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[36px] inline-flex items-center px-2 font-display text-2xl font-bold text-[#FFFFFF] hover:text-[#F07842] transition-colors cursor-pointer"
                     >
                       {brandName || 'نِزال'}
                     </button>
@@ -316,7 +316,7 @@ export const Footer: React.FC<FooterProps> = ({
                           setEditingBrand(true);
                         }}
                         title="تعديل اسم المنصة"
-                        className="text-[11px] text-[#C5CBBF] hover:text-white flex items-center gap-1 px-2.5 py-1 rounded-lg border border-white/15 bg-white/5 cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[32px] text-[11px] text-[#C5CBBF] hover:text-white flex items-center gap-1 px-2.5 py-1 rounded-lg border border-white/15 bg-white/5 cursor-pointer transition-colors"
                       >
                         <Edit3 className="w-3 h-3 text-[#F07842]" />
                         <span>تغيير</span>
@@ -333,12 +333,12 @@ export const Footer: React.FC<FooterProps> = ({
                       value={draftBrand}
                       onChange={(e) => setDraftBrand(e.target.value)}
                       maxLength={40}
-                      className="px-3 py-1.5 text-sm bg-[#272B27] border border-[#F07842] rounded-lg text-white focus:outline-none"
+                      className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 text-sm bg-[#272B27] border border-[#F07842] rounded-lg text-white focus:outline-none"
                       aria-label="اسم المنصة"
                     />
                     <button
                       type="submit"
-                      className="min-w-[36px] min-h-[36px] p-1.5 bg-[#F07842] text-white rounded-lg hover:bg-[#D9632E] cursor-pointer flex items-center justify-center"
+                      className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] p-1.5 bg-[#F07842] text-white rounded-lg hover:bg-[#D9632E] cursor-pointer flex items-center justify-center"
                       aria-label="حفظ الاسم"
                     >
                       <Check className="w-4 h-4" />
@@ -449,7 +449,7 @@ export const Footer: React.FC<FooterProps> = ({
                     <button
                       type="button"
                       onClick={() => setActiveModal('about')}
-                      className="group inline-flex items-center gap-2 min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
+                      className="group inline-flex items-center gap-2 min-h-[44px] sm:min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
                     >
                       <Info className="w-3.5 h-3.5 text-[#14543D] group-hover:text-[#F07842] transition-colors" />
                       <span>عن المنصة</span>
@@ -459,7 +459,7 @@ export const Footer: React.FC<FooterProps> = ({
                     <button
                       type="button"
                       onClick={() => setActiveModal('privacy')}
-                      className="group inline-flex items-center gap-2 min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
+                      className="group inline-flex items-center gap-2 min-h-[44px] sm:min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
                     >
                       <Shield className="w-3.5 h-3.5 text-[#14543D] group-hover:text-[#F07842] transition-colors" />
                       <span>سياسة الخصوصية</span>
@@ -469,7 +469,7 @@ export const Footer: React.FC<FooterProps> = ({
                     <button
                       type="button"
                       onClick={() => setActiveModal('terms')}
-                      className="group inline-flex items-center gap-2 min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
+                      className="group inline-flex items-center gap-2 min-h-[44px] sm:min-h-[36px] text-[#C5CBBF] hover:text-[#F07842] transition-all duration-200 hover:-translate-x-1 cursor-pointer"
                     >
                       <FileText className="w-3.5 h-3.5 text-[#14543D] group-hover:text-[#F07842] transition-colors" />
                       <span>شروط الاستخدام</span>
@@ -509,7 +509,7 @@ export const Footer: React.FC<FooterProps> = ({
             <button
               type="button"
               onClick={scrollToTop}
-              className="inline-flex items-center gap-2 min-h-[40px] px-4 py-2 rounded-xl bg-[#272B27] hover:bg-[#F07842] border border-white/15 hover:border-[#F07842] text-[#F3F5E9] hover:text-white font-bold transition-all duration-200 cursor-pointer group"
+              className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-xl bg-[#272B27] hover:bg-[#F07842] border border-white/15 hover:border-[#F07842] text-[#F3F5E9] hover:text-white font-bold transition-all duration-200 cursor-pointer group"
             >
               <span>العودة إلى أعلى الصفحة</span>
               <ArrowUp className="w-3.5 h-3.5 text-[#F07842] group-hover:text-white group-hover:-translate-y-0.5 transition-all" />
@@ -650,7 +650,7 @@ export const Footer: React.FC<FooterProps> = ({
                           key={opt.id}
                           type="button"
                           onClick={() => setReportType(opt.id)}
-                          className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                          className={`min-h-[44px] py-2 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                             reportType === opt.id
                               ? 'bg-[#14543D] text-white border-[#14543D]'
                               : 'bg-[#F7F8F1] text-[#1B1F1C] border-[#E5E8DD] hover:border-[#F07842]'
@@ -687,7 +687,7 @@ export const Footer: React.FC<FooterProps> = ({
                         setActiveModal(null);
                         goTo('contact');
                       }}
-                      className="min-h-[40px] text-xs font-bold text-[#14543D] hover:text-[#F07842] cursor-pointer"
+                      className="min-h-[44px] inline-flex items-center text-xs font-bold text-[#14543D] hover:text-[#F07842] cursor-pointer"
                     >
                       أو عرض جميع قنوات التواصل →
                     </button>

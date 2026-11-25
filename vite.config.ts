@@ -1,14 +1,50 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, type Plugin} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
+
+function pwaDevHmrGuardPlugin(): Plugin {
+  let hmrEnabled = true;
+  return {
+    name: 'pwa-dev-hmr-guard',
+    apply: 'serve',
+    configResolved(config) {
+      hmrEnabled = config.server.hmr !== false;
+    },
+    transform(code, id) {
+      if (!id.includes('pwa-entry-point-loaded')) {
+        return null;
+      }
+      if (!hmrEnabled) {
+        return {
+          code: 'export default function registerDevSW() {}\n',
+          map: null,
+        };
+      }
+      return {
+        code: code.replace(
+          /import\.meta\.hot\.send\(([^)]+)\);?/g,
+          `if (import.meta.hot) {
+  Promise.resolve(import.meta.hot.send($1)).catch(() => {
+    import.meta.hot?.on('vite:ws:connect', () => {
+      Promise.resolve(import.meta.hot?.send($1)).catch(() => {});
+    });
+  });
+}`
+        ),
+        map: null,
+      };
+    },
+  };
+}
 
 export default defineConfig(() => {
   return {
     plugins: [
       react(),
       tailwindcss(),
+      pwaDevHmrGuardPlugin(),
       VitePWA({
         registerType: 'autoUpdate',
         devOptions: {

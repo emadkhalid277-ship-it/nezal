@@ -883,7 +883,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
         )}
 
         {/* MAIN ARENA SETUP CONTAINER */}
-        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 lg:p-10 space-y-8">
+        <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl md:rounded-3xl p-3 sm:p-6 md:p-8 lg:p-10 space-y-6 sm:space-y-8">
           {/* Header & Step Progress */}
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-[#E5E8DD] pb-5">
             <div className="space-y-2 text-right">
@@ -942,7 +942,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
           {/* ================================================================= */}
           <section
             aria-label="حالة اختيار الفرق"
-            className="bg-[#F3F5E9]/85 border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4"
+            className="bg-[#F3F5E9]/85 border border-[#E5E8DD] rounded-2xl p-3 sm:p-5 space-y-3.5 sm:space-y-4"
           >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="space-y-1">
@@ -1046,7 +1046,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4">
                 {visibleMainCategories.map((mainCat) => {
                   const isSelected =
                     selectedMainFilter === mainCat.id ||
@@ -1204,7 +1204,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedMainFilter('all')}
-                      className="text-xs font-bold text-[#F07842] hover:underline cursor-pointer"
+                      className="min-h-[44px] sm:min-h-[36px] inline-flex items-center px-2 text-xs font-bold text-[#F07842] hover:underline cursor-pointer"
                     >
                       (عرض الكل)
                     </button>
@@ -1243,7 +1243,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                     type="button"
                     onClick={() => setSearchQuery('')}
                     aria-label="مسح البحث"
-                    className="absolute left-2 top-1/2 -translate-y-1/2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#666B62] hover:text-[#1B1F1C] cursor-pointer"
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded-lg text-[#666B62] hover:text-[#1B1F1C] cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1266,7 +1266,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                     <button
                       type="button"
                       onClick={() => scrollToSection('step-team-setup')}
-                      className="min-h-[36px] px-3 py-1 rounded-lg bg-[#14543D] text-white text-xs font-bold cursor-pointer hover:bg-[#0E3F2D]"
+                      className="min-h-[44px] sm:min-h-[36px] px-3 py-1 rounded-lg bg-[#14543D] text-white text-xs font-bold cursor-pointer hover:bg-[#0E3F2D]"
                     >
                       الانتقال لإعداد الفرق ↓
                     </button>
@@ -1274,7 +1274,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setAutoAdvanceBanner(null)}
-                    className="text-[#52574E] hover:text-[#1B1F1C] text-xs cursor-pointer px-2 py-1"
+                    className="min-h-[44px] sm:min-h-[36px] text-[#52574E] hover:text-[#1B1F1C] text-xs cursor-pointer px-2.5 py-1"
                   >
                     إخفاء
                   </button>
@@ -1296,7 +1296,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                   type="button"
                   onClick={() => setValidationMessage(null)}
                   aria-label="إغلاق التنبيه"
-                  className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#C74E1C] hover:bg-[#F07842]/10 cursor-pointer shrink-0"
+                  className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded-lg text-[#C74E1C] hover:bg-[#F07842]/10 cursor-pointer shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1338,7 +1338,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4">
+                    <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
                       {filteredSubcategories.map((sub) => {
                         const ownerInfo = subcategoryOwnerMap.get(sub.id);
                         const isSelectedByCurrentTeam =
@@ -1362,9 +1362,9 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                               aria-disabled="true"
                               onClick={() => triggerComingSoonMessage()}
                               aria-label={`${sub.name} - قريباً، هذه الفئة غير متاحة حالياً`}
-                              className="group relative min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden bg-[#F7F8F1] border border-dashed border-[#D4D9CC] flex flex-col select-none hover:border-[#F07842]/70 transition-colors cursor-not-allowed text-right"
+                              className="group relative min-h-[196px] sm:min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden bg-[#F7F8F1] border border-dashed border-[#D4D9CC] flex flex-col select-none hover:border-[#F07842]/70 transition-colors cursor-not-allowed text-right"
                             >
-                              <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
+                              <div className="relative h-20 sm:h-28 w-full overflow-hidden shrink-0">
                                 <CategoryCardArtwork
                                   name={sub.name}
                                   mainCategory={sub.mainCategory}
@@ -1426,7 +1426,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                                 ? `${sub.name} - مختارة لفريقك ${currentTeam?.name}، اضغط لإلغاء الاختيار`
                                 : `${sub.name} - اضغط لاختيارها لفريق ${currentTeam?.name}`
                             }
-                            className={`group relative min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden flex flex-col select-none text-right transition-[border-color,box-shadow,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
+                            className={`group relative min-h-[196px] sm:min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden flex flex-col select-none text-right transition-[border-color,box-shadow,background-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
                               isSelectedByCurrentTeam
                                 ? 'bg-[#FEF2EC] border-2 border-[#F07842] shadow-md cursor-pointer z-10'
                                 : isLockedByOtherTeam
@@ -1439,7 +1439,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                             )}
 
                             {/* Subcategory Artwork Zone */}
-                            <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0 bg-[#14543D]">
+                            <div className="relative h-20 sm:h-28 w-full overflow-hidden shrink-0 bg-[#14543D]">
                               <CategoryCardArtwork
                                 name={sub.name}
                                 mainCategory={sub.mainCategory}
@@ -1563,9 +1563,9 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                           aria-disabled="true"
                           onClick={() => triggerComingSoonMessage()}
                           aria-label={`${mainCat.name} - قريباً، هذه الفئة غير متاحة حالياً`}
-                          className="group relative min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden bg-[#F7F8F1] border border-dashed border-[#D4D9CC] flex flex-col select-none hover:border-[#F07842]/75 transition-colors cursor-not-allowed text-right"
+                          className="group relative min-h-[196px] sm:min-h-[224px] w-full min-w-0 rounded-2xl overflow-hidden bg-[#F7F8F1] border border-dashed border-[#D4D9CC] flex flex-col select-none hover:border-[#F07842]/75 transition-colors cursor-not-allowed text-right"
                         >
-                          <div className="relative h-24 sm:h-28 w-full overflow-hidden shrink-0">
+                          <div className="relative h-20 sm:h-28 w-full overflow-hidden shrink-0">
                             <CategoryCardArtwork
                               name={mainCat.name}
                               mainCategory={mainCat.name}
@@ -1686,7 +1686,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                       disabled={isGameLocked}
                       onClick={() => handleTeamCountChange(num)}
                       title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                      className={`min-h-[44px] sm:min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
                         isGameLocked
                           ? 'cursor-not-allowed opacity-80'
                           : 'cursor-pointer'
@@ -1713,7 +1713,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                       disabled={isGameLocked}
                       onClick={() => onUpdateTimer(sec)}
                       title={isGameLocked ? 'مقفلة أثناء سير الجولة' : undefined}
-                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
+                      className={`min-h-[44px] sm:min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold font-mono tabular-nums transition-colors ${
                         isGameLocked
                           ? 'cursor-not-allowed opacity-80'
                           : 'cursor-pointer'
@@ -1781,7 +1781,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                         : 0
                     )
                   }
-                  className={`min-h-[40px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold whitespace-nowrap ${
+                  className={`min-h-[44px] sm:min-h-[40px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold whitespace-nowrap ${
                     isGameLocked
                       ? 'cursor-not-allowed opacity-60'
                       : 'cursor-pointer'
@@ -1844,7 +1844,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                           <button
                             type="button"
                             onClick={() => handleFocusTeamCategories(index)}
-                            className="min-h-[40px] px-1 text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer"
+                            className="min-h-[44px] sm:min-h-[40px] px-2 text-xs font-bold text-[#14543D] hover:text-[#F07842] flex items-center gap-1 cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                             <span>
@@ -1934,7 +1934,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                                   isGameLocked ? `${c.name} (مقفل)` : c.name
                                 }
                                 aria-label={c.name}
-                                className={`min-w-[40px] min-h-[40px] w-10 h-10 rounded-xl flex items-center justify-center transition-transform ${
+                                className={`min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] w-11 h-11 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-transform ${
                                   isGameLocked
                                     ? 'cursor-not-allowed'
                                     : 'cursor-pointer'
@@ -2012,7 +2012,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                                     handleRemovePlayer(team.id, pIdx)
                                   }
                                   aria-label={`حذف ${player}`}
-                                  className="relative min-w-[32px] min-h-[32px] -ml-1 flex items-center justify-center rounded-md text-[#666B62] hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors after:content-[''] after:absolute after:-inset-1.5"
+                                  className="relative min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] -ml-1 flex items-center justify-center rounded-md text-[#666B62] hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors after:content-[''] after:absolute after:-inset-1.5"
                                 >
                                   <X className="w-3.5 h-3.5" />
                                 </button>
@@ -2194,7 +2194,7 @@ export const CategorySelectionPage: React.FC<CategorySelectionPageProps> = ({
                   type="button"
                   onClick={handleToggleBetweenTeams}
                   aria-label="تبديل الفريق النشط"
-                  className="min-h-[42px] px-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#E5E8DD] text-[11px] font-bold text-[#14543D] flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                  className="min-h-[44px] px-2.5 rounded-xl bg-[#F3F5E9] hover:bg-[#E7EAD8] border border-[#E5E8DD] text-[11px] font-bold text-[#14543D] flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
                 >
                   <ArrowLeftRight className="w-3 h-3 text-[#F07842]" />
                   <span>تبديل</span>

@@ -288,7 +288,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                   ? 'إلغاء وضع «قريباً» وإتاحة لعبة ولا كلمة للمباريات الجديدة'
                   : 'تفعيل وضع «قريباً» على لعبة ولا كلمة ومنع بدء مباريات جديدة بها'
               }
-              className={`min-h-[42px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-colors cursor-pointer border disabled:opacity-60 ${
+              className={`min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-colors cursor-pointer border disabled:opacity-60 ${
                 isComingSoon
                   ? 'bg-[#EAF2EE] hover:bg-[#D7E6DF] text-[#14543D] border-[#14543D]/25'
                   : 'bg-[#FEF2EC] hover:bg-[#FDE4D7] text-[#D9602B] border-[#F07842]/25'
@@ -308,7 +308,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
             type="button"
             onClick={() => void loadData()}
             disabled={loading}
-            className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] hover:border-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+            className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] text-xs font-bold text-[#1B1F1C] hover:border-[#14543D] flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>تحديث</span>
@@ -316,7 +316,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
           <button
             type="button"
             onClick={openAddWordModal}
-            className="min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+            className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة كلمة جديدة</span>
@@ -553,12 +553,12 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                       </h4>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => void handleQuickToggleWordActive(item)}
                         title={item.isActive ? 'إيقاف مؤقت' : 'تفعيل'}
-                        className="min-w-[34px] min-h-[34px] px-2 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-[11px] font-bold text-[#52574E] hover:text-[#14543D] cursor-pointer"
+                        className="min-w-[44px] min-h-[44px] sm:min-w-[34px] sm:min-h-[34px] px-2.5 sm:px-2 rounded-lg bg-[#F3F5E9] border border-[#E5E8DD] text-[11px] font-bold text-[#52574E] hover:text-[#14543D] cursor-pointer"
                       >
                         {item.isActive ? 'مفعّلة' : 'تفعيل'}
                       </button>
@@ -566,7 +566,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                         type="button"
                         onClick={() => openEditWordModal(item)}
                         aria-label={`تعديل ${item.word}`}
-                        className="min-w-[34px] min-h-[34px] rounded-lg bg-[#EAF2EE] text-[#14543D] hover:bg-[#D5E6DC] flex items-center justify-center cursor-pointer"
+                        className="min-w-[44px] min-h-[44px] sm:min-w-[34px] sm:min-h-[34px] rounded-lg bg-[#EAF2EE] text-[#14543D] hover:bg-[#D5E6DC] flex items-center justify-center cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
@@ -574,7 +574,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                         type="button"
                         onClick={() => setConfirmDeleteId(item.id)}
                         aria-label={`حذف ${item.word}`}
-                        className="min-w-[34px] min-h-[34px] rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center cursor-pointer"
+                        className="min-w-[44px] min-h-[44px] sm:min-w-[34px] sm:min-h-[34px] rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -591,14 +591,14 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
                       <button
                         type="button"
                         onClick={() => void handleDeleteWord(item.id)}
-                        className="min-h-[36px] px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer transition-colors"
                       >
                         حذف
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteId(null)}
-                        className="min-h-[36px] px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-[#1B1F1C] font-bold cursor-pointer transition-colors"
+                        className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg bg-white border border-rose-200 text-[#1B1F1C] font-bold cursor-pointer transition-colors"
                       >
                         إلغاء
                       </button>
@@ -628,7 +628,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
               type="button"
               disabled={savingWord}
               onClick={() => setWordModalOpen(false)}
-              className="min-h-[42px] px-4 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-[#E5E8DD]/60 text-xs font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-50 transition-colors"
+              className="min-h-[44px] sm:min-h-[42px] px-4 py-2 rounded-xl bg-[#FFFFFF] border border-[#E5E8DD] hover:bg-[#E5E8DD]/60 text-xs font-bold text-[#1B1F1C] cursor-pointer disabled:opacity-50 transition-colors"
             >
               إلغاء
             </button>
@@ -636,7 +636,7 @@ export const AdminWalaKalimaSection: React.FC<AdminWalaKalimaSectionProps> = ({
               type="submit"
               form="wala-kalima-word-form"
               disabled={savingWord}
-              className="min-h-[42px] px-5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs sm:text-sm font-bold cursor-pointer disabled:opacity-60 transition-colors"
+              className="min-h-[44px] sm:min-h-[42px] px-5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs sm:text-sm font-bold cursor-pointer disabled:opacity-60 transition-colors"
             >
               {savingWord ? 'جاري الحفظ...' : editingWord ? 'حفظ التعديلات' : 'إضافة البطاقة'}
             </button>

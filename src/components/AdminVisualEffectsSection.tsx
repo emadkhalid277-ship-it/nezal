@@ -248,28 +248,28 @@ export const AdminVisualEffectsSection: React.FC<
             <button
               type="button"
               onClick={() => triggerPreview('correct')}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-colors"
+              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة الإجابة الصحيحة
             </button>
             <button
               type="button"
               onClick={() => triggerPreview('wrong')}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer transition-colors"
+              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة الإجابة الخاطئة
             </button>
             <button
               type="button"
               onClick={() => triggerPreview('winner')}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold cursor-pointer transition-colors"
+              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3F2D] text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة الفوز
             </button>
             <button
               type="button"
               onClick={() => triggerPreview('tie')}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer transition-colors"
+              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               معاينة التعادل
             </button>

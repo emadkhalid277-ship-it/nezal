@@ -26,6 +26,24 @@ import {
   updateAdminWalaKalimaWord,
   validatePlayerStreamAccess,
 } from './server/walaKalimaEngine.ts';
+import {
+  handleClaimHostRole,
+  handleConfirmCategories,
+  handleCreateOnlineRoom,
+  handleDismissResolvedQuestion,
+  handleFinishOnlineMatch,
+  handleJoinOnlineRoom,
+  handleLeaveOnlineRoom,
+  handlePresenceUpdate,
+  handleRestartOnlineMatch,
+  handleSelectQuestion,
+  handleStartOnlineMatch,
+  handleSubmitAnswer,
+  handleTimeoutOrSkipQuestion,
+  handleToggleCategoryPick,
+  handleWalaKalimaCommit,
+  handleWalaKalimaSyncState,
+} from './server/onlineDuelEngine.ts';
 import type { WalaKalimaContentTypeId } from './src/types/walaKalima.ts';
 import type { DifficultyLevel } from './src/types/game.ts';
 
@@ -364,6 +382,26 @@ async function startServer() {
       res.status(statusCode).json({ code: 'wk/player-action-failed', error: message });
     }
   });
+
+  // =========================================================================
+  // HOST-VS-GUEST TURN-BASED ONLINE DUEL API
+  // =========================================================================
+  app.post('/api/online-rooms', handleCreateOnlineRoom);
+  app.post('/api/online-rooms/:code/join', handleJoinOnlineRoom);
+  app.post('/api/online-rooms/:code/presence', handlePresenceUpdate);
+  app.post('/api/online-rooms/:code/leave', handleLeaveOnlineRoom);
+  app.post('/api/online-rooms/:code/claim-host', handleClaimHostRole);
+  app.post('/api/online-rooms/:code/categories/toggle', handleToggleCategoryPick);
+  app.post('/api/online-rooms/:code/categories/confirm', handleConfirmCategories);
+  app.post('/api/online-rooms/:code/start', handleStartOnlineMatch);
+  app.post('/api/online-rooms/:code/select-question', handleSelectQuestion);
+  app.post('/api/online-rooms/:code/submit-answer', handleSubmitAnswer);
+  app.post('/api/online-rooms/:code/timeout-question', handleTimeoutOrSkipQuestion);
+  app.post('/api/online-rooms/:code/dismiss-result', handleDismissResolvedQuestion);
+  app.post('/api/online-rooms/:code/wala-kalima-sync', handleWalaKalimaSyncState);
+  app.post('/api/online-rooms/:code/wala-kalima-commit', handleWalaKalimaCommit);
+  app.post('/api/online-rooms/:code/finish', handleFinishOnlineMatch);
+  app.post('/api/online-rooms/:code/restart', handleRestartOnlineMatch);
 
   // Unknown /api/* JSON fallback so API errors never return HTML
   app.use('/api', (_req: Request, res: Response) => {

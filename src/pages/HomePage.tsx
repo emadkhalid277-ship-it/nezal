@@ -290,7 +290,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <button
                         type="button"
                         onClick={() => onNavigate?.('online_multiplayer')}
-                        className="inline-flex items-center gap-2 font-bold text-[#14543D] hover:text-[#F07842] transition-colors cursor-pointer min-h-[36px]"
+                        className="inline-flex items-center gap-2 font-bold text-[#14543D] hover:text-[#F07842] transition-colors cursor-pointer min-h-[44px] sm:min-h-[36px]"
                       >
                         <Radio className="w-4 h-4 text-[#F07842] shrink-0" />
                         <span>اللعب عن بُعد (أونلاين)</span>
@@ -315,14 +315,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                           {isOnline &&
                             onSyncOfflineData &&
                             !offlineStatus.syncing && (
-                              <button
-                                type="button"
-                                onClick={onSyncOfflineData}
-                                className="inline-flex items-center gap-1 text-[#14543D] hover:text-[#F07842] font-bold underline underline-offset-4 cursor-pointer"
-                              >
-                                <RefreshCw className="w-3 h-3" />
-                                <span>تحديث المحلي</span>
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={onSyncOfflineData}
+                                  className="inline-flex items-center gap-1 min-h-[44px] sm:min-h-[36px] px-1 text-[#14543D] hover:text-[#F07842] font-bold underline underline-offset-4 cursor-pointer"
+                                >
+                                  <RefreshCw className="w-3 h-3" />
+                                  <span>تحديث المحلي</span>
+                                </button>
                             )}
                         </>
                       )}
@@ -498,7 +498,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                             onClick={() =>
                               handleCategoryCardClick(safeSelectedCol)
                             }
-                            className="min-h-[38px] px-3.5 py-2 rounded-xl bg-white text-[#1B1F1C] hover:bg-[#F07842] hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+                            className="min-h-[44px] sm:min-h-[38px] px-3.5 py-2 rounded-xl bg-white text-[#1B1F1C] hover:bg-[#F07842] hover:text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
                           >
                             <span>ابدأ</span>
                             <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
@@ -655,14 +655,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                     type="button"
                     onClick={() => setComingSoonNotice(null)}
                     aria-label="إغلاق التنبيه"
-                    className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg text-[#D9602B] hover:bg-[#F07842]/10 cursor-pointer"
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-[#D9602B] hover:bg-[#F07842]/10 cursor-pointer shrink-0"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-5">
+              <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
                 {visibleMainCategories.map((mainCat, index) => {
                   const isComingSoon = Boolean(mainCat.isComingSoon);
                   const subsCount = subcategoryCountByMain.get(mainCat.id) ?? 0;

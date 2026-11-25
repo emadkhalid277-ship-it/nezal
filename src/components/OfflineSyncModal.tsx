@@ -47,9 +47,9 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
       closeDisabled={isSyncing}
       bodyClassName="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1"
       footer={
-        <div className="flex flex-wrap items-center justify-end gap-2.5">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-end gap-2.5">
           {!isOnline && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#F07842] ml-auto">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#F07842] sm:ml-auto">
               <WifiOff className="w-4 h-4" />
               <span>غير متصل</span>
             </span>
@@ -60,7 +60,7 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
               type="button"
               disabled={isSyncing}
               onClick={onRetrySync}
-              className={`${UI_CLASSES.btnGreen} text-xs`}
+              className={`${UI_CLASSES.btnGreen} w-full sm:w-auto min-h-[44px] text-xs`}
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>
@@ -77,7 +77,7 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
             <button
               type="button"
               onClick={onSwitchToOfflineLocal}
-              className={`${UI_CLASSES.btnPrimary} text-xs`}
+              className={`${UI_CLASSES.btnPrimary} w-full sm:w-auto min-h-[44px] text-xs`}
             >
               اللعب المحلي دون إنترنت
             </button>
@@ -86,7 +86,7 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className={`${UI_CLASSES.btnOutline} text-xs`}
+            className={`${UI_CLASSES.btnOutline} w-full sm:w-auto min-h-[44px] text-xs`}
           >
             إغلاق
           </button>

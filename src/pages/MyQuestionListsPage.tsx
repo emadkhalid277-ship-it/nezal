@@ -639,7 +639,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
               <button
                 type="button"
                 onClick={openCreateListModal}
-                className="min-h-[36px] px-2 text-xs font-bold text-[#F07842] hover:underline flex items-center gap-1 cursor-pointer"
+                className="min-h-[44px] sm:min-h-[36px] px-2 text-xs font-bold text-[#F07842] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>قائمة</span>
@@ -654,7 +654,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                 <button
                   type="button"
                   onClick={openCreateListModal}
-                  className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[#EAF2EE] text-[#14543D] text-xs font-bold hover:bg-[#D7E6DF] cursor-pointer"
+                  className="min-h-[44px] sm:min-h-[38px] px-3.5 py-2 rounded-lg bg-[#EAF2EE] text-[#14543D] text-xs font-bold hover:bg-[#D7E6DF] cursor-pointer"
                 >
                   + أنشئ أول قائمة
                 </button>
@@ -687,7 +687,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             e.stopPropagation();
                             openEditListModal(l);
                           }}
-                          className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#52574E] hover:text-[#14543D] hover:bg-black/5 transition-colors cursor-pointer"
+                          className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded-lg text-[#52574E] hover:text-[#14543D] hover:bg-black/5 transition-colors cursor-pointer"
                           title="تعديل القائمة"
                           aria-label={`تعديل القائمة ${l.name}`}
                         >
@@ -699,7 +699,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             e.stopPropagation();
                             handleDeleteList(l.id, l.name);
                           }}
-                          className="min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-[#52574E] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded-lg text-[#52574E] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="حذف القائمة"
                           aria-label={`حذف القائمة ${l.name}`}
                         >
@@ -724,7 +724,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
           {activeList ? (
             <>
               {/* Active List Banner & Tools */}
-              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-5 space-y-4 shadow-xs">
+              <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5E8DD]">
                   <div>
                     <div className="text-xs font-bold text-[#F07842]">القائمة المفتوحة</div>
@@ -737,7 +737,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     <button
                       type="button"
                       onClick={() => openEditListModal(activeList)}
-                      className="min-h-[40px] px-3 py-1.5 rounded-xl border border-[#E5E8DD] text-xs font-bold text-[#52574E] hover:text-[#14543D] hover:bg-[#F7F8F1] flex items-center gap-1 cursor-pointer transition-colors"
+                      className="min-h-[44px] sm:min-h-[40px] px-3 py-1.5 rounded-xl border border-[#E5E8DD] text-xs font-bold text-[#52574E] hover:text-[#14543D] hover:bg-[#F7F8F1] flex items-center gap-1 cursor-pointer transition-colors"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>تعديل</span>
@@ -745,7 +745,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                     <button
                       type="button"
                       onClick={openCreateQuestionModal}
-                      className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                      className="min-h-[44px] sm:min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#14543D] text-white text-xs font-bold hover:bg-[#0E3B2B] flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>إضافة سؤال</span>
@@ -878,20 +878,20 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                               </StatusBadge>
                             )}
                             {isRejected && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setViewingRejection({
-                                    questionText: q.questionText,
-                                    reason: q.rejectionReason || 'لم يحدد المشرف سبباً.',
-                                  })
-                                }
-                                className="min-h-[32px] px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 hover:bg-rose-100 cursor-pointer transition-colors"
-                                title="اضغط لعرض سبب الرفض"
-                              >
-                                <XCircle className="w-3 h-3 text-rose-600" />
-                                <span>مرفوض (عرض السبب)</span>
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setViewingRejection({
+                                      questionText: q.questionText,
+                                      reason: q.rejectionReason || 'لم يحدد المشرف سبباً.',
+                                    })
+                                  }
+                                  className="min-h-[44px] sm:min-h-[32px] px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 hover:bg-rose-100 cursor-pointer transition-colors"
+                                  title="اضغط لعرض سبب الرفض"
+                                >
+                                  <XCircle className="w-3 h-3 text-rose-600" />
+                                  <span>مرفوض (عرض السبب)</span>
+                                </button>
                             )}
                           </div>
                         </div>
@@ -956,7 +956,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                                 type="button"
                                 disabled={actionLoading}
                                 onClick={() => handleSubmitForReview(q)}
-                                className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                                className="min-h-[44px] sm:min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                                 title="إرسال هذا السؤال لمراجعته من إدارة نِزال"
                               >
                                 <Send className="w-3.5 h-3.5" />
@@ -967,7 +967,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             <button
                               type="button"
                               onClick={() => openEditQuestionModal(q)}
-                              className="min-w-[40px] min-h-[40px] rounded-xl text-[#52574E] hover:text-[#14543D] hover:bg-[#F7F8F1] border border-transparent hover:border-[#E5E8DD] flex items-center justify-center cursor-pointer transition-colors"
+                              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl text-[#52574E] hover:text-[#14543D] hover:bg-[#F7F8F1] border border-transparent hover:border-[#E5E8DD] flex items-center justify-center cursor-pointer transition-colors"
                               title="تعديل السؤال"
                               aria-label="تعديل السؤال"
                             >
@@ -977,7 +977,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDeleteQuestion(q)}
-                              className="min-w-[40px] min-h-[40px] rounded-xl text-[#52574E] hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
+                              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl text-[#52574E] hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
                               title="حذف السؤال"
                               aria-label="حذف السؤال"
                             >
@@ -1235,7 +1235,7 @@ export const MyQuestionListsPage: React.FC<MyQuestionListsPageProps> = ({
                   disabled={actionLoading || uploadingImage}
                   onClick={handleRemoveImage}
                   aria-label="حذف الصورة المرفقة"
-                  className="min-w-[36px] min-h-[36px] rounded-lg text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer disabled:opacity-50"
+                  className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] rounded-lg text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer disabled:opacity-50"
                   title="حذف الصورة"
                 >
                   <Trash2 className="w-4 h-4" />

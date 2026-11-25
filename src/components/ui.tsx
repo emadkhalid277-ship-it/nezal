@@ -115,7 +115,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
   return (
     <MotionConfig reducedMotion="user">
       <div
-        className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-3 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs`}
+        className={`fixed inset-0 ${zIndexClass} flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[#1B1F1C]/65 backdrop-blur-xs`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={!hideHeader && title ? titleId : undefined}
@@ -132,11 +132,11 @@ export const ModalShell: React.FC<ModalShellProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
           onClick={(e) => e.stopPropagation()}
-          className={`w-full ${MAX_WIDTH_MAP[maxWidth]} max-h-[92dvh] flex flex-col bg-[#FFFFFF] border border-[#E5E8DD] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden text-right ${containerClassName}`}
+          className={`w-full ${MAX_WIDTH_MAP[maxWidth]} max-h-[94dvh] sm:max-h-[92dvh] flex flex-col bg-[#FFFFFF] border border-[#E5E8DD] rounded-t-3xl rounded-b-none sm:rounded-3xl shadow-2xl overflow-hidden text-right ${containerClassName}`}
         >
           {!hideHeader && (
             <div
-              className={`px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-3 shrink-0 ${HEADER_TONE_MAP[headerTone]}`}
+              className={`px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 shrink-0 ${HEADER_TONE_MAP[headerTone]}`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 {icon && <span className="shrink-0 flex items-center">{icon}</span>}
@@ -169,7 +169,7 @@ export const ModalShell: React.FC<ModalShellProps> = ({
                   disabled={closeDisabled}
                   onClick={onClose}
                   aria-label={closeButtonLabel}
-                  className={`min-w-[40px] min-h-[40px] px-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
+                  className={`min-w-[44px] min-h-[44px] px-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F07842] ${
                     isLightHeader
                       ? 'bg-[#FFFFFF] hover:bg-[#E5E8DD]/70 text-[#52574E] hover:text-[#1B1F1C] border border-[#E5E8DD]'
                       : 'bg-white/10 hover:bg-white/20 text-white'
@@ -312,7 +312,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
           type="button"
           onClick={onDismiss}
           aria-label="إغلاق التنبيه"
-          className="min-w-[36px] min-h-[36px] rounded-xl hover:bg-black/5 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+          className="min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] rounded-xl hover:bg-black/5 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
         >
           <X className="w-4 h-4" />
         </button>

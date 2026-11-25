@@ -558,7 +558,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           <button
             type="button"
             onClick={onNavigateHome}
-            className="inline-flex items-center gap-1.5 min-h-[36px] text-xs font-bold text-[#52574E] hover:text-[#14543D] cursor-pointer mb-1 transition-colors"
+            className="inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-[36px] text-xs font-bold text-[#52574E] hover:text-[#14543D] cursor-pointer mb-1 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
             <span>العودة للرئيسية</span>
@@ -651,11 +651,11 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
         {/* RIGHT / PRIMARY COLUMN (8 cols): TABS & LISTS */}
         <div className="lg:col-span-8 space-y-5">
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"
               onClick={() => setActiveTab('friends')}
-              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[44px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'friends'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
@@ -669,7 +669,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('requests')}
-              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[44px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'requests'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
@@ -687,7 +687,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('invites')}
-              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[44px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'invites'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
@@ -705,7 +705,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('blocked')}
-              className={`px-4 py-2 min-h-[42px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
+              className={`px-4 py-2 min-h-[44px] rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors flex items-center gap-2 ${
                 activeTab === 'blocked'
                   ? 'bg-[#14543D] text-white'
                   : 'bg-[#FFFFFF] border border-[#E5E8DD] text-[#52574E] hover:text-[#1B1F1C]'
@@ -719,7 +719,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
 
           {/* TAB 1: FRIENDS LIST */}
           {activeTab === 'friends' && (
-            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-5 md:p-6 space-y-5 shadow-xs">
+            <div className="bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 sm:p-5 md:p-6 space-y-5 shadow-xs">
               {/* Filter Bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E8DD] pb-4">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -734,7 +734,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                       key={f.id}
                       type="button"
                       onClick={() => setPresenceFilter(f.id)}
-                      className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors tabular-nums ${
+                      className={`min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors tabular-nums ${
                         presenceFilter === f.id
                           ? 'bg-[#EAF2EE] text-[#14543D]'
                           : 'text-[#52574E] hover:bg-[#F7F8F1]'
@@ -808,14 +808,14 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               onClick={() =>
                                 handleRemoveFriend(friend.uid, friend.displayName)
                               }
-                              className="min-h-[36px] px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[36px] px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer transition-colors"
                             >
                               نعم
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmRemoveUid(null)}
-                              className="min-h-[36px] px-3 rounded-lg bg-white border border-[#E5E8DD] text-[#52574E] text-xs font-bold cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[36px] px-3 rounded-lg bg-white border border-[#E5E8DD] text-[#52574E] text-xs font-bold cursor-pointer transition-colors"
                             >
                               لا
                             </button>
@@ -835,14 +835,14 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                   friend.photoURL
                                 )
                               }
-                              className="min-h-[36px] px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[36px] px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold cursor-pointer transition-colors"
                             >
                               حظر
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmBlockUid(null)}
-                              className="min-h-[36px] px-3 rounded-lg bg-white border border-[#E5E8DD] text-[#52574E] text-xs font-bold cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[36px] px-3 rounded-lg bg-white border border-[#E5E8DD] text-[#52574E] text-xs font-bold cursor-pointer transition-colors"
                             >
                               إلغاء
                             </button>
@@ -861,7 +861,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                   ? 'إرسال دعوة للعب أونلاين'
                                   : 'أوقف هذا اللاعب استقبال الدعوات'
                               }
-                              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] disabled:opacity-45 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] disabled:opacity-45 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               <Play className="w-3.5 h-3.5" />
                               <span>دعوة للعب</span>
@@ -881,7 +881,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                                   ? 'إرسال دعوة لمشاهدة المباراة'
                                   : 'أوقف هذا اللاعب استقبال الدعوات'
                               }
-                              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD] disabled:opacity-45 text-[#1B1F1C] border border-[#E5E8DD] text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F7F8F1] hover:bg-[#E5E8DD] disabled:opacity-45 text-[#1B1F1C] border border-[#E5E8DD] text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               <Eye className="w-3.5 h-3.5 text-[#F07842]" />
                               <span>دعوة للمشاهدة</span>
@@ -895,7 +895,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               }}
                               title="إزالة الصديق"
                               aria-label={`إزالة ${friend.displayName} من الأصدقاء`}
-                              className="min-w-[40px] min-h-[40px] rounded-xl border border-[#E5E8DD] text-[#52574E] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
+                              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl border border-[#E5E8DD] text-[#52574E] hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
                             >
                               <UserMinus className="w-4 h-4" />
                             </button>
@@ -908,7 +908,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               }}
                               title="حظر المستخدم"
                               aria-label={`حظر ${friend.displayName}`}
-                              className="min-w-[40px] min-h-[40px] rounded-xl border border-[#E5E8DD] text-[#52574E] hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
+                              className="min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl border border-[#E5E8DD] text-[#52574E] hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
                             >
                               <Ban className="w-4 h-4" />
                             </button>
@@ -963,7 +963,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             type="button"
                             disabled={busyAction === `acc_req_${req.id}`}
                             onClick={() => handleAcceptRequest(req)}
-                            className="px-3.5 py-2 min-h-[40px] rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Check className="w-3.5 h-3.5" />
                             <span>قبول</span>
@@ -972,7 +972,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             type="button"
                             disabled={busyAction === `rej_req_${req.id}`}
                             onClick={() => handleRejectRequest(req)}
-                            className="px-3.5 py-2 min-h-[40px] rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer transition-colors"
+                            className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer transition-colors"
                           >
                             رفض
                           </button>
@@ -1021,7 +1021,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           type="button"
                           disabled={busyAction === `can_req_${req.id}`}
                           onClick={() => handleCancelRequest(req)}
-                          className="px-3.5 py-2 min-h-[40px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#52574E] hover:text-rose-700 cursor-pointer shrink-0 transition-colors"
+                          className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#52574E] hover:text-rose-700 cursor-pointer shrink-0 transition-colors"
                         >
                           إلغاء الطلب
                         </button>
@@ -1077,7 +1077,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               type="button"
                               disabled={busyAction === `acc_inv_${inv.id}`}
                               onClick={() => handleAcceptInvite(inv)}
-                              className="min-h-[40px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[40px] px-4 py-2 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               {isSpectate ? (
                                 <>
@@ -1095,7 +1095,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                               type="button"
                               disabled={busyAction === `rej_inv_${inv.id}`}
                               onClick={() => handleRejectInvite(inv)}
-                              className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer transition-colors"
+                              className="min-h-[44px] sm:min-h-[40px] px-3.5 py-2 rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-[#52574E] hover:text-rose-700 text-xs font-bold cursor-pointer transition-colors"
                             >
                               رفض
                             </button>
@@ -1140,7 +1140,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                           type="button"
                           disabled={busyAction === `can_inv_${inv.id}`}
                           onClick={() => handleCancelInvite(inv)}
-                          className="px-3.5 py-2 min-h-[40px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#52574E] hover:text-rose-700 cursor-pointer shrink-0 transition-colors"
+                          className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] self-start sm:self-center rounded-xl border border-[#E5E8DD] hover:bg-rose-50 hover:border-rose-200 text-xs font-bold text-[#52574E] hover:text-rose-700 cursor-pointer shrink-0 transition-colors"
                         >
                           إلغاء الدعوة
                         </button>
@@ -1190,7 +1190,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                         onClick={() =>
                           handleUnblockUser(blk.blockedUid, blk.blockedName)
                         }
-                        className="px-3.5 py-2 min-h-[40px] self-start sm:self-center rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+                        className="px-3.5 py-2 min-h-[44px] sm:min-h-[40px] self-start sm:self-center rounded-xl bg-[#F7F8F1] border border-[#E5E8DD] hover:bg-[#EAF2EE] text-xs font-bold text-[#14543D] flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
                       >
                         <Unlock className="w-3.5 h-3.5" />
                         <span>إلغاء الحظر</span>
@@ -1290,7 +1290,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             type="button"
                             disabled={busyAction === `acc_req_${incomingReq.id}`}
                             onClick={() => handleAcceptRequest(incomingReq)}
-                            className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-[11px] font-bold cursor-pointer shrink-0 transition-colors"
+                            className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-xl bg-[#F07842] hover:bg-[#D9632E] text-white text-[11px] font-bold cursor-pointer shrink-0 transition-colors"
                           >
                             قبول الطلب
                           </button>
@@ -1303,7 +1303,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
                             type="button"
                             disabled={busyAction === `add_${player.uid}`}
                             onClick={() => handleSendFriendRequest(player)}
-                            className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
+                            className="min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-xl bg-[#14543D] hover:bg-[#0E3D2C] text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
                           >
                             <UserPlus className="w-3 h-3" />
                             <span>إضافة صديق</span>
