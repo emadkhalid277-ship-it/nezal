@@ -12,29 +12,73 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { UserGameMatch } from '../types/match';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 const MATCHES_COLLECTION = 'userGameMatches';
+
+const knownCreatedMatchIds = new Set<string>();
+const lastSavedMatchSignatures = new Map<string, string>();
+
+export function clearMatchServiceCachesForTest(): void {
+  knownCreatedMatchIds.clear();
+  lastSavedMatchSignatures.clear();
+}
+
+function buildMatchSyncSignature(
+  match: Partial<UserGameMatch> & { id: string; userId: string }
+): string {
+  const teamsSig = Array.isArray(match.teams)
+    ? match.teams.map((t) => `${t.id}:${t.score}`).join(',')
+    : '';
+  const usedCount = Array.isArray(match.usedTileKeys) ? match.usedTileKeys.length : 0;
+  const activeKey = match.activeQuestionState?.tileKey || '';
+  const revealed = match.activeQuestionState?.answerRevealed ? 1 : 0;
+  return `${match.status || ''}|${teamsSig}|${usedCount}|${match.activeTeamIndex ?? ''}|${activeKey}|${revealed}|${match.winnerTeamName || ''}|${match.winnerScore ?? ''}`;
+}
 
 export function generateMatchId(): string {
   return `match_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
-// 1. Save or update match progress in Firestore
+// 1. Save or update match progress in Firestore (deduped + read-minimized)
 export async function saveMatchProgressToFirestore(
   match: Partial<UserGameMatch> & { id: string; userId: string }
 ): Promise<void> {
   if (!match.userId || !match.id) return;
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('match_sync', 'dedup_skip', 1, 'quota_paused');
+    return;
+  }
+
+  const nextSignature = buildMatchSyncSignature(match);
+  if (lastSavedMatchSignatures.get(match.id) === nextSignature) {
+    trackFirestoreOp('match_sync', 'dedup_skip', 1, match.id);
+    return;
+  }
 
   try {
     const docRef = doc(db, MATCHES_COLLECTION, match.id);
-    const existingSnap = await getDoc(docRef);
+    let exists = knownCreatedMatchIds.has(match.id);
+    if (!exists) {
+      trackFirestoreOp('match_sync', 'read', 1, match.id);
+      const existingSnap = await getDoc(docRef);
+      exists = existingSnap.exists();
+      if (exists) {
+        knownCreatedMatchIds.add(match.id);
+      }
+    }
 
     const payload: any = {
       ...match,
       updatedAt: serverTimestamp(),
     };
 
-    if (!existingSnap.exists()) {
+    if (!exists) {
       payload.createdAt = serverTimestamp();
     }
 
@@ -42,8 +86,15 @@ export async function saveMatchProgressToFirestore(
       payload.completedAt = serverTimestamp();
     }
 
+    trackFirestoreOp('match_sync', 'write', 1, match.id);
     await setDoc(docRef, payload, { merge: true });
+    knownCreatedMatchIds.add(match.id);
+    lastSavedMatchSignatures.set(match.id, nextSignature);
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('match_sync', error);
+      return;
+    }
     console.warn('Could not save match progress to Firestore:', error);
   }
 }
@@ -53,6 +104,10 @@ export async function fetchActiveIncompleteMatch(
   userId: string
 ): Promise<UserGameMatch | null> {
   if (!userId) return null;
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('match_sync', 'dedup_skip', 1, 'quota_paused_fetch_incomplete');
+    return null;
+  }
 
   try {
     const colRef = collection(db, MATCHES_COLLECTION);
@@ -62,11 +117,13 @@ export async function fetchActiveIncompleteMatch(
       where('status', '==', 'in_progress')
     );
 
+    trackFirestoreOp('match_sync', 'read', 1, 'fetchActiveIncompleteMatch');
     const snap = await getDocs(q);
     if (snap.empty) return null;
 
     const matches: UserGameMatch[] = [];
     snap.forEach((d) => {
+      knownCreatedMatchIds.add(d.id);
       matches.push({ id: d.id, ...d.data() } as UserGameMatch);
     });
 
@@ -79,6 +136,10 @@ export async function fetchActiveIncompleteMatch(
 
     return matches[0] || null;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('match_sync', error);
+      return null;
+    }
     console.warn('Error fetching active incomplete match:', error);
     return null;
   }

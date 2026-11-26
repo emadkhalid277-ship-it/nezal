@@ -70,6 +70,12 @@ import {
   validateQuestionImageFile,
 } from '../utils/questionMedia';
 import { uploadQuestionImageToCloudinarySigned } from './cloudinaryService';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 export {
   ALLOWED_QUESTION_AUDIO_TYPES,
@@ -596,12 +602,19 @@ export async function fetchMainCategoriesFromFirestore(
   if (!forceRefresh) {
     const cached = serviceCache.get<MainCategoryMeta[]>('main_categories');
     if (cached && Array.isArray(cached) && cached.length > 0) {
+      trackFirestoreOp('questions_bootstrap', 'cache_hit', 1, 'main_categories');
       return cached;
     }
+  }
+  if (isFirestoreQuotaPaused()) {
+    const stale = serviceCache.get<MainCategoryMeta[]>('main_categories');
+    if (stale && Array.isArray(stale) && stale.length > 0) return stale;
+    return MAIN_CATEGORIES;
   }
 
   try {
     const snap = await getDocs(collection(db, MAIN_CATEGORIES_COLLECTION));
+    trackFirestoreOp('questions_bootstrap', 'read', Math.max(1, snap.size), 'mainCategories');
     const byId = new Map<string, MainCategoryMeta>();
 
     // Seed map with built-in defaults (excluding Movies & TV Shows)
@@ -723,6 +736,10 @@ export async function fetchMainCategoriesFromFirestore(
     serviceCache.set('main_categories', result);
     return result;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', error);
+      return MAIN_CATEGORIES;
+    }
     handleFirestoreError(error, OperationType.LIST, MAIN_CATEGORIES_COLLECTION);
   }
 }
@@ -1197,10 +1214,17 @@ export async function fetchContactSettingsFromFirestore(
 ): Promise<ContactSettings> {
   if (!forceRefresh) {
     const cached = serviceCache.get<ContactSettings>('contact_settings');
-    if (cached) return cached;
+    if (cached) {
+      trackFirestoreOp('questions_bootstrap', 'cache_hit', 1, 'contact_settings');
+      return cached;
+    }
+  }
+  if (isFirestoreQuotaPaused()) {
+    return serviceCache.get<ContactSettings>('contact_settings') || DEFAULT_CONTACT_SETTINGS;
   }
 
   try {
+    trackFirestoreOp('questions_bootstrap', 'read', 1, 'settings/contact');
     const docRef = doc(db, SETTINGS_COLLECTION, CONTACT_DOC_ID);
     const snap = await getDoc(docRef);
     if (!snap.exists()) {
@@ -1225,6 +1249,10 @@ export async function fetchContactSettingsFromFirestore(
     serviceCache.set('contact_settings', result);
     return result;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', error);
+      return DEFAULT_CONTACT_SETTINGS;
+    }
     handleFirestoreError(
       error,
       OperationType.GET,
@@ -1280,12 +1308,19 @@ export async function fetchActiveSubcategories(
   if (!forceRefresh) {
     const cached = serviceCache.get<SubcategoryItem[]>('active_subcategories');
     if (cached && Array.isArray(cached) && cached.length > 0) {
+      trackFirestoreOp('questions_bootstrap', 'cache_hit', 1, 'active_subcategories');
       return cached;
     }
+  }
+  if (isFirestoreQuotaPaused()) {
+    const stale = serviceCache.get<SubcategoryItem[]>('active_subcategories');
+    if (stale && Array.isArray(stale) && stale.length > 0) return stale;
+    return DEFAULT_SUBCATEGORIES;
   }
 
   try {
     const snap = await getDocs(collection(db, SUBCATEGORIES_COLLECTION));
+    trackFirestoreOp('questions_bootstrap', 'read', Math.max(1, snap.size), 'subcategories_active');
     const fromDb = snap.docs.map((d) => mapDocToSubcategory(d.id, d.data()));
     const result = mergeSubcategories(fromDb, mainCategories).filter(
       (s) => s.isActive && !s.isDeleted
@@ -1293,6 +1328,10 @@ export async function fetchActiveSubcategories(
     serviceCache.set('active_subcategories', result);
     return result;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', error);
+      return DEFAULT_SUBCATEGORIES;
+    }
     handleFirestoreError(error, OperationType.LIST, SUBCATEGORIES_COLLECTION);
   }
 }
@@ -1304,17 +1343,28 @@ export async function fetchAllSubcategoriesForAdmin(
   if (!forceRefresh) {
     const cached = serviceCache.get<SubcategoryItem[]>('admin_subcategories');
     if (cached && Array.isArray(cached) && cached.length > 0) {
+      trackFirestoreOp('questions_bootstrap', 'cache_hit', 1, 'admin_subcategories');
       return cached;
     }
+  }
+  if (isFirestoreQuotaPaused()) {
+    const stale = serviceCache.get<SubcategoryItem[]>('admin_subcategories');
+    if (stale && Array.isArray(stale) && stale.length > 0) return stale;
+    return DEFAULT_SUBCATEGORIES;
   }
 
   try {
     const snap = await getDocs(collection(db, SUBCATEGORIES_COLLECTION));
+    trackFirestoreOp('questions_bootstrap', 'read', Math.max(1, snap.size), 'subcategories_admin');
     const fromDb = snap.docs.map((d) => mapDocToSubcategory(d.id, d.data()));
     const result = mergeSubcategories(fromDb, mainCategories);
     serviceCache.set('admin_subcategories', result);
     return result;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', error);
+      return DEFAULT_SUBCATEGORIES;
+    }
     handleFirestoreError(error, OperationType.LIST, SUBCATEGORIES_COLLECTION);
   }
 }
@@ -1537,8 +1587,14 @@ export async function fetchApprovedQuestions(
   if (!forceRefresh) {
     const cached = serviceCache.get<TriviaQuestion[]>('approved_questions');
     if (cached && Array.isArray(cached) && cached.length > 0) {
+      trackFirestoreOp('questions_bootstrap', 'cache_hit', 1, 'approved_questions');
       return cached;
     }
+  }
+  if (isFirestoreQuotaPaused()) {
+    const stale = serviceCache.get<TriviaQuestion[]>('approved_questions');
+    if (stale && Array.isArray(stale) && stale.length > 0) return stale;
+    throw new Error('Firestore quota paused');
   }
 
   try {
@@ -1547,6 +1603,7 @@ export async function fetchApprovedQuestions(
       where('status', 'in', ['approved', 'pending'])
     );
     const snap = await getDocs(q);
+    trackFirestoreOp('questions_bootstrap', 'read', Math.max(1, snap.size), 'questions_approved');
     const result = snap.docs
       .filter((d) => !isDeletedBuiltinManifestDoc(d.id, d.data()))
       .map((d) => mapDocToQuestion(d.id, d.data()))
@@ -1559,6 +1616,9 @@ export async function fetchApprovedQuestions(
     serviceCache.set('approved_questions', result);
     return result;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', error);
+    }
     handleFirestoreError(error, OperationType.LIST, QUESTIONS_COLLECTION);
   }
 }
@@ -1569,12 +1629,19 @@ export async function fetchAllQuestionsForAdmin(
   if (!forceRefresh) {
     const cached = serviceCache.get<TriviaQuestion[]>('admin_questions');
     if (cached && Array.isArray(cached) && cached.length > 0) {
+      trackFirestoreOp('questions_bootstrap', 'cache_hit', 1, 'admin_questions');
       return cached;
     }
+  }
+  if (isFirestoreQuotaPaused()) {
+    const stale = serviceCache.get<TriviaQuestion[]>('admin_questions');
+    if (stale && Array.isArray(stale) && stale.length > 0) return stale;
+    throw new Error('Firestore quota paused');
   }
 
   try {
     const snap = await getDocs(collection(db, QUESTIONS_COLLECTION));
+    trackFirestoreOp('questions_bootstrap', 'read', Math.max(1, snap.size), 'questions_admin');
     const result = snap.docs
       .filter((d) => !isDeletedBuiltinManifestDoc(d.id, d.data()))
       .map((d) => mapDocToQuestion(d.id, d.data()))
@@ -1582,6 +1649,9 @@ export async function fetchAllQuestionsForAdmin(
     serviceCache.set('admin_questions', result);
     return result;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', error);
+    }
     handleFirestoreError(error, OperationType.LIST, QUESTIONS_COLLECTION);
   }
 }
@@ -1592,11 +1662,17 @@ export async function fetchDeletedBuiltinQuestionIds(
   if (!forceRefresh) {
     const cached = serviceCache.get<string[]>('deleted_builtin_ids');
     if (Array.isArray(cached)) {
+      trackFirestoreOp('questions_bootstrap', 'cache_hit', 1, 'deleted_builtin_ids');
       return new Set(cached);
     }
   }
+  if (isFirestoreQuotaPaused()) {
+    const stale = serviceCache.get<string[]>('deleted_builtin_ids');
+    return new Set(Array.isArray(stale) ? stale : []);
+  }
 
   try {
+    trackFirestoreOp('questions_bootstrap', 'read', 1, 'deleted_builtin_manifest');
     const manifestSnap = await getDoc(
       doc(db, QUESTIONS_COLLECTION, DELETED_BUILTIN_MANIFEST_DOC_ID)
     );
@@ -1611,6 +1687,9 @@ export async function fetchDeletedBuiltinQuestionIds(
     serviceCache.set('deleted_builtin_ids', ids);
     return new Set(ids);
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', error);
+    }
     console.warn('Could not read deleted built-in questions manifest:', error);
     return new Set();
   }

@@ -62,6 +62,29 @@ const roomLocks = new Map<string, Promise<void>>();
 // Short-lived secret answer cache so correctAnswer never sits in Firestore before submission
 const secretAnswerCache = new Map<string, CachedQuestionAnswer>();
 
+const METADATA_CACHE_TTL_MS = 5 * 60 * 1000;
+const PRESENCE_WRITE_MIN_INTERVAL_MS = 35_000;
+const HOST_STALE_THRESHOLD_MS = 95_000;
+
+interface TtlCacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+const firestoreQuestionCache = new Map<string, TtlCacheEntry<AuthoritativeQuestionRecord | null>>();
+const firestoreSubcategoryCache = new Map<string, TtlCacheEntry<SubcategoryItem | null>>();
+const firestoreMainCategoryCache = new Map<
+  string,
+  TtlCacheEntry<{ isComingSoon?: boolean; isActive?: boolean; isDeleted?: boolean } | null>
+>();
+
+export function clearOnlineDuelCachesForTest(): void {
+  firestoreQuestionCache.clear();
+  firestoreSubcategoryCache.clear();
+  firestoreMainCategoryCache.clear();
+  secretAnswerCache.clear();
+}
+
 let builtinQuestionMapPromise: Promise<{
   questionsById: Map<string, AuthoritativeQuestionRecord>;
   subcategoriesById: Map<string, SubcategoryItem>;
@@ -102,9 +125,12 @@ function withRoomLock<T>(roomCode: string, task: () => Promise<T>): Promise<T> {
   });
 }
 
-async function importTsModuleFallback<T>(relPath: string): Promise<T> {
+async function importTsModuleWithEsbuildFallback<T>(
+  importer: () => Promise<T>,
+  relPath: string
+): Promise<T> {
   try {
-    return (await import(relPath)) as T;
+    return await importer();
   } catch {
     const esbuild = await import('esbuild');
     const absPath = path.resolve(import.meta.dirname, relPath);
@@ -132,13 +158,17 @@ async function loadBuiltinCatalog(): Promise<{
       const subcategoriesById = new Map<string, SubcategoryItem>();
 
       const [questionsMod, seedMod] = await Promise.all([
-        importTsModuleFallback<{ ALL_EXPANDED_QUESTIONS: TriviaQuestion[] }>(
+        importTsModuleWithEsbuildFallback<{ ALL_EXPANDED_QUESTIONS: TriviaQuestion[] }>(
+          () => import('../src/data/questions/index.ts'),
           '../src/data/questions/index.ts'
         ),
-        importTsModuleFallback<{
+        importTsModuleWithEsbuildFallback<{
           DEFAULT_SUBCATEGORIES: SubcategoryItem[];
-          INITIAL_SEED_QUESTIONS: TriviaQuestion[];
-        }>('../src/data/categoriesAndSeed.ts'),
+          INITIAL_SEED_QUESTIONS: Array<Partial<TriviaQuestion> & Pick<TriviaQuestion, 'id' | 'category' | 'questionText' | 'points' | 'correctAnswer'>>;
+        }>(
+          () => import('../src/data/categoriesAndSeed.ts'),
+          '../src/data/categoriesAndSeed.ts'
+        ),
       ]);
 
       for (const sub of seedMod.DEFAULT_SUBCATEGORIES || []) {
@@ -146,7 +176,9 @@ async function loadBuiltinCatalog(): Promise<{
         subcategoriesById.set(sanitizeDocId(sub.id), sub);
       }
 
-      const registerQuestion = (q: TriviaQuestion) => {
+      const registerQuestion = (
+        q: Partial<TriviaQuestion> & Pick<TriviaQuestion, 'id' | 'category' | 'questionText' | 'points' | 'correctAnswer'>
+      ) => {
         const rec: AuthoritativeQuestionRecord = {
           id: q.id,
           subcategoryId: q.subcategoryId,
@@ -188,7 +220,17 @@ async function resolveAuthoritativeQuestion(
   if (!rawId) return null;
   const cleanId = sanitizeDocId(rawId);
 
-  // 1. Check Firestore first so admin edits/custom approved questions always take precedence
+  const now = Date.now();
+  const cachedFs = firestoreQuestionCache.get(cleanId);
+  if (cachedFs && cachedFs.expiresAt > now) {
+    if (cachedFs.value) {
+      return cachedFs.value.status === 'rejected' ? null : cachedFs.value;
+    }
+    const { questionsById } = await loadBuiltinCatalog();
+    return questionsById.get(rawId) || questionsById.get(cleanId) || null;
+  }
+
+  // 1. Check Firestore first so admin edits/custom approved questions always take precedence (cached 5m)
   try {
     const fsDoc = await firestoreGetDoc<TriviaQuestion & { acceptedAnswers?: string[] }>(
       'questions',
@@ -197,8 +239,7 @@ async function resolveAuthoritativeQuestion(
     );
     if (fsDoc.exists && fsDoc.data) {
       const q = fsDoc.data;
-      if (q.status === 'rejected') return null;
-      return {
+      const mapped: AuthoritativeQuestionRecord = {
         id: q.id || cleanId,
         subcategoryId: q.subcategoryId,
         category: q.category || 'عام',
@@ -215,9 +256,21 @@ async function resolveAuthoritativeQuestion(
         audioMaxPlays: q.audioMaxPlays ?? null,
         status: q.status,
       };
+      firestoreQuestionCache.set(cleanId, {
+        value: mapped,
+        expiresAt: now + METADATA_CACHE_TTL_MS,
+      });
+      return q.status === 'rejected' ? null : mapped;
     }
-  } catch {
-    // Fallback to built-in catalog
+    firestoreQuestionCache.set(cleanId, {
+      value: null,
+      expiresAt: now + METADATA_CACHE_TTL_MS,
+    });
+  } catch (err) {
+    if (err instanceof FirestoreHttpError && err.status === 429) {
+      throw err;
+    }
+    // Fallback to built-in catalog on non-quota transient error
   }
 
   // 2. Built-in expanded question bank
@@ -238,35 +291,73 @@ async function checkSubcategoryIsComingSoon(
   let mainCatId = builtinSub?.mainCategoryId || '';
   let exists = Boolean(builtinSub);
 
-  try {
-    const fsSub = await firestoreGetDoc<SubcategoryItem>('subcategories', cleanId, idToken);
-    if (fsSub.exists && fsSub.data) {
+  const now = Date.now();
+  const cachedSub = firestoreSubcategoryCache.get(cleanId);
+  if (cachedSub && cachedSub.expiresAt > now) {
+    const subData = cachedSub.value;
+    if (subData) {
       exists = true;
-      subName = fsSub.data.name || subName;
-      subComingSoon = Boolean(fsSub.data.isComingSoon);
-      if (fsSub.data.isDeleted || fsSub.data.isActive === false) {
+      subName = subData.name || subName;
+      subComingSoon = Boolean(subData.isComingSoon);
+      if (subData.isDeleted || subData.isActive === false) {
         subComingSoon = true;
       }
-      mainCatId = fsSub.data.mainCategoryId || mainCatId;
+      mainCatId = subData.mainCategoryId || mainCatId;
     }
-  } catch {
-    // ignore read error and rely on built-in catalog
+  } else {
+    try {
+      const fsSub = await firestoreGetDoc<SubcategoryItem>('subcategories', cleanId, idToken);
+      firestoreSubcategoryCache.set(cleanId, {
+        value: fsSub.exists && fsSub.data ? fsSub.data : null,
+        expiresAt: now + METADATA_CACHE_TTL_MS,
+      });
+      if (fsSub.exists && fsSub.data) {
+        exists = true;
+        subName = fsSub.data.name || subName;
+        subComingSoon = Boolean(fsSub.data.isComingSoon);
+        if (fsSub.data.isDeleted || fsSub.data.isActive === false) {
+          subComingSoon = true;
+        }
+        mainCatId = fsSub.data.mainCategoryId || mainCatId;
+      }
+    } catch (err) {
+      if (err instanceof FirestoreHttpError && err.status === 429) {
+        throw err;
+      }
+      // ignore non-quota read error and rely on built-in catalog
+    }
   }
 
   if (mainCatId) {
-    try {
-      const fsMain = await firestoreGetDoc<{ isComingSoon?: boolean; isActive?: boolean; isDeleted?: boolean }>(
-        'mainCategories',
-        sanitizeDocId(mainCatId),
-        idToken
-      );
-      if (fsMain.exists && fsMain.data) {
-        if (fsMain.data.isComingSoon || fsMain.data.isDeleted || fsMain.data.isActive === false) {
-          subComingSoon = true;
-        }
+    const cleanMainId = sanitizeDocId(mainCatId);
+    const cachedMain = firestoreMainCategoryCache.get(cleanMainId);
+    if (cachedMain && cachedMain.expiresAt > now) {
+      const mainData = cachedMain.value;
+      if (mainData && (mainData.isComingSoon || mainData.isDeleted || mainData.isActive === false)) {
+        subComingSoon = true;
       }
-    } catch {
-      // ignore
+    } else {
+      try {
+        const fsMain = await firestoreGetDoc<{ isComingSoon?: boolean; isActive?: boolean; isDeleted?: boolean }>(
+          'mainCategories',
+          cleanMainId,
+          idToken
+        );
+        firestoreMainCategoryCache.set(cleanMainId, {
+          value: fsMain.exists && fsMain.data ? fsMain.data : null,
+          expiresAt: now + METADATA_CACHE_TTL_MS,
+        });
+        if (fsMain.exists && fsMain.data) {
+          if (fsMain.data.isComingSoon || fsMain.data.isDeleted || fsMain.data.isActive === false) {
+            subComingSoon = true;
+          }
+        }
+      } catch (err) {
+        if (err instanceof FirestoreHttpError && err.status === 429) {
+          throw err;
+        }
+        // ignore non-quota read error
+      }
     }
   }
 
@@ -454,10 +545,18 @@ async function requireAuthenticatedUser(req: Request): Promise<{
 }
 
 function handleEngineError(res: Response, err: unknown, fallbackMsg: string): void {
-  if (err instanceof ApiError || err instanceof FirestoreHttpError) {
+  if (err instanceof ApiError) {
     res.status(err.status).json({
       code: err.code,
       error: err.message,
+    });
+    return;
+  }
+  if (err instanceof FirestoreHttpError) {
+    res.status(err.status).json({
+      code: err.code,
+      error: err.message,
+      ...(err.retryAfterMs ? { retryAfterMs: err.retryAfterMs } : {}),
     });
     return;
   }
@@ -784,7 +883,7 @@ export async function handlePresenceUpdate(req: Request, res: Response): Promise
         ? 'connecting'
         : 'online';
 
-    const updatedRoom = await withRoomLock(code, async () => {
+    const txOutcome = await withRoomLock(code, async () => {
       const result = await runRoomCasTransaction<Record<string, unknown>>({
         roomCode: code,
         idToken,
@@ -792,13 +891,23 @@ export async function handlePresenceUpdate(req: Request, res: Response): Promise
           const room = raw as unknown as OnlineGameRoom;
           const now = Date.now();
           if (room.players?.[user.uid]) {
+            const existing = room.players[user.uid];
+            const lastSeenAge = now - Number(existing.lastSeen || 0);
+            if (
+              existing.connectionStatus === status &&
+              lastSeenAge >= 0 &&
+              lastSeenAge < PRESENCE_WRITE_MIN_INTERVAL_MS
+            ) {
+              // Skip redundant Firestore write & onSnapshot fanout when status is unchanged and recently pinged
+              return null;
+            }
             const isHost = (room.hostUid || room.hostId) === user.uid;
             return {
               ...room,
               players: {
                 ...room.players,
                 [user.uid]: {
-                  ...room.players[user.uid],
+                  ...existing,
                   lastSeen: now,
                   connectionStatus: status,
                 },
@@ -808,14 +917,24 @@ export async function handlePresenceUpdate(req: Request, res: Response): Promise
             } as unknown as Record<string, unknown>;
           }
           if (room.spectators?.[user.uid]) {
+            const existingSpec = room.spectators[user.uid];
+            const nextSpecStatus = status === 'connecting' ? 'online' : status;
+            const lastSeenAge = now - Number(existingSpec.lastSeen || 0);
+            if (
+              existingSpec.connectionStatus === nextSpecStatus &&
+              lastSeenAge >= 0 &&
+              lastSeenAge < PRESENCE_WRITE_MIN_INTERVAL_MS
+            ) {
+              return null;
+            }
             return {
               ...room,
               spectators: {
                 ...room.spectators,
                 [user.uid]: {
-                  ...room.spectators[user.uid],
+                  ...existingSpec,
                   lastSeen: now,
-                  connectionStatus: status === 'connecting' ? 'online' : status,
+                  connectionStatus: nextSpecStatus,
                 },
               },
               updatedAt: now,
@@ -824,10 +943,13 @@ export async function handlePresenceUpdate(req: Request, res: Response): Promise
           return null;
         },
       });
-      return result.data as unknown as OnlineGameRoom;
+      return {
+        room: result.data as unknown as OnlineGameRoom,
+        changed: result.changed,
+      };
     });
 
-    res.json({ ok: true, room: updatedRoom });
+    res.json({ ok: true, changed: txOutcome.changed, room: txOutcome.room });
   } catch (err) {
     handleEngineError(res, err, 'تعذر تحديث حالة الاتصال.');
   }
@@ -2087,7 +2209,7 @@ export async function handleClaimHostRole(req: Request, res: Response): Promise<
           const isStale =
             !currentHost ||
             currentHost.connectionStatus === 'offline' ||
-            now - (currentHost.lastSeen || 0) > 35000;
+            now - (currentHost.lastSeen || 0) > HOST_STALE_THRESHOLD_MS;
 
           if (!isStale && currentHostUid !== user.uid) {
             throw new ApiError(

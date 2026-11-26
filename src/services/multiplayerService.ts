@@ -8,6 +8,26 @@ import {
   RoomSpectator,
   RoomTeam,
 } from '../types/multiplayer';
+import {
+  FIRESTORE_QUOTA_EXCEEDED_MESSAGE,
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
+
+export class RoomApiError extends Error {
+  status: number;
+  code: string;
+  retryAfterMs?: number;
+
+  constructor(status: number, code: string, message: string, retryAfterMs?: number) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
 
 const ROOMS_COLLECTION = 'gameSessions';
 const ROOM_DOC_PREFIX = 'room_';
@@ -163,7 +183,18 @@ async function callRoomApi<T>(
   body: Record<string, unknown> = {},
   user?: User | null
 ): Promise<T> {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('online_api', 'dedup_skip', 1, `quota_paused:${path}`);
+    throw new RoomApiError(
+      429,
+      'firestore/quota-exceeded',
+      FIRESTORE_QUOTA_EXCEEDED_MESSAGE
+    );
+  }
+
   const idToken = await getIdTokenOrThrow(user);
+  trackFirestoreOp('online_api', 'api_call', 1, path);
+
   const res = await fetch(path, {
     method: 'POST',
     headers: {
@@ -176,11 +207,29 @@ async function callRoomApi<T>(
   const payload = (await res.json().catch(() => ({}))) as {
     error?: string;
     code?: string;
+    retryAfterMs?: number;
     room?: OnlineGameRoom;
   } & Record<string, unknown>;
 
   if (!res.ok) {
-    throw new Error(payload?.error || `تعذر إتمام الطلب (HTTP ${res.status})`);
+    const isQuota =
+      res.status === 429 ||
+      isFirestoreQuotaExceededError(payload?.code) ||
+      isFirestoreQuotaExceededError(payload?.error);
+    if (isQuota) {
+      triggerFirestoreQuotaCooldown('online_api', payload?.error, payload?.retryAfterMs);
+      throw new RoomApiError(
+        429,
+        'firestore/quota-exceeded',
+        payload?.error || FIRESTORE_QUOTA_EXCEEDED_MESSAGE,
+        payload?.retryAfterMs
+      );
+    }
+    throw new RoomApiError(
+      res.status,
+      payload?.code || `HTTP_${res.status}`,
+      payload?.error || `تعذر إتمام الطلب (HTTP ${res.status})`
+    );
   }
   return payload as unknown as T;
 }
@@ -209,13 +258,31 @@ export async function createOnlineRoom(params: CreateRoomParams): Promise<Online
 }
 
 export async function fetchOnlineRoom(code: string): Promise<OnlineGameRoom | null> {
-  const cleanCode = code.trim().toUpperCase();
-  let snap = await getDoc(getRoomDoc(cleanCode));
-  if (!snap.exists()) {
-    snap = await getDoc(doc(db, ROOMS_COLLECTION, cleanCode));
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('online_room_fetch', 'dedup_skip', 1, 'quota_paused');
+    throw new RoomApiError(
+      429,
+      'firestore/quota-exceeded',
+      FIRESTORE_QUOTA_EXCEEDED_MESSAGE
+    );
   }
-  if (!snap.exists()) return null;
-  return snap.data() as OnlineGameRoom;
+
+  const cleanCode = code.trim().toUpperCase();
+  try {
+    trackFirestoreOp('online_room_fetch', 'read', 1, `room_${cleanCode}`);
+    let snap = await getDoc(getRoomDoc(cleanCode));
+    if (!snap.exists()) {
+      trackFirestoreOp('online_room_fetch', 'read', 1, cleanCode);
+      snap = await getDoc(doc(db, ROOMS_COLLECTION, cleanCode));
+    }
+    if (!snap.exists()) return null;
+    return snap.data() as OnlineGameRoom;
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('online_room_fetch', err);
+    }
+    throw err;
+  }
 }
 
 export function subscribeToOnlineRoom(
@@ -225,10 +292,12 @@ export function subscribeToOnlineRoom(
 ): () => void {
   const cleanCode = code.trim().toUpperCase();
   const roomRef = getRoomDoc(cleanCode);
+  trackFirestoreOp('online_room_stream', 'listener_attach', 1, cleanCode);
 
   return onSnapshot(
     roomRef,
     (snap) => {
+      trackFirestoreOp('online_room_stream', 'listener_snapshot', 1, cleanCode);
       if (!snap.exists()) {
         onUpdate(null);
       } else {
@@ -237,6 +306,9 @@ export function subscribeToOnlineRoom(
     },
     (err) => {
       console.error('Room realtime subscription error:', err);
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('online_room_stream', err);
+      }
       if (onError) onError(err);
     }
   );
@@ -308,11 +380,19 @@ export async function updateOnlinePlayerPresence(
   _playerId: string,
   status: 'online' | 'connecting' | 'offline'
 ): Promise<void> {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('online_presence', 'dedup_skip', 1, 'quota_paused');
+    return;
+  }
   const cleanCode = code.trim().toUpperCase();
   try {
     await callRoomApi(`/api/online-rooms/${encodeURIComponent(cleanCode)}/presence`, { status });
-  } catch {
-    // silence background heartbeat errors
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('online_presence', err);
+      return;
+    }
+    // silence non-quota transient heartbeat errors
   }
 }
 

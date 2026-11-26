@@ -25,6 +25,12 @@ import {
   markPresenceOfflineNow,
   syncPublicPlayerProfile,
 } from '../services/presenceService';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
 
@@ -131,7 +137,19 @@ export async function syncUserProfile(user: User): Promise<UserProfileData> {
 
   const role: 'admin' | 'user' = isAdminUser ? 'admin' : 'user';
 
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('auth_profile', 'dedup_skip', 1, 'quota_paused_syncUserProfile');
+    return {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || user.email?.split('@')[0] || 'لاعب نِزال',
+      photoURL: user.photoURL,
+      role,
+    };
+  }
+
   try {
+    trackFirestoreOp('auth_profile', 'read', 1, 'users_profile');
     const existingSnap = await getDoc(userRef);
     if (!existingSnap.exists()) {
       const newProfile: UserProfileData = {
@@ -143,6 +161,7 @@ export async function syncUserProfile(user: User): Promise<UserProfileData> {
         createdAt: serverTimestamp(),
         lastLoginAt: serverTimestamp(),
       };
+      trackFirestoreOp('auth_profile', 'write', 1, 'users_profile_create');
       await setDoc(userRef, newProfile);
       syncPublicPlayerProfile(user, {
         displayName: newProfile.displayName || undefined,
@@ -151,6 +170,7 @@ export async function syncUserProfile(user: User): Promise<UserProfileData> {
     } else {
       const data = existingSnap.data() as UserProfileData;
       const mergedDisplayName = user.displayName || data.displayName || 'لاعب نِزال';
+      trackFirestoreOp('auth_profile', 'write', 1, 'users_profile_update');
       await setDoc(
         userRef,
         {
@@ -170,7 +190,11 @@ export async function syncUserProfile(user: User): Promise<UserProfileData> {
       };
     }
   } catch (err) {
-    console.warn('Could not sync user profile to Firestore (may need rules deployed):', err);
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('auth_profile', err);
+    } else {
+      console.warn('Could not sync user profile to Firestore (may need rules deployed):', err);
+    }
     return {
       uid: user.uid,
       email: user.email,
@@ -182,10 +206,18 @@ export async function syncUserProfile(user: User): Promise<UserProfileData> {
 }
 
 async function checkUserIsAdminDirect(uid: string): Promise<boolean> {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('auth_profile', 'dedup_skip', 1, 'quota_paused_checkAdmin');
+    return false;
+  }
   try {
+    trackFirestoreOp('auth_profile', 'read', 1, 'admins_check');
     const snap = await getDoc(doc(db, 'admins', uid));
     return snap.exists();
-  } catch {
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('auth_profile', err);
+    }
     return false;
   }
 }

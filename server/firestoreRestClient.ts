@@ -1,14 +1,141 @@
 import { loadFirebaseConfig } from './cloudinarySignCore.ts';
 
+export const SERVER_QUOTA_COOLDOWN_MS = 45_000;
+export const SERVER_QUOTA_EXCEEDED_MESSAGE =
+  'تم تجاوز حصة قاعدة البيانات (Firestore Quota Exceeded) مؤقتاً. تم إيقاف الطلبات المتكررة لحماية الحصة، يرجى الانتظار قليلاً والمحاولة مجدداً.';
+
 export class FirestoreHttpError extends Error {
   status: number;
   code: string;
+  retryAfterMs?: number;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, retryAfterMs?: number) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+interface CollectionCounters {
+  reads: number;
+  writes: number;
+  quota429: number;
+}
+
+const serverFirestoreStats = {
+  reads: 0,
+  writes: 0,
+  conflicts409: 0,
+  quota429: 0,
+  cooldownSkips: 0,
+  byCollection: new Map<string, CollectionCounters>(),
+};
+
+let serverQuotaCooldownUntil = 0;
+
+function recordCollectionOp(collectionPath: string, op: 'reads' | 'writes' | 'quota429'): void {
+  serverFirestoreStats[op] += 1;
+  const cleanCol = collectionPath.replace(/^\/+|\/+$/g, '') || 'unknown';
+  let entry = serverFirestoreStats.byCollection.get(cleanCol);
+  if (!entry) {
+    entry = { reads: 0, writes: 0, quota429: 0 };
+    serverFirestoreStats.byCollection.set(cleanCol, entry);
+  }
+  entry[op] += 1;
+}
+
+function isQuotaErrorDetails(status: number, code: string, message: string): boolean {
+  const lowerCode = code.toLowerCase();
+  const lowerMsg = message.toLowerCase();
+  return (
+    status === 429 ||
+    lowerCode.includes('resource_exhausted') ||
+    lowerCode.includes('resource-exhausted') ||
+    lowerCode.includes('quota-exceeded') ||
+    lowerMsg.includes('quota exceeded') ||
+    lowerMsg.includes('resource_exhausted')
+  );
+}
+
+function throwIfServerQuotaCoolingDown(collectionPath: string, opLabel: string): void {
+  const now = Date.now();
+  if (serverQuotaCooldownUntil > now) {
+    serverFirestoreStats.cooldownSkips += 1;
+    const remainingMs = serverQuotaCooldownUntil - now;
+    throw new FirestoreHttpError(
+      429,
+      'firestore/quota-exceeded',
+      SERVER_QUOTA_EXCEEDED_MESSAGE,
+      remainingMs
+    );
+  }
+  if (serverQuotaCooldownUntil > 0 && now >= serverQuotaCooldownUntil) {
+    serverQuotaCooldownUntil = 0;
+  }
+  void collectionPath;
+  void opLabel;
+}
+
+function throwMappedFirestoreError(
+  status: number,
+  code: string,
+  message: string,
+  collectionPath: string
+): never {
+  if (isQuotaErrorDetails(status, code, message)) {
+    serverQuotaCooldownUntil = Date.now() + SERVER_QUOTA_COOLDOWN_MS;
+    recordCollectionOp(collectionPath, 'quota429');
+    console.warn('[NIZAL Server Firestore 429]', {
+      collectionPath,
+      status,
+      code,
+      message,
+      cooldownMs: SERVER_QUOTA_COOLDOWN_MS,
+      totals: {
+        reads: serverFirestoreStats.reads,
+        writes: serverFirestoreStats.writes,
+        conflicts409: serverFirestoreStats.conflicts409,
+        quota429: serverFirestoreStats.quota429,
+        cooldownSkips: serverFirestoreStats.cooldownSkips,
+      },
+    });
+    throw new FirestoreHttpError(
+      429,
+      'firestore/quota-exceeded',
+      SERVER_QUOTA_EXCEEDED_MESSAGE,
+      SERVER_QUOTA_COOLDOWN_MS
+    );
+  }
+  throw new FirestoreHttpError(status, code, message);
+}
+
+export function getServerFirestoreDiagnostics() {
+  const byCollection: Record<string, CollectionCounters> = {};
+  serverFirestoreStats.byCollection.forEach((v, k) => {
+    byCollection[k] = { ...v };
+  });
+  const now = Date.now();
+  return {
+    reads: serverFirestoreStats.reads,
+    writes: serverFirestoreStats.writes,
+    conflicts409: serverFirestoreStats.conflicts409,
+    quota429: serverFirestoreStats.quota429,
+    cooldownSkips: serverFirestoreStats.cooldownSkips,
+    cooldownActive: serverQuotaCooldownUntil > now,
+    cooldownRemainingMs: Math.max(0, serverQuotaCooldownUntil - now),
+    byCollection,
+  };
+}
+
+export function resetServerFirestoreDiagnosticsForTest(): void {
+  serverFirestoreStats.reads = 0;
+  serverFirestoreStats.writes = 0;
+  serverFirestoreStats.conflicts409 = 0;
+  serverFirestoreStats.quota429 = 0;
+  serverFirestoreStats.cooldownSkips = 0;
+  serverFirestoreStats.byCollection.clear();
+  serverQuotaCooldownUntil = 0;
 }
 
 export interface FirestoreRawValue {
@@ -156,19 +283,21 @@ export async function firestoreGetDoc<T>(
   docId: string,
   idToken?: string
 ): Promise<FirestoreDocResponse<T>> {
+  throwIfServerQuotaCoolingDown(collectionPath, 'get');
   const url = buildDocumentUrl(collectionPath, docId);
   const headers: Record<string, string> = {};
   if (idToken) {
     headers.Authorization = `Bearer ${idToken}`;
   }
 
+  recordCollectionOp(collectionPath, 'reads');
   const res = await fetch(url, { method: 'GET', headers });
   if (res.status === 404) {
     return { exists: false, data: null };
   }
   if (!res.ok) {
     const err = await parseFirestoreError(res);
-    throw new FirestoreHttpError(res.status, err.code, err.message);
+    throwMappedFirestoreError(res.status, err.code, err.message, collectionPath);
   }
 
   const docJson = (await res.json()) as {
@@ -188,9 +317,11 @@ export async function firestoreCreateDoc<T extends Record<string, unknown>>(
   data: T,
   idToken: string
 ): Promise<{ data: T; updateTime?: string }> {
+  throwIfServerQuotaCoolingDown(collectionPath, 'create');
   const baseUrl = buildDocumentUrl(collectionPath, docId);
   const url = `${baseUrl}?currentDocument.exists=false`;
 
+  recordCollectionOp(collectionPath, 'writes');
   const res = await fetch(url, {
     method: 'PATCH',
     headers: {
@@ -204,7 +335,7 @@ export async function firestoreCreateDoc<T extends Record<string, unknown>>(
 
   if (!res.ok) {
     const err = await parseFirestoreError(res);
-    throw new FirestoreHttpError(res.status, err.code, err.message);
+    throwMappedFirestoreError(res.status, err.code, err.message, collectionPath);
   }
 
   const docJson = (await res.json()) as {
@@ -224,9 +355,11 @@ export async function firestorePatchDocWithUpdateTime<T extends Record<string, u
   updateTime: string,
   idToken: string
 ): Promise<{ data: T; updateTime?: string }> {
+  throwIfServerQuotaCoolingDown(collectionPath, 'patch');
   const baseUrl = buildDocumentUrl(collectionPath, docId);
   const url = `${baseUrl}?currentDocument.updateTime=${encodeURIComponent(updateTime)}`;
 
+  recordCollectionOp(collectionPath, 'writes');
   const res = await fetch(url, {
     method: 'PATCH',
     headers: {
@@ -240,7 +373,7 @@ export async function firestorePatchDocWithUpdateTime<T extends Record<string, u
 
   if (!res.ok) {
     const err = await parseFirestoreError(res);
-    throw new FirestoreHttpError(res.status, err.code, err.message);
+    throwMappedFirestoreError(res.status, err.code, err.message, collectionPath);
   }
 
   const docJson = (await res.json()) as {
@@ -290,9 +423,17 @@ export async function runRoomCasTransaction<T extends Record<string, unknown>>(p
     } catch (err) {
       if (
         err instanceof FirestoreHttpError &&
+        (err.status === 429 || err.code === 'firestore/quota-exceeded')
+      ) {
+        // NEVER retry 429 / RESOURCE_EXHAUSTED
+        throw err;
+      }
+      if (
+        err instanceof FirestoreHttpError &&
         (err.status === 409 || err.status === 412 || err.code === 'ABORTED' || err.code === 'FAILED_PRECONDITION') &&
         i < attempts - 1
       ) {
+        serverFirestoreStats.conflicts409 += 1;
         await new Promise((r) => setTimeout(r, 35 * (i + 1)));
         continue;
       }

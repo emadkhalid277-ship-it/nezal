@@ -105,6 +105,16 @@ import {
 } from '../types/walaKalima';
 import { WalaKalimaBoardModal } from '../components/WalaKalimaBoardModal';
 import { AlertBanner, StatusBadge } from '../components/ui';
+import {
+  FIRESTORE_QUOTA_EXCEEDED_MESSAGE,
+  FirestoreQuotaState,
+  getFirestoreQuotaState,
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  resetFirestoreQuotaCooldown,
+  subscribeFirestoreQuotaState,
+  trackFirestoreOp,
+} from '../utils/firestoreDiagnostics';
 
 interface OnlineMultiplayerPageProps {
   user: User | null;
@@ -225,8 +235,19 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     eventKey: string;
   } | null>(null);
 
+  const [quotaState, setQuotaState] = useState<FirestoreQuotaState>(() =>
+    getFirestoreQuotaState()
+  );
+
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const subscribedRoomCodeRef = useRef<string | null>(null);
   const heartbeatRef = useRef<number | null>(null);
+  const lastRoomMutationAtRef = useRef<number>(0);
+  const lastManualRetryAtRef = useRef<number>(0);
+  const lastMatchSyncSigRef = useRef<string>('');
+  const matchSyncTimerRef = useRef<number | null>(null);
+  const userRef = useRef<User | null>(user);
+  const playerProfileIdRef = useRef<string>(playerProfile.id);
   const audioLoadingStartedAtRef = useRef<number | null>(null);
   const onlineFeedbackTimerRef = useRef<number | null>(null);
   const autoTimeoutFiredKeyRef = useRef<string | null>(null);
@@ -241,6 +262,31 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     totalScore: number;
     teamScores: number[];
   } | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    playerProfileIdRef.current = playerProfile.id;
+  }, [playerProfile.id]);
+
+  useEffect(() => {
+    return subscribeFirestoreQuotaState((nextState) => {
+      setQuotaState(nextState);
+      if (nextState.paused) {
+        if (unsubscribeRef.current) {
+          unsubscribeRef.current();
+          unsubscribeRef.current = null;
+          subscribedRoomCodeRef.current = null;
+        }
+        if (heartbeatRef.current) {
+          window.clearInterval(heartbeatRef.current);
+          heartbeatRef.current = null;
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     return soundFX.subscribe(setSoundEnabled);
@@ -279,97 +325,200 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       if (onlineFeedbackTimerRef.current !== null) {
         window.clearTimeout(onlineFeedbackTimerRef.current);
       }
+      if (matchSyncTimerRef.current !== null) {
+        window.clearTimeout(matchSyncTimerRef.current);
+      }
     };
   }, []);
 
-  // Connect to room stream
-  const connectToRoomStream = useCallback(
-    (roomCode: string) => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
-      const unsub = subscribeToOnlineRoom(
-        roomCode,
-        (updatedRoom) => {
-          if (!updatedRoom) {
-            setErrorMsg('تم إغلاق الغرفة أو أنها لم تعد متوفرة.');
-            clearActiveOnlineRoomCode();
-            setCurrentRoom(null);
-            return;
-          }
-          setCurrentRoom(updatedRoom);
+  const disconnectRoomStream = useCallback(() => {
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+    subscribedRoomCodeRef.current = null;
+  }, []);
 
-          // Auto-save match progress for active players
-          const myUid = user?.uid || playerProfile.id;
-          if (
-            user &&
-            updatedRoom.players?.[myUid] &&
-            (updatedRoom.status === 'playing' ||
-              updatedRoom.status === 'in_game' ||
-              updatedRoom.status === 'finished')
-          ) {
-            const sorted = [...updatedRoom.teams].sort((a, b) => b.score - a.score);
-            const playersList = Object.values(updatedRoom.players || {});
-            saveMatchProgressToFirestore({
-              id: `online_${updatedRoom.code}_${user.uid}`,
-              userId: user.uid,
-              userEmail: user.email || null,
-              status: updatedRoom.status === 'finished' ? 'completed' : 'in_progress',
-              mode: 'online',
-              roomCode: updatedRoom.code,
-              teams: updatedRoom.teams.map((t) => ({
-                id: t.id,
-                name: t.name,
-                color: t.color,
-                score: t.score,
-                players: playersList
-                  .filter((p) => p.teamId === t.id)
-                  .map((p) => p.name),
-              })),
-              selectedSubcategories: updatedRoom.selectedSubcategoryIds || [],
-              usedTileKeys: updatedRoom.usedTileKeys || [],
-              activeTeamIndex: updatedRoom.activeTeamIndex || 0,
-              activeQuestionState: updatedRoom.activeQuestion
-                ? {
-                    tileKey: updatedRoom.activeQuestion.tileKey,
-                    subcategoryId: updatedRoom.activeQuestion.subcategoryId,
-                    subcategoryName: updatedRoom.activeQuestion.subcategoryName,
-                    mainCategoryName: updatedRoom.activeQuestion.category,
-                    points: (updatedRoom.activeQuestion.points as PointValue) || 100,
-                    questionId: updatedRoom.activeQuestion.questionId,
-                    questionText: updatedRoom.activeQuestion.questionText,
-                    correctAnswer: updatedRoom.activeQuestion.correctAnswer,
-                    mediaType: inferQuestionMediaType(updatedRoom.activeQuestion),
-                    imageUrl: updatedRoom.activeQuestion.imageUrl,
-                    imageDescription: updatedRoom.activeQuestion.imageDescription,
-                    audioUrl: updatedRoom.activeQuestion.audioUrl,
-                    audioMaxPlays: updatedRoom.activeQuestion.audioMaxPlays ?? null,
-                    explanation: updatedRoom.activeQuestion.explanation,
-                    answerRevealed: updatedRoom.activeQuestion.isAnswerRevealed,
-                    timeLeft: updatedRoom.timerDuration || 60,
-                    timerPaused: false,
-                  }
-                : null,
-              winnerTeamName:
-                updatedRoom.status === 'finished' ? sorted[0]?.name : undefined,
-              winnerScore:
-                updatedRoom.status === 'finished' ? sorted[0]?.score : undefined,
-            }).catch(() => {});
-          }
-        },
-        (err) => {
-          console.error('Room subscription error:', err);
-          setErrorMsg('حدث خطأ أثناء مزامنة الغرفة. جاري المحاولة مجدداً...');
+  const applyRoomMutationSuccess = useCallback((updatedRoom: OnlineGameRoom) => {
+    lastRoomMutationAtRef.current = Date.now();
+    setCurrentRoom(updatedRoom);
+  }, []);
+
+  const handleRoomActionError = useCallback((err: any, fallback: string) => {
+    if (isFirestoreQuotaExceededError(err)) {
+      setErrorMsg(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+      return;
+    }
+    setErrorMsg(err?.message || fallback);
+  }, []);
+
+  // Connect to room stream (reuses existing active subscription for same roomCode)
+  const connectToRoomStream = useCallback((roomCode: string) => {
+    const cleanCode = (roomCode || '').trim().toUpperCase();
+    if (!cleanCode) return;
+
+    if (isFirestoreQuotaPaused()) {
+      trackFirestoreOp('online_room', 'dedup_skip', 1, `quota_paused_stream:${cleanCode}`);
+      setErrorMsg(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+      return;
+    }
+
+    if (subscribedRoomCodeRef.current === cleanCode && unsubscribeRef.current) {
+      trackFirestoreOp('online_room', 'dedup_skip', 1, `reuse_stream:${cleanCode}`);
+      return;
+    }
+
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+
+    subscribedRoomCodeRef.current = cleanCode;
+    const unsub = subscribeToOnlineRoom(
+      cleanCode,
+      (updatedRoom) => {
+        if (!updatedRoom) {
+          setErrorMsg('تم إغلاق الغرفة أو أنها لم تعد متوفرة.');
+          clearActiveOnlineRoomCode();
+          disconnectRoomStream();
+          setCurrentRoom(null);
+          return;
         }
-      );
-      unsubscribeRef.current = unsub;
-    },
-    [user, playerProfile.id]
-  );
+        setCurrentRoom(updatedRoom);
+      },
+      (err) => {
+        console.error('Room subscription error:', err);
+        if (isFirestoreQuotaExceededError(err)) {
+          disconnectRoomStream();
+          setErrorMsg(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+        } else {
+          setErrorMsg('حدث خطأ أثناء مزامنة الغرفة. يرجى التحقق من الاتصال.');
+        }
+      }
+    );
+    unsubscribeRef.current = unsub;
+  }, [disconnectRoomStream]);
+
+  const handleManualQuotaRetry = useCallback(() => {
+    const now = Date.now();
+    if (now - lastManualRetryAtRef.current < 1500) {
+      return;
+    }
+    lastManualRetryAtRef.current = now;
+    resetFirestoreQuotaCooldown();
+    setErrorMsg(null);
+    if (currentRoom?.code) {
+      connectToRoomStream(currentRoom.code);
+    }
+  }, [currentRoom?.code, connectToRoomStream]);
+
+  // Debounced, signature-deduplicated match progress persistence (never runs on heartbeats)
+  useEffect(() => {
+    if (!user || !currentRoom || quotaState.paused) return;
+    const activeUid = user.uid || playerProfileIdRef.current;
+    if (!currentRoom.players?.[activeUid]) return;
+
+    const isTrackableStatus =
+      currentRoom.status === 'playing' ||
+      currentRoom.status === 'in_game' ||
+      currentRoom.status === 'finished';
+    if (!isTrackableStatus) return;
+
+    const teamsSig = (currentRoom.teams || [])
+      .map((t) => `${t.id}:${t.score}`)
+      .join(',');
+    const aq = currentRoom.activeQuestion;
+    const syncSig = `${currentRoom.code}|${currentRoom.status}|${teamsSig}|${
+      (currentRoom.usedTileKeys || []).length
+    }|${currentRoom.activeTeamIndex || 0}|${aq?.tileKey || ''}|${
+      aq?.isAnswerRevealed ? 1 : 0
+    }`;
+
+    if (lastMatchSyncSigRef.current === syncSig) {
+      return;
+    }
+    lastMatchSyncSigRef.current = syncSig;
+
+    if (matchSyncTimerRef.current !== null) {
+      window.clearTimeout(matchSyncTimerRef.current);
+      matchSyncTimerRef.current = null;
+    }
+
+    const flushMatchSync = () => {
+      if (isFirestoreQuotaPaused()) return;
+      const sorted = [...currentRoom.teams].sort((a, b) => b.score - a.score);
+      const playersList = Object.values(currentRoom.players || {});
+      saveMatchProgressToFirestore({
+        id: `online_${currentRoom.code}_${user.uid}`,
+        userId: user.uid,
+        userEmail: user.email || null,
+        status: currentRoom.status === 'finished' ? 'completed' : 'in_progress',
+        mode: 'online',
+        roomCode: currentRoom.code,
+        teams: currentRoom.teams.map((t) => ({
+          id: t.id,
+          name: t.name,
+          color: t.color,
+          score: t.score,
+          players: playersList
+            .filter((p) => p.teamId === t.id)
+            .map((p) => p.name),
+        })),
+        selectedSubcategories: currentRoom.selectedSubcategoryIds || [],
+        usedTileKeys: currentRoom.usedTileKeys || [],
+        activeTeamIndex: currentRoom.activeTeamIndex || 0,
+        activeQuestionState: aq
+          ? {
+              tileKey: aq.tileKey,
+              subcategoryId: aq.subcategoryId,
+              subcategoryName: aq.subcategoryName,
+              mainCategoryName: aq.category,
+              points: (aq.points as PointValue) || 100,
+              questionId: aq.questionId,
+              questionText: aq.questionText,
+              correctAnswer: aq.correctAnswer,
+              mediaType: inferQuestionMediaType(aq),
+              imageUrl: aq.imageUrl,
+              imageDescription: aq.imageDescription,
+              audioUrl: aq.audioUrl,
+              audioMaxPlays: aq.audioMaxPlays ?? null,
+              explanation: aq.explanation,
+              answerRevealed: aq.isAnswerRevealed,
+              timeLeft: currentRoom.timerDuration || 60,
+              timerPaused: false,
+            }
+          : null,
+        winnerTeamName:
+          currentRoom.status === 'finished' ? sorted[0]?.name : undefined,
+        winnerScore:
+          currentRoom.status === 'finished' ? sorted[0]?.score : undefined,
+      }).catch(() => {});
+    };
+
+    if (currentRoom.status === 'finished') {
+      flushMatchSync();
+    } else {
+      matchSyncTimerRef.current = window.setTimeout(flushMatchSync, 1200);
+    }
+
+    return () => {
+      if (matchSyncTimerRef.current !== null) {
+        window.clearTimeout(matchSyncTimerRef.current);
+        matchSyncTimerRef.current = null;
+      }
+    };
+  }, [currentRoom, user, quotaState.paused]);
 
   // Seamless reconnection after reload/disconnect
   useEffect(() => {
-    if (!user || autoJoinNonce || initialRoomCode || currentRoom || autoReconnectAttemptedRef.current) {
+    if (
+      !user ||
+      autoJoinNonce ||
+      initialRoomCode ||
+      currentRoom ||
+      autoReconnectAttemptedRef.current ||
+      quotaState.paused
+    ) {
       return;
     }
     const saved = getActiveOnlineRoomSession();
@@ -437,8 +586,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         } else {
           clearActiveOnlineRoomCode();
         }
-      } catch {
-        clearActiveOnlineRoomCode();
+      } catch (err) {
+        if (isFirestoreQuotaExceededError(err)) {
+          setErrorMsg(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+        } else {
+          clearActiveOnlineRoomCode();
+        }
       } finally {
         if (!cancelled) setIsReconnecting(false);
       }
@@ -448,11 +601,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [user, autoJoinNonce, initialRoomCode, currentRoom, connectToRoomStream, playerProfile.name]);
+  }, [user, autoJoinNonce, initialRoomCode, currentRoom, connectToRoomStream, playerProfile.name, quotaState.paused]);
 
   // Auto-join room when triggered from Friend Invite or Notification Center
   useEffect(() => {
     if (!user || !autoJoinNonce || !initialRoomCode) return;
+    if (isFirestoreQuotaPaused()) {
+      setErrorMsg(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+      setEntryMode('join');
+      setRoomCodeInput(initialRoomCode.trim().toUpperCase());
+      return;
+    }
     const cleanCode = initialRoomCode.trim().toUpperCase();
     if (!cleanCode) return;
 
@@ -477,7 +636,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           });
           if (cancelled) return;
           setPlayerProfile(getOrCreatePlayerProfile(user, displayName));
-          setCurrentRoom(room);
+          applyRoomMutationSuccess(room);
           connectToRoomStream(room.code);
         } else {
           const { room } = await joinOnlineRoom({
@@ -487,12 +646,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           });
           if (cancelled) return;
           setPlayerProfile(getOrCreatePlayerProfile(user, displayName));
-          setCurrentRoom(room);
+          applyRoomMutationSuccess(room);
           connectToRoomStream(room.code);
         }
       } catch (err: any) {
         if (!cancelled) {
-          setErrorMsg(err?.message || 'تعذر الدخول إلى الغرفة تلقائياً.');
+          handleRoomActionError(err, 'تعذر الدخول إلى الغرفة تلقائياً.');
           setEntryMode('join');
           setRoomCodeInput(cleanCode);
         }
@@ -510,11 +669,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (unsubscribeRef.current) unsubscribeRef.current();
-      if (heartbeatRef.current) window.clearInterval(heartbeatRef.current);
+      disconnectRoomStream();
+      if (heartbeatRef.current) {
+        window.clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
       if (onPresenceActivityChange) onPresenceActivityChange('online', null);
     };
-  }, []);
+  }, [disconnectRoomStream]);
 
   // Computed identities & roles
   const myUid = user?.uid || playerProfile.id;
@@ -591,19 +753,23 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     prevModalTimeLeftRef.current = modalTimeLeft;
 
     // Auto-resolve on timeout when timer hits 0
-    if (modalTimeLeft === 0 && currentRoom?.code && !isSpectator && myRole) {
+    if (modalTimeLeft === 0 && currentRoom?.code && !isSpectator && myRole && !quotaState.paused) {
       const timeoutKey = `${currentRoom.code}__${q.tileKey}__${q.openedAt}`;
       if (autoTimeoutFiredKeyRef.current !== timeoutKey) {
         const delayMs = isMyTurn ? 150 : 2000;
         const t = window.setTimeout(() => {
-          if (autoTimeoutFiredKeyRef.current === timeoutKey) return;
+          if (autoTimeoutFiredKeyRef.current === timeoutKey || isFirestoreQuotaPaused()) return;
           autoTimeoutFiredKeyRef.current = timeoutKey;
-          void timeoutOrSkipOnlineQuestion(currentRoom.code).catch(() => {});
+          void timeoutOrSkipOnlineQuestion(currentRoom.code).catch((err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              setErrorMsg(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+            }
+          });
         }, delayMs);
         return () => window.clearTimeout(t);
       }
     }
-  }, [modalTimeLeft, currentRoom?.activeQuestion, currentRoom?.code, onlineAudioReady, isMyTurn, isSpectator, myRole]);
+  }, [modalTimeLeft, currentRoom?.activeQuestion, currentRoom?.code, onlineAudioReady, isMyTurn, isSpectator, myRole, quotaState.paused]);
 
   // Reset question draft & media readiness when active question changes
   useEffect(() => {
@@ -704,17 +870,33 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     }
   }, [currentRoom?.lastActionAt, currentRoom?.lastActionMessage]);
 
-  // Presence heartbeat every 10 seconds
+  // Throttled, visibility-gated presence heartbeat (45s, skips if recent room action or quota paused)
   useEffect(() => {
-    if (!currentRoom || !user) return;
-    const ping = () => {
-      void updateOnlinePlayerPresence(currentRoom.code, myUid, 'online');
+    const roomCode = currentRoom?.code;
+    const uid = user?.uid;
+    if (!roomCode || !uid || quotaState.paused) return;
+
+    const pingIfNeeded = () => {
+      if (isFirestoreQuotaPaused()) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      if (Date.now() - lastRoomMutationAtRef.current < 30_000) {
+        trackFirestoreOp('online_presence', 'dedup_skip', 1, 'recent_room_mutation');
+        return;
+      }
+      void updateOnlinePlayerPresence(roomCode, myUid, 'online');
     };
-    ping();
-    const interval = window.setInterval(ping, 10000);
+
+    const interval = window.setInterval(pingIfNeeded, 45_000);
     heartbeatRef.current = interval;
-    return () => window.clearInterval(interval);
-  }, [currentRoom?.code, myUid, user]);
+    return () => {
+      window.clearInterval(interval);
+      if (heartbeatRef.current === interval) {
+        heartbeatRef.current = null;
+      }
+    };
+  }, [currentRoom?.code, myUid, user?.uid, quotaState.paused]);
 
   // Notify parent app of global presence state
   useEffect(() => {
@@ -903,12 +1085,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const isHostOnlineNow = Boolean(
     hostPlayerObj &&
       hostPlayerObj.connectionStatus !== 'offline' &&
-      Date.now() - (hostPlayerObj.lastSeen || 0) <= 35000
+      Date.now() - (hostPlayerObj.lastSeen || 0) <= 95000
   );
   const isGuestOnlineNow = Boolean(
     guestPlayerObj &&
       guestPlayerObj.connectionStatus !== 'offline' &&
-      Date.now() - (guestPlayerObj.lastSeen || 0) <= 35000
+      Date.now() - (guestPlayerObj.lastSeen || 0) <= 95000
   );
 
   const hostPicks = currentRoom?.teamSubcategoryIds?.[hostTeam.id] || [];
@@ -1037,10 +1219,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         ],
       });
       setPlayerProfile(getOrCreatePlayerProfile(user, name));
-      setCurrentRoom(newRoom);
+      applyRoomMutationSuccess(newRoom);
       connectToRoomStream(newRoom.code);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'فشل إنشاء الغرفة. يرجى المحاولة مجدداً.');
+      handleRoomActionError(err, 'فشل إنشاء الغرفة. يرجى المحاولة مجدداً.');
     } finally {
       setLoading(false);
     }
@@ -1082,7 +1264,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           user,
         });
         setPlayerProfile(getOrCreatePlayerProfile(user, name));
-        setCurrentRoom(room);
+        applyRoomMutationSuccess(room);
         connectToRoomStream(room.code);
       } else {
         const { room } = await joinOnlineRoom({
@@ -1091,11 +1273,11 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           user,
         });
         setPlayerProfile(getOrCreatePlayerProfile(user, name));
-        setCurrentRoom(room);
+        applyRoomMutationSuccess(room);
         connectToRoomStream(room.code);
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر الانضمام إلى الغرفة.');
+      handleRoomActionError(err, 'تعذر الانضمام إلى الغرفة.');
     } finally {
       setLoading(false);
     }
@@ -1104,10 +1286,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const handleLeaveRoom = async () => {
     if (!currentRoom) return;
     try {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
+      disconnectRoomStream();
       await leaveOnlineRoom(currentRoom.code, myUid);
     } catch {
       clearActiveOnlineRoomCode();
@@ -1147,9 +1326,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     setIsTogglingSubId(subcategoryId);
     try {
       const updated = await toggleOnlineSubcategoryPick(currentRoom.code, subcategoryId);
-      setCurrentRoom(updated);
+      applyRoomMutationSuccess(updated);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'حدث خطأ أثناء تعديل اختيار الفئة.');
+      handleRoomActionError(err, 'حدث خطأ أثناء تعديل اختيار الفئة.');
     } finally {
       setIsTogglingSubId(null);
     }
@@ -1161,9 +1340,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     setIsConfirmingBusy(true);
     try {
       const updated = await confirmOnlineCategories(currentRoom.code, confirmed);
-      setCurrentRoom(updated);
+      applyRoomMutationSuccess(updated);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر تحديث تأكيد الفئات.');
+      handleRoomActionError(err, 'تعذر تحديث تأكيد الفئات.');
     } finally {
       setIsConfirmingBusy(false);
     }
@@ -1175,9 +1354,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     setErrorMsg(null);
     try {
       const updated = await hostStartGame(currentRoom.code);
-      setCurrentRoom(updated);
+      applyRoomMutationSuccess(updated);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر بدء المباراة.');
+      handleRoomActionError(err, 'تعذر بدء المباراة.');
     } finally {
       setLoading(false);
     }
@@ -1216,9 +1395,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         questionId: matchedQ.id,
         subcategoryName: subName,
       });
-      setCurrentRoom(updated);
+      applyRoomMutationSuccess(updated);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر فتح السؤال.');
+      handleRoomActionError(err, 'تعذر فتح السؤال.');
     }
   };
 
@@ -1240,9 +1419,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         code: currentRoom.code,
         answer: trimmed,
       });
-      setCurrentRoom(updated);
+      applyRoomMutationSuccess(updated);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر إرسال الإجابة.');
+      handleRoomActionError(err, 'تعذر إرسال الإجابة.');
     } finally {
       setIsSubmittingAnswer(false);
     }
@@ -1256,9 +1435,9 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     setIsSubmittingAnswer(true);
     try {
       const updated = await timeoutOrSkipOnlineQuestion(currentRoom.code);
-      setCurrentRoom(updated);
+      applyRoomMutationSuccess(updated);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر تخطي السؤال.');
+      handleRoomActionError(err, 'تعذر تخطي السؤال.');
     } finally {
       setIsSubmittingAnswer(false);
     }
@@ -1271,12 +1450,49 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     setIsDismissingResult(true);
     try {
       const updated = await dismissResolvedOnlineQuestion(currentRoom.code);
-      setCurrentRoom(updated);
+      applyRoomMutationSuccess(updated);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر إغلاق النتيجة.');
+      handleRoomActionError(err, 'تعذر إغلاق النتيجة.');
     } finally {
       setIsDismissingResult(false);
     }
+  };
+
+  // Persist active online room code cleanly in an effect instead of render body
+  useEffect(() => {
+    if (currentRoom?.code && currentRoom.status !== 'finished') {
+      saveActiveOnlineRoomCode(
+        currentRoom.code,
+        isSpectator ? 'spectator' : 'player',
+        myUid
+      );
+    }
+  }, [currentRoom?.code, currentRoom?.status, isSpectator, myUid]);
+
+  const renderQuotaBanner = () => {
+    if (!quotaState.paused) return null;
+    return (
+      <AlertBanner tone="error">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5 text-right">
+            <div className="font-bold text-xs sm:text-sm">
+              تم تجاوز حصة قاعدة البيانات مؤقتاً (Quota Exceeded)
+            </div>
+            <p className="text-[11px] sm:text-xs opacity-90 leading-relaxed">
+              {quotaState.lastErrorMessage || FIRESTORE_QUOTA_EXCEEDED_MESSAGE}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualQuotaRetry}
+            className="min-h-[40px] px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold shrink-0 cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>إعادة المحاولة الآن</span>
+          </button>
+        </div>
+      </AlertBanner>
+    );
   };
 
   // Mandatory Login Gate
@@ -1351,13 +1567,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           </AlertBanner>
         )}
 
+        {renderQuotaBanner()}
+
         {!isOnline && (
           <AlertBanner tone="warning">
             يتطلب اللعب عن بُعد اتصالاً بالإنترنت للمزامنة المباشرة بين اللاعبين.
           </AlertBanner>
         )}
 
-        {errorMsg && (
+        {errorMsg && !quotaState.paused && (
           <AlertBanner tone="error" onDismiss={() => setErrorMsg(null)}>
             {errorMsg}
           </AlertBanner>
@@ -1579,11 +1797,6 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     );
   }
 
-  // Keep local active room saved whenever viewing an active room
-  if (currentRoom.code && currentRoom.status !== 'finished') {
-    saveActiveOnlineRoomCode(currentRoom.code, isSpectator ? 'spectator' : 'player', myUid);
-  }
-
   // -------------------------------------------------------------
   // 2. LOBBY & CATEGORY SELECTION SCREEN
   // -------------------------------------------------------------
@@ -1610,13 +1823,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
     return (
       <div className="max-w-[1150px] mx-auto px-3 sm:px-4 py-5 md:py-8 space-y-5 sm:space-y-7">
+        {renderQuotaBanner()}
+
         {!isOnline && (
           <AlertBanner tone="warning">
             انقطع الاتصال بالإنترنت — ستعود المزامنة تلقائياً فور عودة الاتصال.
           </AlertBanner>
         )}
 
-        {errorMsg && (
+        {errorMsg && !quotaState.paused && (
           <AlertBanner tone="error" onDismiss={() => setErrorMsg(null)}>
             {errorMsg}
           </AlertBanner>
@@ -1649,7 +1864,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => void claimOnlineHost(currentRoom.code).then(setCurrentRoom).catch((e) => setErrorMsg(e?.message))}
+              onClick={() => void claimOnlineHost(currentRoom.code).then(setCurrentRoom).catch((e) => handleRoomActionError(e, 'تعذر استلام دور المضيف.'))}
               className="min-h-[44px] px-4 py-1.5 text-xs font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-700 cursor-pointer"
             >
               استلام دور المضيف 👑
@@ -2255,13 +2470,15 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     return (
       <MotionConfig reducedMotion="user">
         <div className="max-w-[1380px] mx-auto px-3 sm:px-6 py-4 md:py-7 space-y-4 sm:space-y-6">
+          {renderQuotaBanner()}
+
           {!isOnline && (
             <AlertBanner tone="warning">
               انقطع الاتصال بالإنترنت — ستعود المزامنة تلقائياً فور استعادة الاتصال.
             </AlertBanner>
           )}
 
-          {errorMsg && (
+          {errorMsg && !quotaState.paused && (
             <AlertBanner tone="error" onDismiss={() => setErrorMsg(null)}>
               {errorMsg}
             </AlertBanner>
@@ -3196,6 +3413,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
         transition={{ duration: 0.28 }}
         className="max-w-[840px] mx-auto px-3 sm:px-6 py-6 md:py-12 text-center space-y-6"
       >
+        {renderQuotaBanner()}
+        {errorMsg && !quotaState.paused && (
+          <AlertBanner tone="error" onDismiss={() => setErrorMsg(null)}>
+            {errorMsg}
+          </AlertBanner>
+        )}
         <div className="relative overflow-hidden bg-[#FFFFFF] border border-[#E5E8DD] rounded-3xl p-4 sm:p-8 md:p-11 space-y-6 shadow-xl">
           <div
             aria-hidden="true"
@@ -3276,7 +3499,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             {isHost ? (
               <button
                 type="button"
-                onClick={() => void hostRestartGame(currentRoom.code).catch((e) => setErrorMsg(e?.message))}
+                onClick={() => void hostRestartGame(currentRoom.code).catch((e) => handleRoomActionError(e, 'تعذر بدء جولة جديدة.'))}
                 className="w-full sm:w-auto min-h-[48px] px-6 py-3.5 rounded-xl bg-[#F07842] text-[#FFFFFF] text-sm font-bold hover:bg-[#D9632E] cursor-pointer flex items-center justify-center gap-2 shadow-sm"
               >
                 <RotateCcw className="w-4 h-4" />

@@ -120,6 +120,7 @@ import {
   syncPublicPlayerProfile,
 } from './services/presenceService';
 import { PresenceStatus } from './types/social';
+import { isFirestoreQuotaPaused, trackFirestoreOp } from './utils/firestoreDiagnostics';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallBanner } from './components/PWAInstallButton';
@@ -760,10 +761,32 @@ export default function App() {
     [isGameLocked, teams, activeSubcategories]
   );
 
-  // Load questions from Firestore, respect deleted built-in manifest, and merge seamlessly
+  const OFFLINE_QUESTIONS_FRESH_MS = 30 * 60 * 1000;
+  const bootstrappedCatalogScopeRef = useRef<'none' | 'public' | 'admin'>('none');
+
+  // Load questions from Firestore (or fresh IndexedDB snapshot for non-admin), respect deleted built-in manifest, and merge seamlessly
   const loadQuestions = useCallback(async (adminAccess: boolean, forceRefresh = false) => {
     setLoadingQuestions(true);
     try {
+      if (!adminAccess && !forceRefresh) {
+        const offlineSnap = await loadActiveOfflineDataset();
+        if (
+          offlineSnap &&
+          offlineSnap.source === 'firebase' &&
+          offlineSnap.questions.length > 0 &&
+          Date.now() - offlineSnap.syncedAt < OFFLINE_QUESTIONS_FRESH_MS
+        ) {
+          trackFirestoreOp(
+            'questions_bootstrap',
+            'cache_hit',
+            1,
+            `indexeddb_fresh_${offlineSnap.questions.length}`
+          );
+          setAllQuestions(offlineSnap.questions);
+          return offlineSnap.questions;
+        }
+      }
+
       const [firestoreList, builtinQuestions, deletedBuiltinIds] = await Promise.all([
         adminAccess
           ? fetchAllQuestionsForAdmin(forceRefresh)
@@ -860,6 +883,9 @@ export default function App() {
 
   // Load contact settings from Firestore
   const loadContactSettings = useCallback(async () => {
+    if (isFirestoreQuotaPaused()) {
+      return DEFAULT_CONTACT_SETTINGS;
+    }
     try {
       const settings = await fetchContactSettingsFromFirestore();
       setContactSettings(settings);
@@ -872,6 +898,9 @@ export default function App() {
 
   // Load Question Deduplication settings from Firestore
   const loadQuestionDedupSettings = useCallback(async (forceRefresh = false) => {
+    if (isFirestoreQuotaPaused()) {
+      return DEFAULT_QUESTION_DEDUP_SETTINGS;
+    }
     try {
       const settings = await fetchQuestionDedupSettingsFromFirestore(
         forceRefresh
@@ -889,6 +918,9 @@ export default function App() {
 
   // Load Visual Effects settings from Firestore / local cache
   const loadVisualEffectsSettings = useCallback(async (forceRefresh = false) => {
+    if (isFirestoreQuotaPaused()) {
+      return loadCachedVisualEffectsSettings();
+    }
     try {
       const settings = await fetchVisualEffectsSettingsFromFirestore(
         forceRefresh
@@ -928,11 +960,11 @@ export default function App() {
       setIsAdmin(adminStatus);
       setAuthLoading(false);
 
-      if (currentUser) {
+      if (currentUser && !isFirestoreQuotaPaused()) {
         syncPublicPlayerProfile(currentUser).catch(() => {});
       }
 
-      if (adminStatus && currentUser) {
+      if (adminStatus && currentUser && !isFirestoreQuotaPaused()) {
         // Run migration/cleanup at most once per session in background without blocking initial render
         const migrationKey = 'nizal_admin_cleanup_done_v1';
         if (!sessionStorage.getItem(migrationKey)) {
@@ -957,58 +989,94 @@ export default function App() {
         return;
       }
 
-      // Start question bank loading in parallel without blocking categories/home display
-      const questionsPromise = loadQuestions(adminStatus);
+      const targetScope: 'public' | 'admin' = adminStatus ? 'admin' : 'public';
+      const alreadyLoadedEnough =
+        bootstrappedCatalogScopeRef.current === 'admin' ||
+        (bootstrappedCatalogScopeRef.current === 'public' && targetScope === 'public');
 
-      const loadedMains = await loadMainCategories(true);
-      const [loadedSubs] = await Promise.all([
-        loadSubcategories(adminStatus, loadedMains, true),
-        loadContactSettings(),
-        loadQuestionDedupSettings(),
-        loadVisualEffectsSettings(),
-      ]);
-      setCategoriesLoaded(true);
+      if (!alreadyLoadedEnough) {
+        bootstrappedCatalogScopeRef.current = targetScope;
 
-      const loadedQuestions = await questionsPromise;
+        // Probe categories first so if Firestore returns 429, circuit breaker pauses before firing remaining reads
+        const loadedMains = await loadMainCategories(adminStatus);
+        const questionsPromise = isFirestoreQuotaPaused()
+          ? Promise.resolve([])
+          : loadQuestions(adminStatus, adminStatus);
 
-      // Defer checksum-guarded IndexedDB sync to idle background without eager image downloads
-      if (!hasSyncedInitialSnapshotRef.current) {
-        hasSyncedInitialSnapshotRef.current = true;
-        cancelDeferredSync?.();
-        cancelDeferredSync = scheduleDeferredTask(() => {
-          void (async () => {
-            const activeForOffline = (loadedQuestions || []).filter(
-              (q) => q.status !== 'rejected'
-            );
-            if (activeForOffline.length === 0 && deletedBuiltinIdsCountRef.current > 0) {
-              await clearOfflineDatasetSnapshots();
-              const nextStatus = await getOfflineDataStatus();
-              setOfflineStatus({ ...nextStatus, syncing: false });
-              return;
-            }
-            const syncRes = await syncOfflineDatasetAtomically(
-              {
-                mainCategories: loadedMains,
-                subcategories: loadedSubs,
-                questions: activeForOffline,
-                source: 'firebase',
-              },
-              { precacheMedia: false }
-            );
-            if (syncRes.ok) {
-              if (!syncRes.skipped) {
+        const [loadedSubs] = await Promise.all([
+          loadSubcategories(adminStatus, loadedMains, adminStatus),
+          loadContactSettings(),
+          loadQuestionDedupSettings(),
+          loadVisualEffectsSettings(),
+        ]);
+        setCategoriesLoaded(true);
+
+        const loadedQuestions = await questionsPromise;
+
+        // Defer checksum-guarded IndexedDB sync to idle background without eager image downloads
+        if (!hasSyncedInitialSnapshotRef.current) {
+          hasSyncedInitialSnapshotRef.current = true;
+          cancelDeferredSync?.();
+          cancelDeferredSync = scheduleDeferredTask(() => {
+            void (async () => {
+              const activeForOffline = (loadedQuestions || []).filter(
+                (q) => q.status !== 'rejected'
+              );
+              if (activeForOffline.length === 0 && deletedBuiltinIdsCountRef.current > 0) {
+                await clearOfflineDatasetSnapshots();
                 const nextStatus = await getOfflineDataStatus();
                 setOfflineStatus({ ...nextStatus, syncing: false });
+                return;
               }
-            } else {
-              console.warn('Offline snapshot sync skipped:', syncRes.reason);
-            }
-          })();
-        });
+              const syncRes = await syncOfflineDatasetAtomically(
+                {
+                  mainCategories: loadedMains,
+                  subcategories: loadedSubs,
+                  questions: activeForOffline,
+                  source: 'firebase',
+                },
+                { precacheMedia: false }
+              );
+              if (syncRes.ok) {
+                if (!syncRes.skipped) {
+                  const nextStatus = await getOfflineDataStatus();
+                  setOfflineStatus({ ...nextStatus, syncing: false });
+                }
+              } else {
+                console.warn('Offline snapshot sync skipped:', syncRes.reason);
+              }
+            })();
+          });
+        }
+
+        // Auto-seed foundational questions & subcategories once ONLY on a genuinely uninitialized DB (never if admin deleted all questions)
+        if (
+          adminStatus &&
+          currentUser &&
+          !isFirestoreQuotaPaused() &&
+          loadedQuestions.length === 0 &&
+          deletedBuiltinIdsCountRef.current === 0
+        ) {
+          setSeeding(true);
+          try {
+            await seedInitialQuestionsToFirestore(currentUser.uid, new Set());
+            const seededMains = await loadMainCategories();
+            await Promise.all([
+              loadQuestions(true, true),
+              loadSubcategories(true, seededMains, true),
+            ]);
+          } catch (e) {
+            console.error('Auto-seed error:', e);
+          } finally {
+            setSeeding(false);
+          }
+        }
+      } else {
+        setCategoriesLoaded(true);
       }
 
       // Check if user has an unfinished active match from a previous session
-      if (currentUser && playModeRef.current !== 'offline_local') {
+      if (currentUser && playModeRef.current !== 'offline_local' && !isFirestoreQuotaPaused()) {
         try {
           const match = await fetchActiveIncompleteMatch(currentUser.uid);
           if (match && match.status === 'in_progress') {
@@ -1017,28 +1085,6 @@ export default function App() {
           }
         } catch (err) {
           console.warn('Could not check incomplete matches:', err);
-        }
-      }
-
-      // Auto-seed foundational questions & subcategories once ONLY on a genuinely uninitialized DB (never if admin deleted all questions)
-      if (
-        adminStatus &&
-        currentUser &&
-        loadedQuestions.length === 0 &&
-        deletedBuiltinIdsCountRef.current === 0
-      ) {
-        setSeeding(true);
-        try {
-          await seedInitialQuestionsToFirestore(currentUser.uid, new Set());
-          const seededMains = await loadMainCategories();
-          await Promise.all([
-            loadQuestions(true),
-            loadSubcategories(true, seededMains),
-          ]);
-        } catch (e) {
-          console.error('Auto-seed error:', e);
-        } finally {
-          setSeeding(false);
         }
       }
     });
@@ -1197,7 +1243,7 @@ export default function App() {
     activePage === 'online_multiplayer' ? onlineActivity.roomCode : null;
 
   useEffect(() => {
-    if (!user || !isOnline || playMode === 'offline_local') return;
+    if (!user || !isOnline || playMode === 'offline_local' || isFirestoreQuotaPaused()) return;
     void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
   }, [user, isOnline, playMode, effectivePresenceStatus, effectivePresenceRoomCode]);
 
@@ -1209,7 +1255,7 @@ export default function App() {
       sendOfflineKeepaliveBeacon(user.uid);
     };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !isFirestoreQuotaPaused()) {
         void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
       }
     };
@@ -1217,7 +1263,9 @@ export default function App() {
       void markPresenceOfflineNow(user.uid);
     };
     const handleNetworkOnline = () => {
-      void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
+      if (!isFirestoreQuotaPaused()) {
+        void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
+      }
     };
 
     window.addEventListener('pagehide', handlePageExit);
@@ -1227,7 +1275,7 @@ export default function App() {
     window.addEventListener('online', handleNetworkOnline);
 
     const heartbeatTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !isFirestoreQuotaPaused()) {
         void sendPresenceHeartbeat(user);
       }
     }, PRESENCE_HEARTBEAT_INTERVAL_MS);
@@ -1240,7 +1288,7 @@ export default function App() {
       window.removeEventListener('online', handleNetworkOnline);
       window.clearInterval(heartbeatTimer);
     };
-  }, [user, effectivePresenceStatus, effectivePresenceRoomCode]);
+  }, [user, isOnline, playMode, effectivePresenceStatus, effectivePresenceRoomCode]);
 
   const handlePresenceActivityChange = useCallback(
     (status: 'online' | 'in_lobby' | 'in_match', roomCode?: string | null) => {

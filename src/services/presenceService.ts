@@ -13,13 +13,21 @@ import {
 import { db } from '../lib/firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { PlayerProfile, PresenceStatus } from '../types/social';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  subscribeFirestoreQuotaState,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 export const PLAYER_PROFILES_COLLECTION = 'playerProfiles';
 export const SOCIAL_FALLBACK_COLLECTION = 'gameSessions';
 
 // Fallback crash timeout ONLY when a browser crashes without firing pagehide/signOut
 export const PRESENCE_CRASH_STALE_MS = 95_000;
-export const PRESENCE_HEARTBEAT_INTERVAL_MS = 35_000;
+export const PRESENCE_HEARTBEAT_INTERVAL_MS = 45_000;
+const EXPLICIT_PRESENCE_DEDUP_MS = 15_000;
 
 const TAB_SESSION_ID = `sess_${Date.now().toString(36)}_${Math.random()
   .toString(36)
@@ -30,6 +38,11 @@ let activePresenceState: {
   uid: string;
   status: Exclude<PresenceStatus, 'offline'>;
   roomCode: string | null;
+} | null = null;
+
+let lastExplicitPresenceWrite: {
+  key: string;
+  sentAt: number;
 } | null = null;
 
 // Mode detection: prefers native hardened collections when rules are deployed,
@@ -62,13 +75,19 @@ export async function ensureSocialStoreMode(
 ): Promise<'native' | 'fallback'> {
   if (socialStoreMode !== 'unknown') return socialStoreMode;
   if (!probeUid) return 'native';
+  if (isFirestoreQuotaPaused()) return 'native';
   if (storeProbePromise) return storeProbePromise;
 
   storeProbePromise = (async () => {
     try {
+      trackFirestoreOp('presence', 'read', 1, 'ensureSocialStoreMode');
       await getDoc(doc(db, PLAYER_PROFILES_COLLECTION, probeUid));
       socialStoreMode = 'native';
     } catch (err) {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('presence', err);
+        return 'native';
+      }
       if (isPermissionDeniedError(err)) {
         socialStoreMode = 'fallback';
       } else {
@@ -145,6 +164,10 @@ export async function syncPublicPlayerProfile(
     currentRoomCode?: string | null;
   }
 ): Promise<void> {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('presence', 'dedup_skip', 1, 'quota_paused_sync_profile');
+    return;
+  }
   const mode = await ensureSocialStoreMode(user.uid);
   const now = Date.now();
   const resolvedName = (
@@ -163,6 +186,7 @@ export async function syncPublicPlayerProfile(
 
   let acceptsInvites = true;
   try {
+    trackFirestoreOp('presence', 'read', 1, 'syncPublicPlayerProfile');
     const snap = await getDoc(readRef);
     if (snap.exists()) {
       const existing = snap.data() as PlayerProfile;
@@ -170,7 +194,11 @@ export async function syncPublicPlayerProfile(
         acceptsInvites = existing.acceptsInvites;
       }
     }
-  } catch {
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('presence', err);
+      return;
+    }
     // proceed with default
   }
 
@@ -204,6 +232,7 @@ export async function syncPublicPlayerProfile(
   }
 
   if (mode === 'fallback') {
+    trackFirestoreOp('presence', 'write', 1, 'syncPublicPlayerProfile_fallback');
     await setDoc(
       doc(db, SOCIAL_FALLBACK_COLLECTION, `soc_prof_${user.uid}`),
       { ...payload, socialDocType: 'playerProfile', _deleted: false },
@@ -213,12 +242,18 @@ export async function syncPublicPlayerProfile(
   }
 
   try {
+    trackFirestoreOp('presence', 'write', 1, 'syncPublicPlayerProfile');
     await setDoc(doc(db, PLAYER_PROFILES_COLLECTION, user.uid), payload, {
       merge: true,
     });
   } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('presence', err);
+      return;
+    }
     if (isPermissionDeniedError(err)) {
       enableFallbackSocialStore();
+      trackFirestoreOp('presence', 'write', 1, 'syncPublicPlayerProfile_fallback');
       await setDoc(
         doc(db, SOCIAL_FALLBACK_COLLECTION, `soc_prof_${user.uid}`),
         { ...payload, socialDocType: 'playerProfile', _deleted: false },
@@ -235,10 +270,25 @@ export async function setExplicitPresence(
   status: PresenceStatus,
   currentRoomCode: string | null = null
 ): Promise<void> {
-  const mode = await ensureSocialStoreMode(user.uid);
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('presence', 'dedup_skip', 1, 'quota_paused_explicit');
+    return;
+  }
+
   const now = Date.now();
   const isOnline = status !== 'offline';
+  const resolvedRoom = isOnline ? currentRoomCode : null;
+  const dedupKey = `${user.uid}|${status}|${resolvedRoom || ''}`;
+  if (
+    lastExplicitPresenceWrite &&
+    lastExplicitPresenceWrite.key === dedupKey &&
+    now - lastExplicitPresenceWrite.sentAt < EXPLICIT_PRESENCE_DEDUP_MS
+  ) {
+    trackFirestoreOp('presence', 'dedup_skip', 1, `explicit:${status}`);
+    return;
+  }
 
+  const mode = await ensureSocialStoreMode(user.uid);
   if (isOnline) {
     activePresenceState = {
       uid: user.uid,
@@ -255,26 +305,37 @@ export async function setExplicitPresence(
       : doc(db, PLAYER_PROFILES_COLLECTION, user.uid);
 
   try {
+    trackFirestoreOp('presence', 'write', 1, `explicit:${status}`);
     await updateDoc(ref, {
       presenceStatus: status,
       isExplicitlyOnline: isOnline,
-      currentRoomCode: isOnline ? currentRoomCode : null,
+      currentRoomCode: resolvedRoom,
       sessionId: TAB_SESSION_ID,
       lastHeartbeat: now,
       updatedAt: now,
     });
-  } catch {
+    lastExplicitPresenceWrite = { key: dedupKey, sentAt: now };
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('presence', err);
+      return;
+    }
     await syncPublicPlayerProfile(user, {
       presenceStatus: status,
       isExplicitlyOnline: isOnline,
-      currentRoomCode: isOnline ? currentRoomCode : null,
+      currentRoomCode: resolvedRoom,
     });
+    lastExplicitPresenceWrite = { key: dedupKey, sentAt: Date.now() };
   }
 }
 
 export async function sendPresenceHeartbeat(user: User): Promise<void> {
   if (!user) return;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('presence', 'dedup_skip', 1, 'quota_paused_heartbeat');
+    return;
+  }
 
   const mode = await ensureSocialStoreMode(user.uid);
   await refreshCachedAuthToken(user);
@@ -287,6 +348,7 @@ export async function sendPresenceHeartbeat(user: User): Promise<void> {
   const now = Date.now();
 
   try {
+    trackFirestoreOp('presence', 'write', 1, 'heartbeat');
     await updateDoc(ref, {
       presenceStatus: status,
       isExplicitlyOnline: true,
@@ -295,7 +357,12 @@ export async function sendPresenceHeartbeat(user: User): Promise<void> {
       lastHeartbeat: now,
       updatedAt: now,
     });
-  } catch {
+    lastExplicitPresenceWrite = { key: `${user.uid}|${status}|${roomCode || ''}`, sentAt: now };
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('presence', err);
+      return;
+    }
     await syncPublicPlayerProfile(user, {
       presenceStatus: status,
       isExplicitlyOnline: true,
@@ -306,6 +373,10 @@ export async function sendPresenceHeartbeat(user: User): Promise<void> {
 
 export async function markPresenceOfflineNow(uid: string): Promise<void> {
   activePresenceState = null;
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('presence', 'dedup_skip', 1, 'quota_paused_mark_offline');
+    return;
+  }
   const mode = await ensureSocialStoreMode(uid);
   const now = Date.now();
   const ref =
@@ -319,14 +390,17 @@ export async function markPresenceOfflineNow(uid: string): Promise<void> {
       currentRoomCode: null,
       updatedAt: now,
     });
-  } catch {
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('presence', err);
+    }
     // ignore if user already signed out or doc missing
   }
 }
 
 // Synchronous keepalive REST patch so tab/window close immediately transitions user offline
 export function sendOfflineKeepaliveBeacon(uid: string): void {
-  if (!uid || !cachedIdToken || !firebaseConfig.projectId) return;
+  if (!uid || !cachedIdToken || !firebaseConfig.projectId || isFirestoreQuotaPaused()) return;
   const dbId =
     firebaseConfig.firestoreDatabaseId &&
     firebaseConfig.firestoreDatabaseId.trim() !== ''
@@ -379,6 +453,10 @@ export function subscribeToPlayerProfiles(
     onUpdate({});
     return () => {};
   }
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('presence', 'dedup_skip', 1, 'quota_paused_sub_profiles');
+    return () => {};
+  }
 
   let disposed = false;
   const profilesMap: Record<string, PlayerProfile> = {};
@@ -387,7 +465,7 @@ export function subscribeToPlayerProfiles(
   const attach = (mode: 'native' | 'fallback') => {
     unsubscribers.forEach((u) => u());
     unsubscribers = [];
-    if (disposed) return;
+    if (disposed || isFirestoreQuotaPaused()) return;
 
     for (let i = 0; i < uniqueUids.length; i += 30) {
       const chunk = uniqueUids.slice(i, i + 30);
@@ -413,6 +491,10 @@ export function subscribeToPlayerProfiles(
           onUpdate({ ...profilesMap });
         },
         (err) => {
+          if (isFirestoreQuotaExceededError(err)) {
+            triggerFirestoreQuotaCooldown('presence', err);
+            return;
+          }
           if (mode === 'native' && isPermissionDeniedError(err)) {
             enableFallbackSocialStore();
             attach('fallback');
@@ -425,10 +507,18 @@ export function subscribeToPlayerProfiles(
     }
   };
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      unsubscribers.forEach((u) => u());
+      unsubscribers = [];
+    }
+  });
+
   ensureSocialStoreMode(uniqueUids[0]).then((mode) => attach(mode));
 
   return () => {
     disposed = true;
+    unsubQuota();
     unsubscribers.forEach((u) => u());
   };
 }
@@ -441,13 +531,17 @@ export function subscribeToMyPlayerProfile(
     onUpdate(null);
     return () => {};
   }
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('presence', 'dedup_skip', 1, 'quota_paused_sub_my_profile');
+    return () => {};
+  }
 
   let disposed = false;
   let unsub: (() => void) | null = null;
 
   const attach = (mode: 'native' | 'fallback') => {
     unsub?.();
-    if (disposed) return;
+    if (disposed || isFirestoreQuotaPaused()) return;
 
     const docRef =
       mode === 'fallback'
@@ -467,6 +561,10 @@ export function subscribeToMyPlayerProfile(
         onUpdate(null);
       },
       (err) => {
+        if (isFirestoreQuotaExceededError(err)) {
+          triggerFirestoreQuotaCooldown('presence', err);
+          return;
+        }
         if (mode === 'native' && isPermissionDeniedError(err)) {
           enableFallbackSocialStore();
           attach('fallback');
@@ -477,10 +575,18 @@ export function subscribeToMyPlayerProfile(
     );
   };
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      unsub?.();
+      unsub = null;
+    }
+  });
+
   ensureSocialStoreMode(uid).then((mode) => attach(mode));
 
   return () => {
     disposed = true;
+    unsubQuota();
     unsub?.();
   };
 }

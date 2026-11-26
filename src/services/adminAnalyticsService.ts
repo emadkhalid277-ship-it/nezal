@@ -6,6 +6,12 @@ import {
 import { db } from '../lib/firebase';
 import { DEFAULT_SUBCATEGORIES } from '../data/categoriesAndSeed';
 import { SubcategoryItem } from '../types/game';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  subscribeFirestoreQuotaState,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 export type TimeFilterOption = '7d' | '30d' | '90d' | 'all';
 export type MatchModeFilter = 'all' | 'local' | 'online';
@@ -1407,18 +1413,27 @@ export function computeAdminAnalytics(
 
 // Subscribe to live Firestore changes on match collections (debounced so updates appear automatically)
 export function subscribeToAdminMatchUpdates(onChange: () => void): () => void {
+  if (isFirestoreQuotaPaused()) {
+    return () => {};
+  }
+
   let timer: number | null = null;
   let initialSessions = true;
   let initialUserMatches = true;
+  let unsubSessions: (() => void) | null = null;
+  let unsubUserMatches: (() => void) | null = null;
 
   const trigger = () => {
+    if (isFirestoreQuotaPaused()) return;
     if (timer) window.clearTimeout(timer);
     timer = window.setTimeout(() => {
-      onChange();
+      if (!isFirestoreQuotaPaused()) {
+        onChange();
+      }
     }, 1200);
   };
 
-  const unsubSessions = onSnapshot(
+  unsubSessions = onSnapshot(
     collection(db, 'gameSessions'),
     () => {
       if (initialSessions) {
@@ -1427,12 +1442,14 @@ export function subscribeToAdminMatchUpdates(onChange: () => void): () => void {
       }
       trigger();
     },
-    () => {
-      // ignore passive listener errors
+    (err) => {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('online_room', err);
+      }
     }
   );
 
-  const unsubUserMatches = onSnapshot(
+  unsubUserMatches = onSnapshot(
     collection(db, 'userGameMatches'),
     () => {
       if (initialUserMatches) {
@@ -1441,14 +1458,27 @@ export function subscribeToAdminMatchUpdates(onChange: () => void): () => void {
       }
       trigger();
     },
-    () => {
-      // ignore passive listener errors
+    (err) => {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('match_sync', err);
+      }
     }
   );
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      if (timer) window.clearTimeout(timer);
+      unsubSessions?.();
+      unsubUserMatches?.();
+      unsubSessions = null;
+      unsubUserMatches = null;
+    }
+  });
+
   return () => {
+    unsubQuota();
     if (timer) window.clearTimeout(timer);
-    unsubSessions();
-    unsubUserMatches();
+    unsubSessions?.();
+    unsubUserMatches?.();
   };
 }

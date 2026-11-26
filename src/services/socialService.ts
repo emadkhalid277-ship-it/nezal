@@ -31,6 +31,13 @@ import {
   isPermissionDeniedError,
 } from './presenceService';
 import { fetchOnlineRoom } from './multiplayerService';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  subscribeFirestoreQuotaState,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 const BLOCKS_COL = 'userBlocks';
 const REQUESTS_COL = 'friendRequests';
@@ -420,13 +427,17 @@ export function subscribeToFriendships(
   uid: string,
   onUpdate: (friendships: Friendship[]) => void
 ): () => void {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('social', 'dedup_skip', 1, 'quota_paused_friendships');
+    return () => {};
+  }
   let disposed = false;
   let unsubs: (() => void)[] = [];
 
   const attach = (mode: 'native' | 'fallback') => {
     unsubs.forEach((u) => u());
     unsubs = [];
-    if (disposed) return;
+    if (disposed || isFirestoreQuotaPaused()) return;
 
     if (mode === 'native') {
       let list1: Friendship[] = [];
@@ -448,6 +459,10 @@ export function subscribeToFriendships(
             emit();
           },
           (err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              triggerFirestoreQuotaCooldown('social', err);
+              return;
+            }
             if (isPermissionDeniedError(err)) {
               enableFallbackSocialStore();
               attach('fallback');
@@ -465,6 +480,10 @@ export function subscribeToFriendships(
             emit();
           },
           (err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              triggerFirestoreQuotaCooldown('social', err);
+              return;
+            }
             if (isPermissionDeniedError(err)) {
               enableFallbackSocialStore();
               attach('fallback');
@@ -490,6 +509,10 @@ export function subscribeToFriendships(
             onUpdate(list);
           },
           (err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              triggerFirestoreQuotaCooldown('social', err);
+              return;
+            }
             console.warn('Error subscribing to fallback friendships:', err);
           }
         )
@@ -497,10 +520,18 @@ export function subscribeToFriendships(
     }
   };
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      unsubs.forEach((u) => u());
+      unsubs = [];
+    }
+  });
+
   ensureSocialStoreMode(uid).then((mode) => attach(mode));
 
   return () => {
     disposed = true;
+    unsubQuota();
     unsubs.forEach((u) => u());
   };
 }
@@ -509,13 +540,17 @@ export function subscribeToFriendRequests(
   uid: string,
   onUpdate: (data: { incoming: FriendRequest[]; outgoing: FriendRequest[] }) => void
 ): () => void {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('social', 'dedup_skip', 1, 'quota_paused_friend_requests');
+    return () => {};
+  }
   let disposed = false;
   let unsubs: (() => void)[] = [];
 
   const attach = (mode: 'native' | 'fallback') => {
     unsubs.forEach((u) => u());
     unsubs = [];
-    if (disposed) return;
+    if (disposed || isFirestoreQuotaPaused()) return;
 
     let incoming: FriendRequest[] = [];
     let outgoing: FriendRequest[] = [];
@@ -541,6 +576,10 @@ export function subscribeToFriendRequests(
           emit();
         },
         (err) => {
+          if (isFirestoreQuotaExceededError(err)) {
+            triggerFirestoreQuotaCooldown('social', err);
+            return;
+          }
           if (mode === 'native' && isPermissionDeniedError(err)) {
             enableFallbackSocialStore();
             attach('fallback');
@@ -560,6 +599,10 @@ export function subscribeToFriendRequests(
           emit();
         },
         (err) => {
+          if (isFirestoreQuotaExceededError(err)) {
+            triggerFirestoreQuotaCooldown('social', err);
+            return;
+          }
           if (mode === 'native' && isPermissionDeniedError(err)) {
             enableFallbackSocialStore();
             attach('fallback');
@@ -569,10 +612,18 @@ export function subscribeToFriendRequests(
     );
   };
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      unsubs.forEach((u) => u());
+      unsubs = [];
+    }
+  });
+
   ensureSocialStoreMode(uid).then((mode) => attach(mode));
 
   return () => {
     disposed = true;
+    unsubQuota();
     unsubs.forEach((u) => u());
   };
 }
@@ -701,12 +752,16 @@ export function subscribeToBlockedUsers(
   uid: string,
   onUpdate: (blocks: UserBlock[]) => void
 ): () => void {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('social', 'dedup_skip', 1, 'quota_paused_blocks');
+    return () => {};
+  }
   let disposed = false;
   let unsub: (() => void) | null = null;
 
   const attach = (mode: 'native' | 'fallback') => {
     unsub?.();
-    if (disposed) return;
+    if (disposed || isFirestoreQuotaPaused()) return;
 
     const q =
       mode === 'native'
@@ -725,6 +780,10 @@ export function subscribeToBlockedUsers(
         onUpdate(list);
       },
       (err) => {
+        if (isFirestoreQuotaExceededError(err)) {
+          triggerFirestoreQuotaCooldown('social', err);
+          return;
+        }
         if (mode === 'native' && isPermissionDeniedError(err)) {
           enableFallbackSocialStore();
           attach('fallback');
@@ -733,10 +792,18 @@ export function subscribeToBlockedUsers(
     );
   };
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      unsub?.();
+      unsub = null;
+    }
+  });
+
   ensureSocialStoreMode(uid).then((mode) => attach(mode));
 
   return () => {
     disposed = true;
+    unsubQuota();
     unsub?.();
   };
 }
@@ -1037,13 +1104,17 @@ export function subscribeToGameInvites(
   uid: string,
   onUpdate: (data: { incoming: GameInvite[]; outgoing: GameInvite[] }) => void
 ): () => void {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('social', 'dedup_skip', 1, 'quota_paused_invites');
+    return () => {};
+  }
   let disposed = false;
   let unsubs: (() => void)[] = [];
 
   const attach = (mode: 'native' | 'fallback') => {
     unsubs.forEach((u) => u());
     unsubs = [];
-    if (disposed) return;
+    if (disposed || isFirestoreQuotaPaused()) return;
 
     let incoming: GameInvite[] = [];
     let outgoing: GameInvite[] = [];
@@ -1070,6 +1141,10 @@ export function subscribeToGameInvites(
           emit();
         },
         (err) => {
+          if (isFirestoreQuotaExceededError(err)) {
+            triggerFirestoreQuotaCooldown('social', err);
+            return;
+          }
           if (mode === 'native' && isPermissionDeniedError(err)) {
             enableFallbackSocialStore();
             attach('fallback');
@@ -1090,6 +1165,10 @@ export function subscribeToGameInvites(
           emit();
         },
         (err) => {
+          if (isFirestoreQuotaExceededError(err)) {
+            triggerFirestoreQuotaCooldown('social', err);
+            return;
+          }
           if (mode === 'native' && isPermissionDeniedError(err)) {
             enableFallbackSocialStore();
             attach('fallback');
@@ -1099,10 +1178,18 @@ export function subscribeToGameInvites(
     );
   };
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      unsubs.forEach((u) => u());
+      unsubs = [];
+    }
+  });
+
   ensureSocialStoreMode(uid).then((mode) => attach(mode));
 
   return () => {
     disposed = true;
+    unsubQuota();
     unsubs.forEach((u) => u());
   };
 }
@@ -1114,12 +1201,16 @@ export function subscribeToNotifications(
   uid: string,
   onUpdate: (notifications: UserNotification[]) => void
 ): () => void {
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('social', 'dedup_skip', 1, 'quota_paused_notifications');
+    return () => {};
+  }
   let disposed = false;
   let unsub: (() => void) | null = null;
 
   const attach = (mode: 'native' | 'fallback') => {
     unsub?.();
-    if (disposed) return;
+    if (disposed || isFirestoreQuotaPaused()) return;
 
     const q =
       mode === 'native'
@@ -1149,6 +1240,10 @@ export function subscribeToNotifications(
         onUpdate(list);
       },
       (err) => {
+        if (isFirestoreQuotaExceededError(err)) {
+          triggerFirestoreQuotaCooldown('social', err);
+          return;
+        }
         if (mode === 'native' && isPermissionDeniedError(err)) {
           enableFallbackSocialStore();
           attach('fallback');
@@ -1157,10 +1252,18 @@ export function subscribeToNotifications(
     );
   };
 
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused) {
+      unsub?.();
+      unsub = null;
+    }
+  });
+
   ensureSocialStoreMode(uid).then((mode) => attach(mode));
 
   return () => {
     disposed = true;
+    unsubQuota();
     unsub?.();
   };
 }

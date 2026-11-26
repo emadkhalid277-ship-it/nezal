@@ -9,6 +9,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/online-rooms/:code/:action*",
+      "destination": "/api/online-rooms/dispatch?__code=:code&__action=:action*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

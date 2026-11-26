@@ -100,12 +100,14 @@ export async function dispatchVercelOnlineRoomRoute(
 
   const body = await readJsonBody(req);
   const rawUrl = (req.url || '/api/online-rooms').split('?')[0];
+  const parsedFromUrl = rawUrl
+    .replace(/^\/api\/online-rooms\/?/, '')
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const segments =
     segmentsOverride ??
-    rawUrl
-      .replace(/^\/api\/online-rooms\/?/, '')
-      .split('/')
-      .filter(Boolean);
+    (parsedFromUrl[0] === 'dispatch' ? parsedFromUrl.slice(1) : parsedFromUrl);
 
   const expressReq = {
     headers: req.headers,

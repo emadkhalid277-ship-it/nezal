@@ -2,6 +2,12 @@ import confetti from 'canvas-confetti';
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { VisualEffectsSettings } from '../types/game';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 const SETTINGS_COLLECTION = 'settings';
 const VISUAL_EFFECTS_DOC_ID = 'visual_effects';
@@ -92,8 +98,14 @@ export async function fetchVisualEffectsSettingsFromFirestore(
   }
 
   const localFallback = loadCachedVisualEffectsSettings();
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('questions_bootstrap', 'dedup_skip', 1, 'quota_paused_visual_effects');
+    memoryCachedSettings = localFallback;
+    return localFallback;
+  }
 
   try {
+    trackFirestoreOp('questions_bootstrap', 'read', 1, 'settings/visual_effects');
     const docRef = doc(db, SETTINGS_COLLECTION, VISUAL_EFFECTS_DOC_ID);
     const snap = await getDoc(docRef);
     if (!snap.exists()) {
@@ -123,7 +135,10 @@ export async function fetchVisualEffectsSettingsFromFirestore(
     persistLocalVisualEffectsSettings(normalized);
     memoryCachedSettings = normalized;
     return normalized;
-  } catch {
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('questions_bootstrap', err);
+    }
     memoryCachedSettings = localFallback;
     return localFallback;
   }

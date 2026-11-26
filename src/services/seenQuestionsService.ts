@@ -23,6 +23,13 @@ import {
   DEFAULT_QUESTION_DEDUP_SETTINGS,
   normalizeSeenQuestionId,
 } from '../utils/questionDedupLogic';
+import {
+  isFirestoreQuotaExceededError,
+  isFirestoreQuotaPaused,
+  subscribeFirestoreQuotaState,
+  trackFirestoreOp,
+  triggerFirestoreQuotaCooldown,
+} from '../utils/firestoreDiagnostics';
 
 const USER_SEEN_QUESTIONS_COLLECTION = 'userSeenQuestions';
 const SETTINGS_COLLECTION = 'settings';
@@ -239,11 +246,20 @@ export async function recordQuestionSeenForUser(params: {
   // Enqueue optimistically first, then remove on confirmed Firestore commit
   enqueuePendingSeenItem(item);
 
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('seen_questions', 'dedup_skip', 1, 'quota_paused_record');
+    return false;
+  }
+
   try {
+    trackFirestoreOp('seen_questions', 'write', 1, item.id);
     await persistSeenItemTransaction(item);
     removePendingSeenItem(recordId);
     return true;
   } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('seen_questions', err);
+    }
     console.warn(
       'Seen question write queued for retry when connection stabilizes:',
       err
@@ -256,17 +272,23 @@ export async function recordQuestionSeenForUser(params: {
  * Flush any locally buffered seen-question writes to Firestore (e.g. after reconnecting).
  */
 export async function flushPendingSeenQuestions(uid: string): Promise<number> {
-  if (!uid) return 0;
+  if (!uid || isFirestoreQuotaPaused()) return 0;
   const queue = readPendingQueue().filter((item) => item.userId === uid);
   if (queue.length === 0) return 0;
 
   let flushed = 0;
   for (const item of queue) {
+    if (isFirestoreQuotaPaused()) break;
     try {
+      trackFirestoreOp('seen_questions', 'write', 1, `flush:${item.id}`);
       await persistSeenItemTransaction(item);
       removePendingSeenItem(item.id);
       flushed++;
-    } catch {
+    } catch (err) {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('seen_questions', err);
+        break;
+      }
       // keep remaining items in queue for next retry
     }
   }
@@ -301,9 +323,16 @@ export function subscribeToUserSeenQuestions(
     onUpdate(initialSet, []);
   }
 
-  const unsub = onSnapshot(
+  if (isFirestoreQuotaPaused()) {
+    trackFirestoreOp('seen_questions', 'dedup_skip', 1, 'quota_paused_listener');
+    return () => {};
+  }
+
+  trackFirestoreOp('seen_questions', 'listener_attach', 1, uid);
+  let unsub: (() => void) | null = onSnapshot(
     q,
     (snapshot) => {
+      trackFirestoreOp('seen_questions', 'listener_snapshot', 1, uid);
       const records: SeenQuestionRecord[] = [];
       const mergedIds = new Set<string>(getPendingSeenIdsForUser(uid));
 
@@ -318,12 +347,26 @@ export function subscribeToUserSeenQuestions(
       onUpdate(mergedIds, records);
     },
     (error) => {
+      if (isFirestoreQuotaExceededError(error)) {
+        triggerFirestoreQuotaCooldown('seen_questions', error);
+      }
       console.warn('Could not subscribe to user seen questions:', error);
       if (onError) onError(error);
     }
   );
 
-  return unsub;
+  const unsubQuota = subscribeFirestoreQuotaState((state) => {
+    if (state.paused && unsub) {
+      unsub();
+      unsub = null;
+    }
+  });
+
+  return () => {
+    unsubQuota();
+    unsub?.();
+    unsub = null;
+  };
 }
 
 /**
@@ -339,8 +382,12 @@ export async function fetchQuestionDedupSettingsFromFirestore(
   ) {
     return cachedDedupSettings.data;
   }
+  if (isFirestoreQuotaPaused()) {
+    return cachedDedupSettings?.data || DEFAULT_QUESTION_DEDUP_SETTINGS;
+  }
 
   try {
+    trackFirestoreOp('seen_questions', 'read', 1, 'question_dedup_settings');
     const docRef = doc(db, SETTINGS_COLLECTION, QUESTION_DEDUP_DOC_ID);
     const snap = await getDoc(docRef);
     if (!snap.exists()) {
@@ -366,6 +413,9 @@ export async function fetchQuestionDedupSettingsFromFirestore(
     };
     return result;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      triggerFirestoreQuotaCooldown('seen_questions', error);
+    }
     console.warn('Question dedup settings read fallback to defaults:', error);
     return DEFAULT_QUESTION_DEDUP_SETTINGS;
   }
