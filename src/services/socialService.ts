@@ -23,15 +23,19 @@ import {
   UserBlock,
   UserNotification,
 } from '../types/social';
+import { OnlineGameRoom } from '../types/multiplayer';
 import {
   PLAYER_PROFILES_COLLECTION,
   SOCIAL_FALLBACK_COLLECTION,
   enableFallbackSocialStore,
   ensureSocialStoreMode,
   isPermissionDeniedError,
+  logSocialTrace,
+  setCachedAcceptsInvitesPreference,
 } from './presenceService';
-import { fetchOnlineRoom } from './multiplayerService';
+import { RoomApiError, fetchOnlineRoom } from './multiplayerService';
 import {
+  FIRESTORE_QUOTA_EXCEEDED_MESSAGE,
   isFirestoreQuotaExceededError,
   isFirestoreQuotaPaused,
   subscribeFirestoreQuotaState,
@@ -87,15 +91,92 @@ function getRef(
   return doc(db, SOCIAL_FALLBACK_COLLECTION, `${prefixMap[kind]}${id}`);
 }
 
+export function formatSocialErrorMessage(
+  err: unknown,
+  fallback = 'تعذر تنفيذ الطلب. يرجى المحاولة مجدداً.'
+): string {
+  if (isFirestoreQuotaExceededError(err)) {
+    return FIRESTORE_QUOTA_EXCEEDED_MESSAGE;
+  }
+  if (err instanceof RoomApiError) {
+    return err.message || fallback;
+  }
+
+  const code = String((err as { code?: string })?.code || '').toLowerCase();
+  const rawMessage = String((err as { message?: string })?.message || '').trim();
+  const lowerMessage = rawMessage.toLowerCase();
+
+  if (code.includes('permission-denied') || lowerMessage.includes('missing or insufficient permissions')) {
+    return 'تعذر إتمام العملية بسبب قيود الصلاحيات في قاعدة البيانات. يرجى إعادة تسجيل الدخول أو تحديث الصفحة.';
+  }
+  if (code.includes('unauthenticated')) {
+    return 'انتهت جلسة تسجيل الدخول. يرجى تسجيل الخروج ثم الدخول مجدداً.';
+  }
+  if (
+    code.includes('unavailable') ||
+    code.includes('deadline-exceeded') ||
+    lowerMessage.includes('failed to fetch') ||
+    lowerMessage.includes('network') ||
+    lowerMessage.includes('offline')
+  ) {
+    return 'تعذر الاتصال بالخادم حالياً. تحقق من اتصال الإنترنت ثم أعد المحاولة.';
+  }
+  if (code.includes('invalid-argument') || code.includes('failed-precondition')) {
+    return 'تعذر حفظ الطلب بسبب عدم تطابق البيانات. يرجى تحديث الصفحة والمحاولة مجدداً.';
+  }
+  if (code.includes('not-found')) {
+    return 'السجل المطلوب غير موجود أو لم يعد متاحاً.';
+  }
+
+  if (rawMessage && /[\u0600-\u06FF]/.test(rawMessage)) {
+    return rawMessage;
+  }
+
+  return fallback;
+}
+
+function classifySocialErrorCode(err: unknown): string {
+  if (isFirestoreQuotaExceededError(err)) return 'firestore/quota-exceeded';
+  if (isPermissionDeniedError(err)) return 'firestore/permission-denied';
+  if (err instanceof RoomApiError) return err.code || `HTTP_${err.status}`;
+  const rawCode = String((err as { code?: string })?.code || '').trim();
+  if (rawCode) return rawCode;
+  const lowerMsg = String((err as { message?: string })?.message || '').toLowerCase();
+  if (lowerMsg.includes('failed to fetch') || lowerMsg.includes('network') || lowerMsg.includes('offline')) {
+    return 'network/offline';
+  }
+  return 'social/unknown-error';
+}
+
 export async function isBlockedBetween(uidA: string, uidB: string): Promise<{
   blockedByMe: boolean;
   blockedMe: boolean;
 }> {
   const mode = await ensureSocialStoreMode(uidA);
-  const [aDoc, bDoc] = await Promise.all([
-    getDoc(getRef('block', `${uidA}_${uidB}`, mode)).catch(() => null),
-    getDoc(getRef('block', `${uidB}_${uidA}`, mode)).catch(() => null),
-  ]);
+  const readPair = async (targetMode: 'native' | 'fallback') =>
+    Promise.all([
+      getDoc(getRef('block', `${uidA}_${uidB}`, targetMode)),
+      getDoc(getRef('block', `${uidB}_${uidA}`, targetMode)),
+    ]);
+
+  let docs;
+  try {
+    docs = await readPair(mode);
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('social', err);
+      throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+    }
+    logSocialTrace('isBlockedBetween', {
+      storeMode: mode,
+      code: classifySocialErrorCode(err),
+      reason: 'block_read_fallback',
+    });
+    const altMode = mode === 'native' ? 'fallback' : 'native';
+    docs = await readPair(altMode).catch(() => [null, null] as const);
+  }
+
+  const [aDoc, bDoc] = docs;
   const aActive = Boolean(aDoc && aDoc.exists() && !(aDoc.data() as { _deleted?: boolean })?._deleted);
   const bActive = Boolean(bDoc && bDoc.exists() && !(bDoc.data() as { _deleted?: boolean })?._deleted);
   return {
@@ -358,7 +439,51 @@ export async function acceptFriendRequest(
       _deleted: false,
     });
   }
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('social', err);
+      throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+    }
+    const altMode = mode === 'native' ? 'fallback' : 'native';
+    const altReqSnap = await getDoc(getRef('request', request.id, altMode)).catch(() => null);
+    if (altReqSnap && altReqSnap.exists() && !(altReqSnap.data() as { _deleted?: boolean })?._deleted) {
+      const altBatch = writeBatch(db);
+      altBatch.update(getRef('request', request.id, altMode), {
+        status: 'accepted',
+        toName: myName,
+        toPhotoURL: myPhoto,
+        updatedAt: now,
+      });
+      if (altMode === 'native') {
+        altBatch.set(getRef('friendship', pairId, 'native'), friendshipPayload);
+        altBatch.set(getRef('notification', notifId, 'native'), notifPayload);
+      } else {
+        altBatch.set(getRef('friendship', pairId, 'fallback'), {
+          ...friendshipPayload,
+          socialDocType: 'friendship',
+          socialFriendUsers: [user1, user2],
+          _deleted: false,
+        });
+        const { userId: _omit, ...notifRest } = notifPayload;
+        altBatch.set(getRef('notification', notifId, 'fallback'), {
+          ...notifRest,
+          socialDocType: 'notification',
+          socialNotifUserId: notifPayload.userId,
+          _deleted: false,
+        });
+      }
+      await altBatch.commit();
+      return;
+    }
+    logSocialTrace('acceptFriendRequest', {
+      storeMode: mode,
+      code: classifySocialErrorCode(err),
+      reason: 'commit_failed',
+    });
+    throw new Error(formatSocialErrorMessage(err, 'تعذر قبول طلب الصداقة.'));
+  }
 }
 
 export async function rejectFriendRequest(
@@ -369,10 +494,27 @@ export async function rejectFriendRequest(
     throw new Error('لا تملك صلاحية رفض هذا الطلب');
   }
   const mode = await ensureSocialStoreMode(currentUser.uid);
-  await updateDoc(getRef('request', request.id, mode), {
-    status: 'rejected',
-    updatedAt: Date.now(),
-  });
+  try {
+    await updateDoc(getRef('request', request.id, mode), {
+      status: 'rejected',
+      updatedAt: Date.now(),
+    });
+  } catch (err) {
+    const altMode = mode === 'native' ? 'fallback' : 'native';
+    try {
+      await updateDoc(getRef('request', request.id, altMode), {
+        status: 'rejected',
+        updatedAt: Date.now(),
+      });
+    } catch {
+      logSocialTrace('rejectFriendRequest', {
+        storeMode: mode,
+        code: classifySocialErrorCode(err),
+        reason: 'update_failed',
+      });
+      throw new Error(formatSocialErrorMessage(err, 'تعذر رفض طلب الصداقة.'));
+    }
+  }
 }
 
 export async function cancelFriendRequest(
@@ -536,9 +678,12 @@ export function subscribeToFriendships(
   };
 }
 
+export type SubscriptionDirection = 'incoming' | 'outgoing' | 'both';
+
 export function subscribeToFriendRequests(
   uid: string,
-  onUpdate: (data: { incoming: FriendRequest[]; outgoing: FriendRequest[] }) => void
+  onUpdate: (data: { incoming: FriendRequest[]; outgoing: FriendRequest[] }) => void,
+  direction: SubscriptionDirection = 'both'
 ): () => void {
   if (isFirestoreQuotaPaused()) {
     trackFirestoreOp('social', 'dedup_skip', 1, 'quota_paused_friend_requests');
@@ -556,60 +701,65 @@ export function subscribeToFriendRequests(
     let outgoing: FriendRequest[] = [];
     const emit = () => onUpdate({ incoming, outgoing });
 
-    const qIn =
-      mode === 'native'
-        ? query(collection(db, REQUESTS_COL), where('toUid', '==', uid))
-        : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialReqToUid', '==', uid));
-    const qOut =
-      mode === 'native'
-        ? query(collection(db, REQUESTS_COL), where('fromUid', '==', uid))
-        : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialReqFromUid', '==', uid));
+    if (direction === 'incoming' || direction === 'both') {
+      const qIn =
+        mode === 'native'
+          ? query(collection(db, REQUESTS_COL), where('toUid', '==', uid))
+          : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialReqToUid', '==', uid));
 
-    unsubs.push(
-      onSnapshot(
-        qIn,
-        (snap) => {
-          incoming = snap.docs
-            .map((d) => d.data() as FriendRequest & { _deleted?: boolean })
-            .filter((r) => !r._deleted && r.status === 'pending')
-            .sort((a, b) => b.updatedAt - a.updatedAt);
-          emit();
-        },
-        (err) => {
-          if (isFirestoreQuotaExceededError(err)) {
-            triggerFirestoreQuotaCooldown('social', err);
-            return;
+      unsubs.push(
+        onSnapshot(
+          qIn,
+          (snap) => {
+            incoming = snap.docs
+              .map((d) => d.data() as FriendRequest & { _deleted?: boolean })
+              .filter((r) => !r._deleted && r.status === 'pending')
+              .sort((a, b) => b.updatedAt - a.updatedAt);
+            emit();
+          },
+          (err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              triggerFirestoreQuotaCooldown('social', err);
+              return;
+            }
+            if (mode === 'native' && isPermissionDeniedError(err)) {
+              enableFallbackSocialStore();
+              attach('fallback');
+            }
           }
-          if (mode === 'native' && isPermissionDeniedError(err)) {
-            enableFallbackSocialStore();
-            attach('fallback');
-          }
-        }
-      )
-    );
+        )
+      );
+    }
 
-    unsubs.push(
-      onSnapshot(
-        qOut,
-        (snap) => {
-          outgoing = snap.docs
-            .map((d) => d.data() as FriendRequest & { _deleted?: boolean })
-            .filter((r) => !r._deleted && r.status === 'pending')
-            .sort((a, b) => b.updatedAt - a.updatedAt);
-          emit();
-        },
-        (err) => {
-          if (isFirestoreQuotaExceededError(err)) {
-            triggerFirestoreQuotaCooldown('social', err);
-            return;
+    if (direction === 'outgoing' || direction === 'both') {
+      const qOut =
+        mode === 'native'
+          ? query(collection(db, REQUESTS_COL), where('fromUid', '==', uid))
+          : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialReqFromUid', '==', uid));
+
+      unsubs.push(
+        onSnapshot(
+          qOut,
+          (snap) => {
+            outgoing = snap.docs
+              .map((d) => d.data() as FriendRequest & { _deleted?: boolean })
+              .filter((r) => !r._deleted && r.status === 'pending')
+              .sort((a, b) => b.updatedAt - a.updatedAt);
+            emit();
+          },
+          (err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              triggerFirestoreQuotaCooldown('social', err);
+              return;
+            }
+            if (mode === 'native' && isPermissionDeniedError(err)) {
+              enableFallbackSocialStore();
+              attach('fallback');
+            }
           }
-          if (mode === 'native' && isPermissionDeniedError(err)) {
-            enableFallbackSocialStore();
-            attach('fallback');
-          }
-        }
-      )
-    );
+        )
+      );
+    }
   };
 
   const unsubQuota = subscribeFirestoreQuotaState((state) => {
@@ -817,6 +967,7 @@ export async function updateAcceptsInvitesSetting(
     acceptsInvites,
     updatedAt: Date.now(),
   });
+  setCachedAcceptsInvitesPreference(uid, acceptsInvites);
 }
 
 // =========================================================================
@@ -827,79 +978,163 @@ export async function sendGameInvite(params: {
   toPlayer: { uid: string; displayName?: string };
   roomCode: string;
   inviteType: GameInviteType;
+  roomSnapshot?: OnlineGameRoom | null;
 }): Promise<GameInvite> {
-  const { fromUser, toPlayer, inviteType } = params;
+  const { fromUser, toPlayer, inviteType, roomSnapshot } = params;
   const cleanCode = params.roomCode.trim().toUpperCase();
 
-  if (!fromUser?.uid) throw new Error('يجب تسجيل الدخول أولاً');
+  if (!fromUser?.uid) throw new Error('يجب تسجيل الدخول أولاً لإرسال الدعوات.');
   if (!toPlayer?.uid || toPlayer.uid === fromUser.uid) {
-    throw new Error('لا يمكنك إرسال دعوة إلى نفسك');
+    throw new Error('لا يمكنك إرسال دعوة إلى نفسك.');
   }
   if (!cleanCode || cleanCode.length < 4) {
-    throw new Error('رمز الغرفة غير صالح');
+    throw new Error('رمز الغرفة غير صالح.');
+  }
+  if (isFirestoreQuotaPaused()) {
+    throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
   }
 
-  const mode = await ensureSocialStoreMode(fromUser.uid);
+  let activeMode = await ensureSocialStoreMode(fromUser.uid);
 
-  // Verify friendship
+  const safeReadDoc = async (
+    kind: 'profile' | 'friendship' | 'invite',
+    id: string
+  ) => {
+    try {
+      return await getDoc(getRef(kind, id, activeMode));
+    } catch (err) {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('social', err);
+        throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+      }
+      if (activeMode === 'native' && isPermissionDeniedError(err)) {
+        enableFallbackSocialStore();
+        activeMode = 'fallback';
+        return await getDoc(getRef(kind, id, 'fallback')).catch((fbErr) => {
+          if (isFirestoreQuotaExceededError(fbErr)) {
+            triggerFirestoreQuotaCooldown('social', fbErr);
+            throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+          }
+          throw new Error(formatSocialErrorMessage(fbErr, 'تعذر قراءة بيانات الدعوة.'));
+        });
+      }
+      throw new Error(formatSocialErrorMessage(err, 'تعذر الوصول إلى بيانات قاعدة البيانات.'));
+    }
+  };
+
+  // Verify friendship (check active store; if native has no record yet, also recognize legacy fallback friendship
+  // WITHOUT switching activeMode to fallback so invites & notifications always land in native store!)
   const { pairId } = getSortedPairId(fromUser.uid, toPlayer.uid);
-  const friendSnap = await getDoc(getRef('friendship', pairId, mode)).catch(() => null);
+  let friendSnap = await safeReadDoc('friendship', pairId);
+  if (!friendSnap.exists() || (friendSnap.data() as { _deleted?: boolean })?._deleted) {
+    const altMode: 'native' | 'fallback' = activeMode === 'native' ? 'fallback' : 'native';
+    const altFriendSnap = await getDoc(getRef('friendship', pairId, altMode)).catch((err) => {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('social', err);
+        throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+      }
+      return null;
+    });
+    if (
+      altFriendSnap &&
+      altFriendSnap.exists() &&
+      !(altFriendSnap.data() as { _deleted?: boolean })?._deleted
+    ) {
+      friendSnap = altFriendSnap;
+    }
+  }
+
   if (
     !friendSnap ||
     !friendSnap.exists() ||
     (friendSnap.data() as { _deleted?: boolean })?._deleted
   ) {
-    throw new Error('يمكنك إرسال الدعوات للأصدقاء فقط');
+    logSocialTrace('sendGameInvite', {
+      storeMode: activeMode,
+      code: 'social/not-friends',
+      reason: 'missing_friendship',
+      inviteType,
+      hasRoomCode: true,
+    });
+    throw new Error('يمكنك إرسال الدعوات للأصدقاء فقط.');
   }
 
   // Verify not blocked
   const blockState = await isBlockedBetween(fromUser.uid, toPlayer.uid);
   if (blockState.blockedByMe || blockState.blockedMe) {
-    throw new Error('تعذر إرسال الدعوة بسبب إعدادات الحظر');
+    throw new Error('تعذر إرسال الدعوة بسبب إعدادات الحظر بين الحسابين.');
   }
 
   // Verify recipient invite settings
-  const targetProfileSnap = await getDoc(getRef('profile', toPlayer.uid, mode)).catch(
-    () => null
-  );
+  const targetProfileSnap = await safeReadDoc('profile', toPlayer.uid).catch((err) => {
+    if (isFirestoreQuotaExceededError(err)) {
+      throw err;
+    }
+    return null;
+  });
   if (targetProfileSnap && targetProfileSnap.exists()) {
     const profile = targetProfileSnap.data() as PlayerProfile;
     if (profile.acceptsInvites === false) {
-      throw new Error('أوقف هذا الصديق استقبال دعوات اللعب والمشاهدة');
+      throw new Error('أوقف هذا الصديق استقبال دعوات اللعب والمشاهدة.');
     }
   }
 
-  // Verify room exists and is open
-  const room = await fetchOnlineRoom(cleanCode);
+  // Verify room exists and is open (prefer live roomSnapshot when caller is already inside the room)
+  let room: OnlineGameRoom | null =
+    roomSnapshot && roomSnapshot.code?.trim().toUpperCase() === cleanCode
+      ? roomSnapshot
+      : null;
+
   if (!room) {
-    throw new Error('الغرفة غير موجودة أو تم إغلاقها');
+    try {
+      room = await fetchOnlineRoom(cleanCode);
+    } catch (err) {
+      logSocialTrace('sendGameInvite', {
+        storeMode: activeMode,
+        code: classifySocialErrorCode(err),
+        reason: 'room_fetch_failed',
+        inviteType,
+        hasRoomCode: true,
+      });
+      throw new Error(formatSocialErrorMessage(err, 'تعذر التحقق من حالة الغرفة قبل إرسال الدعوة.'));
+    }
+  }
+
+  if (!room) {
+    throw new Error('الغرفة غير موجودة أو تم إغلاقها.');
   }
   if (room.status === 'finished' || room.status === 'completed') {
-    throw new Error('المباراة في هذه الغرفة قد انتهت بالفعل');
+    throw new Error('المباراة في هذه الغرفة قد انتهت بالفعل.');
   }
   if (inviteType === 'play') {
     const playerCount = Object.keys(room.players || {}).length;
-    if (playerCount >= (room.maxPlayers || 16)) {
-      throw new Error('الغرفة ممتلئة حالياً');
-    }
-    if (
-      (room.status === 'playing' || room.status === 'in_game') &&
-      playerCount >= 2 &&
-      !room.players?.[toPlayer.uid]
-    ) {
-      throw new Error('المباراة بدأت بالفعل، يمكنك إرسال دعوة للمشاهدة بدلاً من ذلك');
+    const currentGuestUid = room.guestUid || room.guestId || null;
+    const isTargetAlreadyInRoom =
+      (room.hostUid || room.hostId) === toPlayer.uid ||
+      currentGuestUid === toPlayer.uid ||
+      Boolean(room.players?.[toPlayer.uid]);
+
+    if (!isTargetAlreadyInRoom) {
+      if (currentGuestUid && currentGuestUid !== toPlayer.uid) {
+        throw new Error('الغرفة مكتملة بالفعل بوجود مضيف وضيف، يمكنك إرسال دعوة للمشاهدة بدلاً من ذلك.');
+      }
+      if (playerCount >= (room.maxPlayers || 2)) {
+        throw new Error('الغرفة ممتلئة حالياً، يمكنك إرسال دعوة للمشاهدة بدلاً من ذلك.');
+      }
+      if (room.status === 'playing' || room.status === 'in_game') {
+        throw new Error('المباراة بدأت بالفعل، يمكنك إرسال دعوة للمشاهدة بدلاً من ذلك.');
+      }
     }
   }
 
   const now = Date.now();
   const inviteId = `${fromUser.uid}_${toPlayer.uid}_${cleanCode}_${inviteType}`;
-  const invDocRef = getRef('invite', inviteId, mode);
-  const existingInviteSnap = await getDoc(invDocRef).catch(() => null);
+  const existingInviteSnap = await safeReadDoc('invite', inviteId);
 
   if (existingInviteSnap && existingInviteSnap.exists()) {
     const prev = existingInviteSnap.data() as GameInvite & { _deleted?: boolean };
     if (!prev._deleted && prev.status === 'pending' && prev.expiresAt > now) {
-      throw new Error('توجد دعوة نشطة مرسلة بالفعل لهذا الصديق في نفس الغرفة');
+      throw new Error('توجد دعوة نشطة مرسلة بالفعل لهذا الصديق في نفس الغرفة.');
     }
   }
 
@@ -921,7 +1156,8 @@ export async function sendGameInvite(params: {
     updatedAt: now,
   };
 
-  const notifId = `notif_inv_${inviteId}_${now}`;
+  const randSuffix = Math.random().toString(36).slice(2, 6);
+  const notifId = `notif_inv_${cleanCode}_${now}_${randSuffix}`;
   const isPlay = inviteType === 'play';
   const notifPayload: UserNotification = {
     id: notifId,
@@ -941,39 +1177,103 @@ export async function sendGameInvite(params: {
     expiresAt,
   };
 
-  const batch = writeBatch(db);
-  if (mode === 'native') {
-    if (existingInviteSnap && existingInviteSnap.exists()) {
-      batch.update(invDocRef, {
-        fromName: myName,
-        fromPhotoURL: fromUser.photoURL || '',
-        toName: invitePayload.toName,
-        status: 'pending',
-        createdAt: now,
-        expiresAt,
-        updatedAt: now,
-      });
+  const commitBatch = async (
+    targetMode: 'native' | 'fallback',
+    hasExistingNativeDoc: boolean
+  ) => {
+    const batch = writeBatch(db);
+    const targetInvRef = getRef('invite', inviteId, targetMode);
+    if (targetMode === 'native') {
+      if (hasExistingNativeDoc) {
+        batch.update(targetInvRef, {
+          fromName: myName,
+          fromPhotoURL: fromUser.photoURL || '',
+          toName: invitePayload.toName,
+          status: 'pending',
+          createdAt: now,
+          expiresAt,
+          updatedAt: now,
+        });
+      } else {
+        batch.set(targetInvRef, invitePayload);
+      }
+      batch.set(getRef('notification', notifId, 'native'), notifPayload);
     } else {
-      batch.set(invDocRef, invitePayload);
+      batch.set(targetInvRef, {
+        ...invitePayload,
+        socialDocType: 'gameInvite',
+        socialInvFromUid: invitePayload.fromUid,
+        socialInvToUid: invitePayload.toUid,
+        _deleted: false,
+      });
+      const { userId: _omit, ...notifRest } = notifPayload;
+      batch.set(getRef('notification', notifId, 'fallback'), {
+        ...notifRest,
+        socialDocType: 'notification',
+        socialNotifUserId: notifPayload.userId,
+        _deleted: false,
+      });
     }
-    batch.set(getRef('notification', notifId, 'native'), notifPayload);
-  } else {
-    batch.set(invDocRef, {
-      ...invitePayload,
-      socialDocType: 'gameInvite',
-      socialInvFromUid: invitePayload.fromUid,
-      socialInvToUid: invitePayload.toUid,
-      _deleted: false,
+    await batch.commit();
+  };
+
+  try {
+    await commitBatch(
+      activeMode,
+      Boolean(existingInviteSnap && existingInviteSnap.exists())
+    );
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('social', err);
+      logSocialTrace('sendGameInvite', {
+        storeMode: activeMode,
+        code: 'firestore/quota-exceeded',
+        reason: 'batch_quota_exceeded',
+        inviteType,
+        hasRoomCode: true,
+      });
+      throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+    }
+    if (activeMode === 'native' && isPermissionDeniedError(err)) {
+      logSocialTrace('sendGameInvite', {
+        storeMode: 'native',
+        code: 'firestore/permission-denied',
+        reason: 'native_write_denied_trying_fallback',
+        inviteType,
+        hasRoomCode: true,
+      });
+      enableFallbackSocialStore();
+      try {
+        await commitBatch('fallback', false);
+        return invitePayload;
+      } catch (fbErr) {
+        if (isFirestoreQuotaExceededError(fbErr)) {
+          triggerFirestoreQuotaCooldown('social', fbErr);
+          throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+        }
+        logSocialTrace('sendGameInvite', {
+          storeMode: 'fallback',
+          code: classifySocialErrorCode(fbErr),
+          reason: 'fallback_write_failed',
+          inviteType,
+          hasRoomCode: true,
+        });
+        throw new Error(
+          formatSocialErrorMessage(fbErr, 'تعذر حفظ الدعوة في قاعدة البيانات.')
+        );
+      }
+    }
+    logSocialTrace('sendGameInvite', {
+      storeMode: activeMode,
+      code: classifySocialErrorCode(err),
+      reason: 'batch_commit_failed',
+      inviteType,
+      hasRoomCode: true,
     });
-    const { userId: _omit, ...notifRest } = notifPayload;
-    batch.set(getRef('notification', notifId, 'fallback'), {
-      ...notifRest,
-      socialDocType: 'notification',
-      socialNotifUserId: notifPayload.userId,
-      _deleted: false,
-    });
+    throw new Error(
+      formatSocialErrorMessage(err, 'تعذر إرسال الدعوة حالياً. يرجى المحاولة مجدداً.')
+    );
   }
-  await batch.commit();
 
   return invitePayload;
 }
@@ -983,51 +1283,104 @@ export async function acceptGameInvite(
   invite: GameInvite
 ): Promise<{ roomCode: string; inviteType: GameInviteType }> {
   if (!currentUser?.uid || invite.toUid !== currentUser.uid) {
-    throw new Error('لا تملك صلاحية قبول هذه الدعوة');
+    throw new Error('لا تملك صلاحية قبول هذه الدعوة.');
   }
   if (invite.status !== 'pending') {
-    throw new Error('هذه الدعوة لم تعد صالحة أو تم الرد عليها مسبقاً');
+    throw new Error('هذه الدعوة لم تعد صالحة أو تم الرد عليها مسبقاً.');
+  }
+  if (isFirestoreQuotaPaused()) {
+    throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
   }
 
-  const mode = await ensureSocialStoreMode(currentUser.uid);
+  const activeMode = await ensureSocialStoreMode(currentUser.uid);
+  const altMode: 'native' | 'fallback' = activeMode === 'native' ? 'fallback' : 'native';
   const now = Date.now();
-  const invDocRef = getRef('invite', invite.id, mode);
+  const invDocRef = getRef('invite', invite.id, activeMode);
+
+  const updateInviteStatusCrossStore = async (payload: Record<string, unknown>) => {
+    try {
+      await updateDoc(invDocRef, payload);
+    } catch (err) {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('social', err);
+        throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+      }
+      // Try alternate store in case invite was written there without poisoning global mode
+      try {
+        await updateDoc(getRef('invite', invite.id, altMode), payload);
+      } catch (altErr) {
+        if (isFirestoreQuotaExceededError(altErr)) {
+          triggerFirestoreQuotaCooldown('social', altErr);
+          throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+        }
+        logSocialTrace('acceptGameInvite', {
+          storeMode: activeMode,
+          code: classifySocialErrorCode(err),
+          reason: 'invite_status_update_failed',
+          inviteType: invite.inviteType,
+          hasRoomCode: Boolean(invite.roomCode),
+        });
+        throw err;
+      }
+    }
+  };
 
   if (invite.expiresAt && now > invite.expiresAt) {
-    await updateDoc(invDocRef, { status: 'expired', updatedAt: now }).catch(() => {});
-    throw new Error('انتهت صلاحية هذه الدعوة');
+    await updateInviteStatusCrossStore({ status: 'expired', updatedAt: now }).catch(() => {});
+    throw new Error('انتهت صلاحية هذه الدعوة.');
   }
 
-  const room = await fetchOnlineRoom(invite.roomCode);
+  let room: OnlineGameRoom | null = null;
+  try {
+    room = await fetchOnlineRoom(invite.roomCode);
+  } catch (err) {
+    logSocialTrace('acceptGameInvite', {
+      storeMode: activeMode,
+      code: classifySocialErrorCode(err),
+      reason: 'room_fetch_failed',
+      inviteType: invite.inviteType,
+      hasRoomCode: Boolean(invite.roomCode),
+    });
+    throw new Error(formatSocialErrorMessage(err, 'تعذر التحقق من الغرفة.'));
+  }
+
   if (!room) {
-    await updateDoc(invDocRef, { status: 'expired', updatedAt: now }).catch(() => {});
-    throw new Error('الغرفة غير موجودة أو تم إغلاقها');
+    await updateInviteStatusCrossStore({ status: 'expired', updatedAt: now }).catch(() => {});
+    throw new Error('الغرفة غير موجودة أو تم إغلاقها.');
   }
   if (room.status === 'finished' || room.status === 'completed') {
-    await updateDoc(invDocRef, { status: 'expired', updatedAt: now }).catch(() => {});
-    throw new Error('المباراة في هذه الغرفة قد انتهت بالفعل');
+    await updateInviteStatusCrossStore({ status: 'expired', updatedAt: now }).catch(() => {});
+    throw new Error('المباراة في هذه الغرفة قد انتهت بالفعل.');
   }
 
   if (invite.inviteType === 'play') {
     const playersCount = Object.keys(room.players || {}).length;
-    const isAlreadyInRoom = Boolean(room.players?.[currentUser.uid]);
+    const currentGuestUid = room.guestUid || room.guestId || null;
+    const isAlreadyInRoom =
+      (room.hostUid || room.hostId) === currentUser.uid ||
+      currentGuestUid === currentUser.uid ||
+      Boolean(room.players?.[currentUser.uid]);
     if (!isAlreadyInRoom) {
-      if (playersCount >= (room.maxPlayers || 16)) {
-        throw new Error('الغرفة ممتلئة حالياً');
+      if (currentGuestUid && currentGuestUid !== currentUser.uid) {
+        throw new Error('الغرفة مكتملة حالياً بوجود مضيف وضيف. يمكنك الدخول كمشاهد بدلاً من ذلك.');
       }
-      if (
-        (room.status === 'playing' || room.status === 'in_game') &&
-        playersCount >= 2
-      ) {
-        throw new Error('بدأت المباراة بالفعل في هذه الغرفة، يمكنك الانضمام كمشاهد بدلاً من ذلك');
+      if (playersCount >= (room.maxPlayers || 2)) {
+        throw new Error('الغرفة ممتلئة حالياً.');
+      }
+      if (room.status === 'playing' || room.status === 'in_game') {
+        throw new Error('بدأت المباراة بالفعل في هذه الغرفة، يمكنك الانضمام كمشاهد بدلاً من ذلك.');
       }
     }
   }
 
-  await updateDoc(invDocRef, {
-    status: 'accepted',
-    updatedAt: now,
-  });
+  try {
+    await updateInviteStatusCrossStore({
+      status: 'accepted',
+      updatedAt: now,
+    });
+  } catch (err) {
+    throw new Error(formatSocialErrorMessage(err, 'تعذر قبول الدعوة.'));
+  }
 
   return {
     roomCode: invite.roomCode,
@@ -1040,13 +1393,31 @@ export async function rejectGameInvite(
   invite: GameInvite
 ): Promise<void> {
   if (!currentUser?.uid || invite.toUid !== currentUser.uid) {
-    throw new Error('لا تملك صلاحية رفض هذه الدعوة');
+    throw new Error('لا تملك صلاحية رفض هذه الدعوة.');
   }
   const mode = await ensureSocialStoreMode(currentUser.uid);
-  await updateDoc(getRef('invite', invite.id, mode), {
-    status: 'rejected',
-    updatedAt: Date.now(),
-  });
+  const altMode: 'native' | 'fallback' = mode === 'native' ? 'fallback' : 'native';
+  try {
+    await updateDoc(getRef('invite', invite.id, mode), {
+      status: 'rejected',
+      updatedAt: Date.now(),
+    });
+  } catch (err) {
+    try {
+      await updateDoc(getRef('invite', invite.id, altMode), {
+        status: 'rejected',
+        updatedAt: Date.now(),
+      });
+    } catch {
+      logSocialTrace('rejectGameInvite', {
+        storeMode: mode,
+        code: classifySocialErrorCode(err),
+        reason: 'reject_update_failed',
+        inviteType: invite.inviteType,
+      });
+      throw new Error(formatSocialErrorMessage(err, 'تعذر رفض الدعوة.'));
+    }
+  }
 }
 
 export async function cancelGameInvite(
@@ -1102,7 +1473,8 @@ export async function cancelGameInvite(
 
 export function subscribeToGameInvites(
   uid: string,
-  onUpdate: (data: { incoming: GameInvite[]; outgoing: GameInvite[] }) => void
+  onUpdate: (data: { incoming: GameInvite[]; outgoing: GameInvite[] }) => void,
+  direction: SubscriptionDirection = 'both'
 ): () => void {
   if (isFirestoreQuotaPaused()) {
     trackFirestoreOp('social', 'dedup_skip', 1, 'quota_paused_invites');
@@ -1120,62 +1492,95 @@ export function subscribeToGameInvites(
     let outgoing: GameInvite[] = [];
     const emit = () => onUpdate({ incoming, outgoing });
 
-    const qIn =
-      mode === 'native'
-        ? query(collection(db, INVITES_COL), where('toUid', '==', uid))
-        : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialInvToUid', '==', uid));
-    const qOut =
-      mode === 'native'
-        ? query(collection(db, INVITES_COL), where('fromUid', '==', uid))
-        : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialInvFromUid', '==', uid));
+    if (direction === 'incoming' || direction === 'both') {
+      const qIn =
+        mode === 'native'
+          ? query(collection(db, INVITES_COL), where('toUid', '==', uid))
+          : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialInvToUid', '==', uid));
 
-    unsubs.push(
-      onSnapshot(
-        qIn,
-        (snap) => {
-          const now = Date.now();
-          incoming = snap.docs
-            .map((d) => d.data() as GameInvite & { _deleted?: boolean })
-            .filter((inv) => !inv._deleted && inv.status === 'pending' && inv.expiresAt > now)
-            .sort((a, b) => b.createdAt - a.createdAt);
-          emit();
-        },
-        (err) => {
-          if (isFirestoreQuotaExceededError(err)) {
-            triggerFirestoreQuotaCooldown('social', err);
-            return;
+      unsubs.push(
+        onSnapshot(
+          qIn,
+          (snap) => {
+            const now = Date.now();
+            incoming = snap.docs
+              .map((d) => {
+                const raw = d.data() as GameInvite & {
+                  _deleted?: boolean;
+                  socialInvFromUid?: string;
+                  socialInvToUid?: string;
+                };
+                return {
+                  ...raw,
+                  id: raw.id || d.id.replace(/^soc_inv_/, ''),
+                  fromUid: raw.fromUid || raw.socialInvFromUid || '',
+                  toUid: raw.toUid || raw.socialInvToUid || uid,
+                  expiresAt: Number(raw.expiresAt || 0),
+                  createdAt: Number(raw.createdAt || 0),
+                };
+              })
+              .filter((inv) => !inv._deleted && inv.status === 'pending' && inv.expiresAt > now)
+              .sort((a, b) => b.createdAt - a.createdAt);
+            emit();
+          },
+          (err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              triggerFirestoreQuotaCooldown('social', err);
+              return;
+            }
+            if (mode === 'native' && isPermissionDeniedError(err)) {
+              enableFallbackSocialStore();
+              attach('fallback');
+            }
           }
-          if (mode === 'native' && isPermissionDeniedError(err)) {
-            enableFallbackSocialStore();
-            attach('fallback');
-          }
-        }
-      )
-    );
+        )
+      );
+    }
 
-    unsubs.push(
-      onSnapshot(
-        qOut,
-        (snap) => {
-          const now = Date.now();
-          outgoing = snap.docs
-            .map((d) => d.data() as GameInvite & { _deleted?: boolean })
-            .filter((inv) => !inv._deleted && inv.status === 'pending' && inv.expiresAt > now)
-            .sort((a, b) => b.createdAt - a.createdAt);
-          emit();
-        },
-        (err) => {
-          if (isFirestoreQuotaExceededError(err)) {
-            triggerFirestoreQuotaCooldown('social', err);
-            return;
+    if (direction === 'outgoing' || direction === 'both') {
+      const qOut =
+        mode === 'native'
+          ? query(collection(db, INVITES_COL), where('fromUid', '==', uid))
+          : query(collection(db, SOCIAL_FALLBACK_COLLECTION), where('socialInvFromUid', '==', uid));
+
+      unsubs.push(
+        onSnapshot(
+          qOut,
+          (snap) => {
+            const now = Date.now();
+            outgoing = snap.docs
+              .map((d) => {
+                const raw = d.data() as GameInvite & {
+                  _deleted?: boolean;
+                  socialInvFromUid?: string;
+                  socialInvToUid?: string;
+                };
+                return {
+                  ...raw,
+                  id: raw.id || d.id.replace(/^soc_inv_/, ''),
+                  fromUid: raw.fromUid || raw.socialInvFromUid || uid,
+                  toUid: raw.toUid || raw.socialInvToUid || '',
+                  expiresAt: Number(raw.expiresAt || 0),
+                  createdAt: Number(raw.createdAt || 0),
+                };
+              })
+              .filter((inv) => !inv._deleted && inv.status === 'pending' && inv.expiresAt > now)
+              .sort((a, b) => b.createdAt - a.createdAt);
+            emit();
+          },
+          (err) => {
+            if (isFirestoreQuotaExceededError(err)) {
+              triggerFirestoreQuotaCooldown('social', err);
+              return;
+            }
+            if (mode === 'native' && isPermissionDeniedError(err)) {
+              enableFallbackSocialStore();
+              attach('fallback');
+            }
           }
-          if (mode === 'native' && isPermissionDeniedError(err)) {
-            enableFallbackSocialStore();
-            attach('fallback');
-          }
-        }
-      )
-    );
+        )
+      );
+    }
   };
 
   const unsubQuota = subscribeFirestoreQuotaState((state) => {
@@ -1270,10 +1675,11 @@ export function subscribeToNotifications(
 
 export async function markNotificationRead(notifId: string): Promise<void> {
   const mode = await ensureSocialStoreMode();
+  const altMode: 'native' | 'fallback' = mode === 'native' ? 'fallback' : 'native';
   try {
     await updateDoc(getRef('notification', notifId, mode), { isRead: true });
   } catch {
-    // ignore if deleted
+    await updateDoc(getRef('notification', notifId, altMode), { isRead: true }).catch(() => {});
   }
 }
 
@@ -1288,11 +1694,17 @@ export async function markAllNotificationsRead(
   unread.slice(0, 50).forEach((n) => {
     batch.update(getRef('notification', n.id, mode), { isRead: true });
   });
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch {
+    // Fallback per-item if notifications span native/fallback stores
+    await Promise.all(unread.slice(0, 50).map((n) => markNotificationRead(n.id)));
+  }
 }
 
 export async function deleteNotification(notifId: string): Promise<void> {
   const mode = await ensureSocialStoreMode();
+  const altMode: 'native' | 'fallback' = mode === 'native' ? 'fallback' : 'native';
   try {
     const ref = getRef('notification', notifId, mode);
     if (mode === 'native') {
@@ -1301,25 +1713,75 @@ export async function deleteNotification(notifId: string): Promise<void> {
       await updateDoc(ref, { _deleted: true });
     }
   } catch {
-    // ignore
+    try {
+      const altRef = getRef('notification', notifId, altMode);
+      if (altMode === 'native') {
+        await deleteDoc(altRef);
+      } else {
+        await updateDoc(altRef, { _deleted: true });
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
 // Lookup a single pending invite by ID (used from Notification Center inline Accept/Reject)
 export async function fetchGameInviteById(inviteId: string): Promise<GameInvite | null> {
   const mode = await ensureSocialStoreMode();
-  const snap = await getDoc(getRef('invite', inviteId, mode));
-  if (!snap.exists()) return null;
-  const data = snap.data() as GameInvite & { _deleted?: boolean };
-  if (data._deleted) return null;
-  return data;
+  const altMode: 'native' | 'fallback' = mode === 'native' ? 'fallback' : 'native';
+
+  const readOne = async (targetMode: 'native' | 'fallback'): Promise<GameInvite | null> => {
+    const snap = await getDoc(getRef('invite', inviteId, targetMode));
+    if (!snap.exists()) return null;
+    const data = snap.data() as GameInvite & {
+      _deleted?: boolean;
+      socialInvFromUid?: string;
+      socialInvToUid?: string;
+    };
+    if (data._deleted) return null;
+    return {
+      ...data,
+      id: data.id || inviteId,
+      fromUid: data.fromUid || data.socialInvFromUid || '',
+      toUid: data.toUid || data.socialInvToUid || '',
+    };
+  };
+
+  try {
+    const primary = await readOne(mode);
+    if (primary) return primary;
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('social', err);
+      throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+    }
+  }
+
+  return await readOne(altMode).catch(() => null);
 }
 
 export async function fetchFriendRequestById(requestId: string): Promise<FriendRequest | null> {
   const mode = await ensureSocialStoreMode();
-  const snap = await getDoc(getRef('request', requestId, mode));
-  if (!snap.exists()) return null;
-  const data = snap.data() as FriendRequest & { _deleted?: boolean };
-  if (data._deleted) return null;
-  return data;
+  const altMode: 'native' | 'fallback' = mode === 'native' ? 'fallback' : 'native';
+
+  const readOne = async (targetMode: 'native' | 'fallback'): Promise<FriendRequest | null> => {
+    const snap = await getDoc(getRef('request', requestId, targetMode));
+    if (!snap.exists()) return null;
+    const data = snap.data() as FriendRequest & { _deleted?: boolean };
+    if (data._deleted) return null;
+    return data;
+  };
+
+  try {
+    const primary = await readOne(mode);
+    if (primary) return primary;
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      triggerFirestoreQuotaCooldown('social', err);
+      throw new Error(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
+    }
+  }
+
+  return await readOne(altMode).catch(() => null);
 }

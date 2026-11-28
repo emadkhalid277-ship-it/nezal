@@ -178,13 +178,66 @@ async function getIdTokenOrThrow(user?: User | null): Promise<string> {
   return effectiveUser.getIdToken();
 }
 
+type RoomApiActorRole = 'host' | 'guest' | 'spectator' | 'unknown';
+
+function sanitizeRoomEndpointForLog(rawPath: string): string {
+  return String(rawPath || '').split('?')[0];
+}
+
+function mapRoomApiErrorMessage(
+  status: number,
+  code: string,
+  serverMsg: string | undefined
+): string {
+  const lowerCode = String(code || '').toLowerCase();
+  const rawMsg = String(serverMsg || '').trim();
+  const lowerMsg = rawMsg.toLowerCase();
+
+  if (status === 429 || lowerCode.includes('quota-exceeded') || lowerCode.includes('resource_exhausted')) {
+    return rawMsg && /[\u0600-\u06FF]/.test(rawMsg) ? rawMsg : FIRESTORE_QUOTA_EXCEEDED_MESSAGE;
+  }
+  if (
+    status === 403 ||
+    lowerCode.includes('permission_denied') ||
+    lowerCode.includes('permission-denied') ||
+    lowerMsg.includes('missing or insufficient permissions')
+  ) {
+    return rawMsg && /[\u0600-\u06FF]/.test(rawMsg)
+      ? rawMsg
+      : 'تعذر تنفيذ الإجراء بسبب قيود الصلاحيات (Permission Denied). يرجى التأكد من أنك عضو في الغرفة أو إعادة الدخول.';
+  }
+  if (status === 0 || lowerCode === 'network/offline') {
+    return 'تعذر الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت ثم المحاولة مجدداً.';
+  }
+  if (status >= 500) {
+    return rawMsg && /[\u0600-\u06FF]/.test(rawMsg)
+      ? rawMsg
+      : 'واجه الخادم خطأً مؤقتاً أثناء معالجة الطلب. يرجى المحاولة مرة أخرى.';
+  }
+  if (rawMsg && /[\u0600-\u06FF]/.test(rawMsg)) {
+    return rawMsg;
+  }
+  return `تعذر إتمام الطلب (HTTP ${status})`;
+}
+
 async function callRoomApi<T>(
   path: string,
   body: Record<string, unknown> = {},
-  user?: User | null
+  user?: User | null,
+  meta?: { actorRole?: RoomApiActorRole }
 ): Promise<T> {
+  const endpoint = sanitizeRoomEndpointForLog(path);
+  const actorRole: RoomApiActorRole = meta?.actorRole || 'unknown';
+
   if (isFirestoreQuotaPaused()) {
     trackFirestoreOp('online_api', 'dedup_skip', 1, `quota_paused:${path}`);
+    console.warn('[NIZAL RoomApi Trace]', {
+      endpoint,
+      actorRole,
+      status: 429,
+      code: 'firestore/quota-exceeded',
+      reason: 'client_quota_cooldown',
+    });
     throw new RoomApiError(
       429,
       'firestore/quota-exceeded',
@@ -195,14 +248,30 @@ async function callRoomApi<T>(
   const idToken = await getIdTokenOrThrow(user);
   trackFirestoreOp('online_api', 'api_call', 1, path);
 
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    console.warn('[NIZAL RoomApi Trace]', {
+      endpoint,
+      actorRole,
+      status: 0,
+      code: 'network/offline',
+      reason: 'fetch_network_failure',
+    });
+    throw new RoomApiError(
+      0,
+      'network/offline',
+      'تعذر الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت ثم المحاولة مجدداً.'
+    );
+  }
 
   const payload = (await res.json().catch(() => ({}))) as {
     error?: string;
@@ -212,24 +281,45 @@ async function callRoomApi<T>(
   } & Record<string, unknown>;
 
   if (!res.ok) {
+    const resolvedCode = payload?.code || `HTTP_${res.status}`;
     const isQuota =
       res.status === 429 ||
       isFirestoreQuotaExceededError(payload?.code) ||
       isFirestoreQuotaExceededError(payload?.error);
     if (isQuota) {
       triggerFirestoreQuotaCooldown('online_api', payload?.error, payload?.retryAfterMs);
+      console.warn('[NIZAL RoomApi Trace]', {
+        endpoint,
+        actorRole,
+        status: 429,
+        code: 'firestore/quota-exceeded',
+        reason: 'server_or_firestore_quota',
+      });
       throw new RoomApiError(
         429,
         'firestore/quota-exceeded',
-        payload?.error || FIRESTORE_QUOTA_EXCEEDED_MESSAGE,
+        mapRoomApiErrorMessage(429, 'firestore/quota-exceeded', payload?.error),
         payload?.retryAfterMs
       );
     }
-    throw new RoomApiError(
-      res.status,
-      payload?.code || `HTTP_${res.status}`,
-      payload?.error || `تعذر إتمام الطلب (HTTP ${res.status})`
-    );
+    const friendlyMessage = mapRoomApiErrorMessage(res.status, resolvedCode, payload?.error);
+    console.warn('[NIZAL RoomApi Trace]', {
+      endpoint,
+      actorRole,
+      status: res.status,
+      code: resolvedCode,
+      reason:
+        res.status === 403
+          ? 'permission_denied'
+          : res.status === 404
+          ? 'room_not_found'
+          : res.status === 409
+          ? 'room_state_conflict'
+          : res.status >= 500
+          ? 'server_error'
+          : 'invalid_room_action',
+    });
+    throw new RoomApiError(res.status, resolvedCode, friendlyMessage);
   }
   return payload as unknown as T;
 }
@@ -417,24 +507,32 @@ export async function claimOnlineHost(code: string): Promise<OnlineGameRoom> {
 
 export async function toggleOnlineSubcategoryPick(
   code: string,
-  subcategoryId: string
+  subcategoryId: string,
+  user?: User | null,
+  actorRole: RoomApiActorRole = 'unknown'
 ): Promise<OnlineGameRoom> {
   const cleanCode = code.trim().toUpperCase();
   const res = await callRoomApi<{ room: OnlineGameRoom }>(
     `/api/online-rooms/${encodeURIComponent(cleanCode)}/categories/toggle`,
-    { subcategoryId }
+    { subcategoryId },
+    user,
+    { actorRole }
   );
   return res.room;
 }
 
 export async function confirmOnlineCategories(
   code: string,
-  confirmed: boolean
+  confirmed: boolean,
+  user?: User | null,
+  actorRole: RoomApiActorRole = 'unknown'
 ): Promise<OnlineGameRoom> {
   const cleanCode = code.trim().toUpperCase();
   const res = await callRoomApi<{ room: OnlineGameRoom }>(
     `/api/online-rooms/${encodeURIComponent(cleanCode)}/categories/confirm`,
-    { confirmed }
+    { confirmed },
+    user,
+    { actorRole }
   );
   return res.room;
 }

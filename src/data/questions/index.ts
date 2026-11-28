@@ -1,12 +1,21 @@
-import { ANIME_QUESTIONS } from './anime';
-import { FOOTBALL_QUESTIONS } from './football';
-import { GAMES_QUESTIONS } from './games';
-import { GENERAL_QUESTIONS } from './general';
-import { GEOGRAPHY_QUESTIONS } from './geography';
-import { RELIGION_QUESTIONS, QuestionTemplate } from './religion';
-import { SPORTS_QUESTIONS } from './sports';
-import { TriviaQuestion } from '../../types/game';
-import { DEFAULT_SUBCATEGORIES } from '../categoriesAndSeed';
+import { ANIME_QUESTIONS } from './anime.ts';
+import { FOOTBALL_QUESTIONS } from './football.ts';
+import { GAMES_QUESTIONS } from './games.ts';
+import { GENERAL_QUESTIONS } from './general.ts';
+import { GEOGRAPHY_QUESTIONS } from './geography.ts';
+import { RELIGION_QUESTIONS } from './religion.ts';
+import type { QuestionTemplate } from './religion.ts';
+import { SPORTS_QUESTIONS } from './sports.ts';
+import { ANIME_A_EXPANSION } from './expansions/animeA.ts';
+import { ANIME_B_EXPANSION } from './expansions/animeB.ts';
+import { FOOTBALL_EXPANSION } from './expansions/football.ts';
+import { GAMES_EXPANSION } from './expansions/games.ts';
+import { GENERAL_EXPANSION } from './expansions/general.ts';
+import { GEOGRAPHY_EXPANSION } from './expansions/geography.ts';
+import { RELIGION_EXPANSION } from './expansions/religion.ts';
+import { SPORTS_EXPANSION } from './expansions/sports.ts';
+import type { TriviaQuestion } from '../../types/game.ts';
+import { DEFAULT_SUBCATEGORIES } from '../categoriesAndSeed.ts';
 
 interface SubcategoryMeta {
   id: string;
@@ -249,10 +258,71 @@ export function buildExpandedQuestionBank(): TriviaQuestion[] {
     perSubcategoryCount.set(meta.id, startOffset + qList.length);
   };
 
-  // Process direct exact matches first so all original 675 question IDs stay identical,
+  // Process direct exact matches first so all original question IDs stay identical,
   // then append confirmed mapped keys with non-overlapping per-subcategory offsets.
   exactEntries.forEach(appendBatch);
   mappedEntries.forEach(appendBatch);
+
+  const expansionDicts: Record<string, QuestionTemplate[]>[] = [
+    GENERAL_EXPANSION,
+    FOOTBALL_EXPANSION,
+    SPORTS_EXPANSION,
+    RELIGION_EXPANSION,
+    GEOGRAPHY_EXPANSION,
+    ANIME_A_EXPANSION,
+    ANIME_B_EXPANSION,
+    GAMES_EXPANSION,
+  ];
+
+  const appendExpansionBatch = (meta: SubcategoryMeta, qList: QuestionTemplate[]) => {
+    const startOffset = perSubcategoryCount.get(meta.id) ?? 0;
+
+    qList.forEach((q, idx) => {
+      const id = `q-${meta.id}-${q.points}-exp-${idx + 1}`;
+
+      let imageUrl: string | undefined = undefined;
+      let imageDescription: string | undefined = undefined;
+
+      for (const [keyword, visual] of Object.entries(VISUAL_IMAGES_MAP)) {
+        if (q.questionText.includes(keyword) || q.correctAnswer.includes(keyword)) {
+          imageUrl = visual.url;
+          imageDescription = visual.desc;
+          break;
+        }
+      }
+
+      results.push({
+        id,
+        subcategoryId: meta.id,
+        category: meta.name,
+        questionText: q.questionText,
+        questionType: 'direct',
+        difficulty: q.difficulty,
+        points: q.points,
+        options: [],
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation || '',
+        source: q.source || 'بنك أسئلة نِزال المعتمد',
+        status: 'pending',
+        imageUrl,
+        imageDescription,
+        authorId: 'system',
+        createdAt: '2026-11-28T00:00:00.000Z',
+        reviewedAt: '2026-11-28T00:00:00.000Z',
+      });
+    });
+
+    perSubcategoryCount.set(meta.id, startOffset + qList.length);
+  };
+
+  for (const dict of expansionDicts) {
+    for (const [subKey, qList] of Object.entries(dict)) {
+      const meta = subById.get(subKey) || normalizedMap.get(normalizeName(subKey));
+      if (meta) {
+        appendExpansionBatch(meta, qList);
+      }
+    }
+  }
 
   return results;
 }

@@ -311,6 +311,88 @@ export async function firestoreGetDoc<T>(
   };
 }
 
+export async function firestoreBatchGetDocs<T>(
+  targets: { collectionPath: string; docId: string }[],
+  idToken?: string
+): Promise<Map<string, FirestoreDocResponse<T>>> {
+  const results = new Map<string, FirestoreDocResponse<T>>();
+  if (targets.length === 0) return results;
+
+  const cfg = loadFirebaseConfig();
+  const dbId = getDatabaseId();
+  const baseDocPrefix = `projects/${cfg.projectId}/databases/${dbId}/documents/`;
+  const uniquePaths: string[] = [];
+  const pathToKey = new Map<string, string>();
+  const pathToCollection = new Map<string, string>();
+
+  for (const t of targets) {
+    const cleanCol = t.collectionPath.replace(/^\/+|\/+$/g, '');
+    const key = `${cleanCol}/${t.docId}`;
+    const fullPath = `${baseDocPrefix}${cleanCol}/${t.docId}`;
+    if (!pathToKey.has(fullPath)) {
+      uniquePaths.push(fullPath);
+      pathToKey.set(fullPath, key);
+      pathToCollection.set(fullPath, cleanCol);
+    }
+  }
+
+  throwIfServerQuotaCoolingDown('batchGet', 'batchGet');
+
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    cfg.projectId
+  )}/databases/${encodeURIComponent(dbId)}/documents:batchGet`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (idToken) {
+    headers.Authorization = `Bearer ${idToken}`;
+  }
+
+  // Record 1 read per requested unique document path
+  for (const fullPath of uniquePaths) {
+    recordCollectionOp(pathToCollection.get(fullPath) || 'unknown', 'reads');
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ documents: uniquePaths }),
+  });
+
+  if (!res.ok) {
+    const err = await parseFirestoreError(res);
+    throwMappedFirestoreError(res.status, err.code, err.message, 'batchGet');
+  }
+
+  const items = (await res.json()) as Array<{
+    found?: {
+      name?: string;
+      fields?: Record<string, FirestoreRawValue>;
+      updateTime?: string;
+    };
+    missing?: string;
+  }>;
+
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      if (item.found?.name) {
+        const key = pathToKey.get(item.found.name) || item.found.name.slice(baseDocPrefix.length);
+        results.set(key, {
+          exists: true,
+          data: docFieldsToObject<T>(item.found.fields),
+          updateTime: item.found.updateTime,
+        });
+      } else if (item.missing) {
+        const key = pathToKey.get(item.missing) || item.missing.slice(baseDocPrefix.length);
+        results.set(key, { exists: false, data: null });
+      }
+    }
+  }
+
+  return results;
+}
+
 export async function firestoreCreateDoc<T extends Record<string, unknown>>(
   collectionPath: string,
   docId: string,

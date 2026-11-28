@@ -21,10 +21,12 @@ import {
   subscribeToPlayerProfiles,
 } from '../services/presenceService';
 import {
+  formatSocialErrorMessage,
   sendGameInvite,
   subscribeToFriendships,
   subscribeToGameInvites,
 } from '../services/socialService';
+import { OnlineGameRoom } from '../types/multiplayer';
 import { AlertBanner, ModalShell, StatusBadge, UI_CLASSES } from './ui';
 
 interface InviteFriendsModalProps {
@@ -33,6 +35,7 @@ interface InviteFriendsModalProps {
   user: User | null;
   roomCode: string;
   canInviteToPlay: boolean;
+  roomSnapshot?: OnlineGameRoom | null;
 }
 
 export const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
@@ -41,6 +44,7 @@ export const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
   user,
   roomCode,
   canInviteToPlay,
+  roomSnapshot,
 }) => {
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [profiles, setProfiles] = useState<Record<string, PlayerProfile>>({});
@@ -53,9 +57,13 @@ export const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
   useEffect(() => {
     if (!isOpen || !user?.uid) return;
     const unsubFriends = subscribeToFriendships(user.uid, setFriendships);
-    const unsubInvites = subscribeToGameInvites(user.uid, ({ outgoing }) => {
-      setOutgoingInvites(outgoing);
-    });
+    const unsubInvites = subscribeToGameInvites(
+      user.uid,
+      ({ outgoing }) => {
+        setOutgoingInvites(outgoing);
+      },
+      'outgoing'
+    );
     return () => {
       unsubFriends();
       unsubInvites();
@@ -126,10 +134,13 @@ export const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
         toPlayer: { uid: friend.uid, displayName: friend.displayName },
         roomCode,
         inviteType,
+        roomSnapshot,
       });
       setSentFeedback((prev) => ({ ...prev, [key]: true }));
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر إرسال الدعوة');
+      setErrorMsg(
+        formatSocialErrorMessage(err, 'تعذر إرسال الدعوة لهذا الصديق. يرجى التحقق من الاتصال وحالة الغرفة.')
+      );
     } finally {
       setSendingKey(null);
     }

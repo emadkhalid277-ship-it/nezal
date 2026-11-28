@@ -136,6 +136,7 @@ interface OnlineMultiplayerPageProps {
   initialRoomCode?: string | null;
   initialJoinRole?: 'player' | 'spectator';
   autoJoinNonce?: number;
+  onAutoJoinConsumed?: () => void;
   onPresenceActivityChange?: (
     status: 'online' | 'in_lobby' | 'in_match',
     roomCode?: string | null
@@ -170,6 +171,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   initialRoomCode,
   initialJoinRole = 'player',
   autoJoinNonce = 0,
+  onAutoJoinConsumed,
   onPresenceActivityChange,
   visualEffectsSettings,
   walaKalimaSettings = DEFAULT_WALA_KALIMA_SETTINGS,
@@ -214,6 +216,8 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const [categoryFilterMainId, setCategoryFilterMainId] = useState<string>('all');
   const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
   const [isTogglingSubId, setIsTogglingSubId] = useState<string | null>(null);
+  const [optimisticMyPicks, setOptimisticMyPicks] = useState<string[] | null>(null);
+  const [categoryBrowserError, setCategoryBrowserError] = useState<string | null>(null);
   const [isConfirmingBusy, setIsConfirmingBusy] = useState<boolean>(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
 
@@ -247,12 +251,21 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const lastMatchSyncSigRef = useRef<string>('');
   const matchSyncTimerRef = useRef<number | null>(null);
   const userRef = useRef<User | null>(user);
+  const currentRoomRef = useRef<OnlineGameRoom | null>(currentRoom);
+  currentRoomRef.current = currentRoom;
   const playerProfileIdRef = useRef<string>(playerProfile.id);
   const audioLoadingStartedAtRef = useRef<number | null>(null);
   const onlineFeedbackTimerRef = useRef<number | null>(null);
   const autoTimeoutFiredKeyRef = useRef<string | null>(null);
   const autoReconnectAttemptedRef = useRef<boolean>(false);
+  const lastHandledAutoJoinNonceRef = useRef<number>(0);
+  const playerNameInputRef = useRef<string>(playerNameInput);
   const prevModalTimeLeftRef = useRef<number>(60);
+  const categoryQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingCategoryOpsRef = useRef<number>(0);
+  const categoryQueueGenerationRef = useRef<number>(0);
+  const optimisticPicksRef = useRef<string[] | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const prevRoomSyncRef = useRef<{
     code: string;
     status: string;
@@ -270,6 +283,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   useEffect(() => {
     playerProfileIdRef.current = playerProfile.id;
   }, [playerProfile.id]);
+
+  useEffect(() => {
+    playerNameInputRef.current = playerNameInput;
+  }, [playerNameInput]);
 
   useEffect(() => {
     return subscribeFirestoreQuotaState((nextState) => {
@@ -319,6 +336,25 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       setEntryMode('join');
     }
   }, [initialRoomCode, initialJoinRole]);
+
+  useEffect(() => {
+    categoryQueueGenerationRef.current += 1;
+    optimisticPicksRef.current = null;
+    setOptimisticMyPicks(null);
+    setCategoryBrowserError(null);
+    pendingCategoryOpsRef.current = 0;
+  }, [currentRoom?.code]);
+
+  const showTransientToast = useCallback((msg: string) => {
+    setToastNotification(msg);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastNotification((prev) => (prev === msg ? null : prev));
+      toastTimerRef.current = null;
+    }, 3600);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -412,27 +448,20 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     }
   }, [currentRoom?.code, connectToRoomStream]);
 
-  // Debounced, signature-deduplicated match progress persistence (never runs on heartbeats)
+  // Sync online match record only on match start and match finish (never on every question/turn)
   useEffect(() => {
     if (!user || !currentRoom || quotaState.paused) return;
     const activeUid = user.uid || playerProfileIdRef.current;
     if (!currentRoom.players?.[activeUid]) return;
 
-    const isTrackableStatus =
-      currentRoom.status === 'playing' ||
-      currentRoom.status === 'in_game' ||
-      currentRoom.status === 'finished';
-    if (!isTrackableStatus) return;
+    const isFinished =
+      currentRoom.status === 'finished' || currentRoom.status === 'completed';
+    const isPlaying =
+      currentRoom.status === 'playing' || currentRoom.status === 'in_game';
+    if (!isPlaying && !isFinished) return;
 
-    const teamsSig = (currentRoom.teams || [])
-      .map((t) => `${t.id}:${t.score}`)
-      .join(',');
-    const aq = currentRoom.activeQuestion;
-    const syncSig = `${currentRoom.code}|${currentRoom.status}|${teamsSig}|${
-      (currentRoom.usedTileKeys || []).length
-    }|${currentRoom.activeTeamIndex || 0}|${aq?.tileKey || ''}|${
-      aq?.isAnswerRevealed ? 1 : 0
-    }`;
+    const syncPhase = isFinished ? 'completed' : 'started';
+    const syncSig = `${currentRoom.code}|${syncPhase}`;
 
     if (lastMatchSyncSigRef.current === syncSig) {
       return;
@@ -446,16 +475,18 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
 
     const flushMatchSync = () => {
       if (isFirestoreQuotaPaused()) return;
-      const sorted = [...currentRoom.teams].sort((a, b) => b.score - a.score);
-      const playersList = Object.values(currentRoom.players || {});
+      const latestRoom = currentRoomRef.current;
+      if (!latestRoom || latestRoom.code !== currentRoom.code) return;
+      const sorted = [...latestRoom.teams].sort((a, b) => b.score - a.score);
+      const playersList = Object.values(latestRoom.players || {});
       saveMatchProgressToFirestore({
-        id: `online_${currentRoom.code}_${user.uid}`,
+        id: `online_${latestRoom.code}_${user.uid}`,
         userId: user.uid,
         userEmail: user.email || null,
-        status: currentRoom.status === 'finished' ? 'completed' : 'in_progress',
+        status: isFinished ? 'completed' : 'in_progress',
         mode: 'online',
-        roomCode: currentRoom.code,
-        teams: currentRoom.teams.map((t) => ({
+        roomCode: latestRoom.code,
+        teams: latestRoom.teams.map((t) => ({
           id: t.id,
           name: t.name,
           color: t.color,
@@ -464,41 +495,19 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             .filter((p) => p.teamId === t.id)
             .map((p) => p.name),
         })),
-        selectedSubcategories: currentRoom.selectedSubcategoryIds || [],
-        usedTileKeys: currentRoom.usedTileKeys || [],
-        activeTeamIndex: currentRoom.activeTeamIndex || 0,
-        activeQuestionState: aq
-          ? {
-              tileKey: aq.tileKey,
-              subcategoryId: aq.subcategoryId,
-              subcategoryName: aq.subcategoryName,
-              mainCategoryName: aq.category,
-              points: (aq.points as PointValue) || 100,
-              questionId: aq.questionId,
-              questionText: aq.questionText,
-              correctAnswer: aq.correctAnswer,
-              mediaType: inferQuestionMediaType(aq),
-              imageUrl: aq.imageUrl,
-              imageDescription: aq.imageDescription,
-              audioUrl: aq.audioUrl,
-              audioMaxPlays: aq.audioMaxPlays ?? null,
-              explanation: aq.explanation,
-              answerRevealed: aq.isAnswerRevealed,
-              timeLeft: currentRoom.timerDuration || 60,
-              timerPaused: false,
-            }
-          : null,
-        winnerTeamName:
-          currentRoom.status === 'finished' ? sorted[0]?.name : undefined,
-        winnerScore:
-          currentRoom.status === 'finished' ? sorted[0]?.score : undefined,
+        selectedSubcategories: latestRoom.selectedSubcategoryIds || [],
+        usedTileKeys: latestRoom.usedTileKeys || [],
+        activeTeamIndex: latestRoom.activeTeamIndex || 0,
+        activeQuestionState: null,
+        winnerTeamName: isFinished ? sorted[0]?.name : undefined,
+        winnerScore: isFinished ? sorted[0]?.score : undefined,
       }).catch(() => {});
     };
 
-    if (currentRoom.status === 'finished') {
+    if (isFinished) {
       flushMatchSync();
     } else {
-      matchSyncTimerRef.current = window.setTimeout(flushMatchSync, 1200);
+      matchSyncTimerRef.current = window.setTimeout(flushMatchSync, 1500);
     }
 
     return () => {
@@ -603,24 +612,37 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     };
   }, [user, autoJoinNonce, initialRoomCode, currentRoom, connectToRoomStream, playerProfile.name, quotaState.paused]);
 
-  // Auto-join room when triggered from Friend Invite or Notification Center
+  // Auto-join room when triggered from Friend Invite, URL ?room=, or Notification Center
   useEffect(() => {
     if (!user || !autoJoinNonce || !initialRoomCode) return;
+    if (lastHandledAutoJoinNonceRef.current === autoJoinNonce) return;
+
+    const cleanCode = initialRoomCode.trim().toUpperCase();
+    if (!cleanCode) {
+      onAutoJoinConsumed?.();
+      return;
+    }
+
+    lastHandledAutoJoinNonceRef.current = autoJoinNonce;
+
     if (isFirestoreQuotaPaused()) {
       setErrorMsg(FIRESTORE_QUOTA_EXCEEDED_MESSAGE);
       setEntryMode('join');
-      setRoomCodeInput(initialRoomCode.trim().toUpperCase());
+      setRoomCodeInput(cleanCode);
+      onAutoJoinConsumed?.();
       return;
     }
-    const cleanCode = initialRoomCode.trim().toUpperCase();
-    if (!cleanCode) return;
 
     let cancelled = false;
     const displayName =
-      playerNameInput.trim() ||
+      playerNameInputRef.current.trim() ||
       user.displayName ||
       user.email?.split('@')[0] ||
       'لاعب نِزال';
+
+    if (subscribedRoomCodeRef.current && subscribedRoomCodeRef.current !== cleanCode) {
+      disconnectRoomStream();
+    }
 
     setLoading(true);
     setErrorMsg(null);
@@ -656,7 +678,10 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           setRoomCodeInput(cleanCode);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          onAutoJoinConsumed?.();
+        }
       }
     };
 
@@ -664,7 +689,17 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [autoJoinNonce]);
+  }, [
+    user,
+    autoJoinNonce,
+    initialRoomCode,
+    initialJoinRole,
+    onAutoJoinConsumed,
+    connectToRoomStream,
+    disconnectRoomStream,
+    applyRoomMutationSuccess,
+    handleRoomActionError,
+  ]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -683,8 +718,25 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const hostUid = currentRoom ? currentRoom.hostUid || currentRoom.hostId : '';
   const guestUid = currentRoom ? currentRoom.guestUid || currentRoom.guestId || null : null;
 
-  const isHost = Boolean(currentRoom && myUid === hostUid);
-  const isGuest = Boolean(currentRoom && guestUid && myUid === guestUid);
+  const myPlayerRecord = currentRoom
+    ? currentRoom.players?.[myUid] ||
+      Object.values(currentRoom.players || {}).find(
+        (p) => p.userId && (p.userId === user?.uid || p.userId === myUid)
+      ) ||
+      null
+    : null;
+
+  const isHost = Boolean(
+    currentRoom &&
+      (myUid === hostUid ||
+        myPlayerRecord?.isHost ||
+        (myPlayerRecord?.teamId && myPlayerRecord.teamId === (currentRoom.teams?.[0]?.id || 'team_1')))
+  );
+  const isGuest = Boolean(
+    currentRoom &&
+      !isHost &&
+      ((guestUid && myUid === guestUid) || (myPlayerRecord && !myPlayerRecord.isHost))
+  );
   const myRole: TurnRole | null = isHost ? 'host' : isGuest ? 'guest' : null;
   const isSpectator = Boolean(
     currentRoom && !myRole && currentRoom.spectators?.[myUid]
@@ -870,7 +922,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     }
   }, [currentRoom?.lastActionAt, currentRoom?.lastActionMessage]);
 
-  // Throttled, visibility-gated presence heartbeat (45s, skips if recent room action or quota paused)
+  // Throttled, visibility-gated & snapshot-aware presence heartbeat (75s, skips if recent room action or synced lastSeen < 65s)
   useEffect(() => {
     const roomCode = currentRoom?.code;
     const uid = user?.uid;
@@ -881,14 +933,29 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
         return;
       }
-      if (Date.now() - lastRoomMutationAtRef.current < 30_000) {
+      const now = Date.now();
+      if (now - lastRoomMutationAtRef.current < 60_000) {
         trackFirestoreOp('online_presence', 'dedup_skip', 1, 'recent_room_mutation');
+        return;
+      }
+      const syncedRoom = currentRoomRef.current;
+      const syncedMember =
+        syncedRoom?.players?.[myUid] ||
+        syncedRoom?.players?.[uid] ||
+        syncedRoom?.spectators?.[myUid] ||
+        syncedRoom?.spectators?.[uid];
+      if (
+        syncedMember &&
+        syncedMember.connectionStatus === 'online' &&
+        now - Number(syncedMember.lastSeen || 0) < 65_000
+      ) {
+        trackFirestoreOp('online_presence', 'dedup_skip', 1, 'synced_lastSeen_fresh');
         return;
       }
       void updateOnlinePlayerPresence(roomCode, myUid, 'online');
     };
 
-    const interval = window.setInterval(pingIfNeeded, 45_000);
+    const interval = window.setInterval(pingIfNeeded, 75_000);
     heartbeatRef.current = interval;
     return () => {
       window.clearInterval(interval);
@@ -1042,6 +1109,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const triggerComingSoonAlert = () => {
     const msg = 'هذه الفئة قادمة قريباً، ترقبوا!';
     setErrorMsg(msg);
+    setCategoryBrowserError(msg);
     setToastNotification(msg);
     window.setTimeout(() => {
       setToastNotification((prev) => (prev === msg ? null : prev));
@@ -1085,16 +1153,18 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
   const isHostOnlineNow = Boolean(
     hostPlayerObj &&
       hostPlayerObj.connectionStatus !== 'offline' &&
-      Date.now() - (hostPlayerObj.lastSeen || 0) <= 95000
+      Date.now() - (hostPlayerObj.lastSeen || 0) <= 150000
   );
   const isGuestOnlineNow = Boolean(
     guestPlayerObj &&
       guestPlayerObj.connectionStatus !== 'offline' &&
-      Date.now() - (guestPlayerObj.lastSeen || 0) <= 95000
+      Date.now() - (guestPlayerObj.lastSeen || 0) <= 150000
   );
 
-  const hostPicks = currentRoom?.teamSubcategoryIds?.[hostTeam.id] || [];
-  const guestPicks = currentRoom?.teamSubcategoryIds?.[guestTeam.id] || [];
+  const serverHostPicks = currentRoom?.teamSubcategoryIds?.[hostTeam.id] || [];
+  const serverGuestPicks = currentRoom?.teamSubcategoryIds?.[guestTeam.id] || [];
+  const hostPicks = isHost && optimisticMyPicks !== null ? optimisticMyPicks : serverHostPicks;
+  const guestPicks = isGuest && optimisticMyPicks !== null ? optimisticMyPicks : serverGuestPicks;
   const hasGuest = Boolean(guestUid || guestPlayerObj || playersList.length >= 2);
   const hostConfirmed = Boolean(currentRoom?.categoryConfirmations?.host);
   const guestConfirmed = Boolean(currentRoom?.categoryConfirmations?.guest);
@@ -1311,8 +1381,14 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  const handleToggleCategoryPick = async (subcategoryId: string) => {
-    if (!currentRoom || !myRole) return;
+  const handleToggleCategoryPick = (subcategoryId: string) => {
+    if (!currentRoom || !myRole) {
+      const msg = 'تعذر تحديد دورك في الغرفة حالياً. يرجى تحديث الصفحة أو إعادة الدخول للغرفة.';
+      setCategoryBrowserError(msg);
+      setErrorMsg(msg);
+      return;
+    }
+
     const matchedSub = activeSubcategories.find((s) => s.id === subcategoryId);
     const matchedMain = mainCategories.find(
       (m) => m.id === subcategoryId || m.name === subcategoryId
@@ -1322,26 +1398,112 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
       return;
     }
 
+    const isRoleConfirmed =
+      myRole === 'host'
+        ? Boolean(currentRoom.categoryConfirmations?.host)
+        : Boolean(currentRoom.categoryConfirmations?.guest);
+    if (isRoleConfirmed) {
+      const msg = 'أكّدت فئاتك الثلاث بالفعل. اضغط «تعديل اختياراتي» في بطاقتك أولاً لتغيير الاختيار.';
+      setCategoryBrowserError(msg);
+      showTransientToast(msg);
+      return;
+    }
+
+    const opponentPicks = myRole === 'host' ? serverGuestPicks : serverHostPicks;
+    if (opponentPicks.includes(subcategoryId)) {
+      const msg = 'هذه الفئة اختارها خصمك بالفعل! يرجى اختيار فئة أخرى.';
+      setCategoryBrowserError(msg);
+      showTransientToast(msg);
+      return;
+    }
+
+    const serverMyPicks = myRole === 'host' ? serverHostPicks : serverGuestPicks;
+    const basePicks = optimisticPicksRef.current ?? serverMyPicks;
+    const isAlreadyPicked = basePicks.includes(subcategoryId);
+
+    if (!isAlreadyPicked && basePicks.length >= 3) {
+      const msg = 'اخترت 3 فئات بالفعل! اضغط على إحدى فئاتك المحددة لإلغائها ثم اختر فئة أخرى.';
+      setCategoryBrowserError(msg);
+      showTransientToast(msg);
+      return;
+    }
+
+    const nextOptimistic = isAlreadyPicked
+      ? basePicks.filter((id) => id !== subcategoryId)
+      : [...basePicks, subcategoryId];
+
+    optimisticPicksRef.current = nextOptimistic;
+    setOptimisticMyPicks(nextOptimistic);
+    setCategoryBrowserError(null);
     setErrorMsg(null);
     setIsTogglingSubId(subcategoryId);
-    try {
-      const updated = await toggleOnlineSubcategoryPick(currentRoom.code, subcategoryId);
-      applyRoomMutationSuccess(updated);
-    } catch (err: any) {
-      handleRoomActionError(err, 'حدث خطأ أثناء تعديل اختيار الفئة.');
-    } finally {
-      setIsTogglingSubId(null);
-    }
+
+    const targetRoomCode = currentRoom.code;
+    const opGeneration = categoryQueueGenerationRef.current;
+    pendingCategoryOpsRef.current += 1;
+
+    categoryQueueRef.current = categoryQueueRef.current
+      .catch(() => {})
+      .then(async () => {
+        try {
+          if (opGeneration !== categoryQueueGenerationRef.current) {
+            return;
+          }
+          const updated = await toggleOnlineSubcategoryPick(
+            targetRoomCode,
+            subcategoryId,
+            user,
+            myRole
+          );
+          if (opGeneration !== categoryQueueGenerationRef.current) {
+            return;
+          }
+          pendingCategoryOpsRef.current = Math.max(0, pendingCategoryOpsRef.current - 1);
+          applyRoomMutationSuccess(updated);
+          if (pendingCategoryOpsRef.current === 0) {
+            optimisticPicksRef.current = null;
+            setOptimisticMyPicks(null);
+          }
+        } catch (err: any) {
+          categoryQueueGenerationRef.current += 1;
+          pendingCategoryOpsRef.current = 0;
+          optimisticPicksRef.current = null;
+          setOptimisticMyPicks(null);
+          const friendly = isFirestoreQuotaExceededError(err)
+            ? FIRESTORE_QUOTA_EXCEEDED_MESSAGE
+            : err?.message || 'حدث خطأ أثناء تعديل اختيار الفئة.';
+          setCategoryBrowserError(friendly);
+          handleRoomActionError(err, 'حدث خطأ أثناء تعديل اختيار الفئة.');
+          showTransientToast(friendly);
+        } finally {
+          setIsTogglingSubId((curr) => (curr === subcategoryId ? null : curr));
+        }
+      });
   };
 
   const handleConfirmMyCategories = async (confirmed: boolean) => {
     if (!currentRoom || !myRole || isConfirmingBusy) return;
     setErrorMsg(null);
+    setCategoryBrowserError(null);
     setIsConfirmingBusy(true);
     try {
-      const updated = await confirmOnlineCategories(currentRoom.code, confirmed);
+      if (pendingCategoryOpsRef.current > 0) {
+        await categoryQueueRef.current.catch(() => {});
+      }
+      const updated = await confirmOnlineCategories(
+        currentRoom.code,
+        confirmed,
+        user,
+        myRole
+      );
+      optimisticPicksRef.current = null;
+      setOptimisticMyPicks(null);
       applyRoomMutationSuccess(updated);
     } catch (err: any) {
+      const friendly = isFirestoreQuotaExceededError(err)
+        ? FIRESTORE_QUOTA_EXCEEDED_MESSAGE
+        : err?.message || 'تعذر تحديث تأكيد الفئات.';
+      setCategoryBrowserError(friendly);
       handleRoomActionError(err, 'تعذر تحديث تأكيد الفئات.');
     } finally {
       setIsConfirmingBusy(false);
@@ -2187,6 +2349,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
               </div>
             </div>
 
+            {quotaState.paused && (
+              <AlertBanner tone="warning">
+                تم إيقاف المزامنة مؤقتاً بسبب تجاوز حد القراءة اليومي (Quota Exceeded). اضغط «إعادة المحاولة الآن» في الأعلى أو انتظر انتهاء المهلة.
+              </AlertBanner>
+            )}
+
             {amIConfirmed && (
               <AlertBanner tone="info">
                 أكّدت فئاتك الثلاث بنجاح. لتبديل أي فئة قبل بدء المباراة، اضغط على «تعديل اختياراتي» في بطاقتك أعلاه.
@@ -2253,6 +2421,12 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
                   ))}
               </div>
             </div>
+
+            {categoryBrowserError && (
+              <AlertBanner tone="error" onDismiss={() => setCategoryBrowserError(null)}>
+                {categoryBrowserError}
+              </AlertBanner>
+            )}
 
             <div className="grid grid-cols-1 min-[375px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[380px] overflow-y-auto p-1">
               {filteredSubcategories.map((sub) => {
@@ -2444,6 +2618,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
           user={user}
           roomCode={currentRoom.code}
           canInviteToPlay={!hasGuest}
+          roomSnapshot={currentRoom}
         />
       </div>
     );
@@ -3391,6 +3566,7 @@ export const OnlineMultiplayerPage: React.FC<OnlineMultiplayerPageProps> = ({
             user={user}
             roomCode={currentRoom.code}
             canInviteToPlay={false}
+            roomSnapshot={currentRoom}
           />
         </div>
       </MotionConfig>

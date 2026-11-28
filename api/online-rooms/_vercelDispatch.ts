@@ -17,7 +17,7 @@ import {
   handleToggleCategoryPick,
   handleWalaKalimaCommit,
   handleWalaKalimaSyncState,
-} from '../../server/onlineDuelEngine.ts';
+} from './_onlineDuelEngine.bundle.mjs';
 
 interface VercelNodeRequest extends IncomingMessage {
   body?: unknown;

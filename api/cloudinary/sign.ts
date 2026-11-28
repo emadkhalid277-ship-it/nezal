@@ -2,7 +2,7 @@ import {
   handleCloudinarySignRequest,
   type ApiRequestLike,
   type ApiResponseLike,
-} from '../../server/cloudinarySignCore.ts';
+} from './_cloudinarySignCore.bundle.mjs';
 
 export default async function handler(
   req: ApiRequestLike,

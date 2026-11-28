@@ -1,4 +1,4 @@
-import { QuestionTemplate } from './religion';
+import type { QuestionTemplate } from './religion.ts';
 
 export const GEOGRAPHY_QUESTIONS: Record<string, QuestionTemplate[]> = {
   'دول وعواصم': [

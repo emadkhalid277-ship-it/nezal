@@ -205,7 +205,16 @@ export async function syncUserProfile(user: User): Promise<UserProfileData> {
   }
 }
 
+const ADMIN_CHECK_CACHE_TTL_MS = 5 * 60 * 1000;
+const adminCheckCache = new Map<string, { value: boolean; expiresAt: number }>();
+
 async function checkUserIsAdminDirect(uid: string): Promise<boolean> {
+  const cached = adminCheckCache.get(uid);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    trackFirestoreOp('auth_profile', 'cache_hit', 1, 'admins_check');
+    return cached.value;
+  }
   if (isFirestoreQuotaPaused()) {
     trackFirestoreOp('auth_profile', 'dedup_skip', 1, 'quota_paused_checkAdmin');
     return false;
@@ -213,7 +222,12 @@ async function checkUserIsAdminDirect(uid: string): Promise<boolean> {
   try {
     trackFirestoreOp('auth_profile', 'read', 1, 'admins_check');
     const snap = await getDoc(doc(db, 'admins', uid));
-    return snap.exists();
+    const isAdminDoc = snap.exists();
+    adminCheckCache.set(uid, {
+      value: isAdminDoc,
+      expiresAt: now + ADMIN_CHECK_CACHE_TTL_MS,
+    });
+    return isAdminDoc;
   } catch (err) {
     if (isFirestoreQuotaExceededError(err)) {
       triggerFirestoreQuotaCooldown('auth_profile', err);
@@ -264,6 +278,7 @@ export async function resetUserPassword(email: string): Promise<void> {
 export async function signOutUser(): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (uid) {
+    adminCheckCache.delete(uid);
     await markPresenceOfflineNow(uid).catch(() => {});
   }
   await signOut(auth);

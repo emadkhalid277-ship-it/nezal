@@ -1,4 +1,4 @@
-import { QuestionTemplate } from './religion';
+import type { QuestionTemplate } from './religion.ts';
 
 export const ANIME_QUESTIONS: Record<string, QuestionTemplate[]> = {
   'انمي عام': [

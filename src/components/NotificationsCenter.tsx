@@ -26,6 +26,7 @@ import {
   deleteNotification,
   fetchFriendRequestById,
   fetchGameInviteById,
+  formatSocialErrorMessage,
   markAllNotificationsRead,
   markNotificationRead,
   rejectFriendRequest,
@@ -63,10 +64,12 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<GameInvite[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resolvedNotifIds, setResolvedNotifIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    setResolvedNotifIds(new Set());
     if (!user?.uid) {
       setNotifications([]);
       setIncomingRequests([]);
@@ -75,12 +78,20 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
     }
 
     const unsubNotifs = subscribeToNotifications(user.uid, setNotifications);
-    const unsubReqs = subscribeToFriendRequests(user.uid, ({ incoming }) => {
-      setIncomingRequests(incoming);
-    });
-    const unsubInvs = subscribeToGameInvites(user.uid, ({ incoming }) => {
-      setIncomingInvites(incoming);
-    });
+    const unsubReqs = subscribeToFriendRequests(
+      user.uid,
+      ({ incoming }) => {
+        setIncomingRequests(incoming);
+      },
+      'incoming'
+    );
+    const unsubInvs = subscribeToGameInvites(
+      user.uid,
+      ({ incoming }) => {
+        setIncomingInvites(incoming);
+      },
+      'incoming'
+    );
 
     return () => {
       unsubNotifs();
@@ -126,6 +137,15 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
 
   if (!user) return null;
 
+  const markResolvedLocally = (notifId: string) => {
+    setResolvedNotifIds((prev) => {
+      if (prev.has(notifId)) return prev;
+      const next = new Set(prev);
+      next.add(notifId);
+      return next;
+    });
+  };
+
   const handleFriendDecision = async (
     notif: UserNotification,
     accept: boolean
@@ -138,6 +158,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
         pendingReqMap.get(notif.relatedId) ||
         (await fetchFriendRequestById(notif.relatedId));
       if (!req || req.status !== 'pending') {
+        markResolvedLocally(notif.id);
         await markNotificationRead(notif.id);
         setActionError('طلب الصداقة لم يعد معلقاً');
         return;
@@ -147,9 +168,10 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
       } else {
         await rejectFriendRequest(user, req);
       }
+      markResolvedLocally(notif.id);
       await markNotificationRead(notif.id);
     } catch (err: any) {
-      setActionError(err?.message || 'تعذر تنفيذ الإجراء');
+      setActionError(formatSocialErrorMessage(err, 'تعذر تنفيذ الإجراء.'));
     } finally {
       setBusyId(null);
     }
@@ -167,12 +189,14 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
         pendingInviteMap.get(notif.relatedId) ||
         (await fetchGameInviteById(notif.relatedId));
       if (!inv || inv.status !== 'pending') {
+        markResolvedLocally(notif.id);
         await markNotificationRead(notif.id);
-        setActionError('هذه الدعوة لم تعد صالحة أو انتهت');
+        setActionError('هذه الدعوة لم تعد صالحة أو انتهت.');
         return;
       }
       if (accept) {
         const result = await acceptGameInvite(user, inv);
+        markResolvedLocally(notif.id);
         await markNotificationRead(notif.id);
         setIsOpen(false);
         onJoinRoomFromInvite(
@@ -181,10 +205,21 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
         );
       } else {
         await rejectGameInvite(user, inv);
+        markResolvedLocally(notif.id);
         await markNotificationRead(notif.id);
       }
     } catch (err: any) {
-      setActionError(err?.message || 'تعذر قبول الدعوة');
+      const msg = formatSocialErrorMessage(err, 'تعذر قبول الدعوة.');
+      if (
+        msg.includes('انتهت صلاحية') ||
+        msg.includes('لم تعد صالحة') ||
+        msg.includes('غير موجودة') ||
+        msg.includes('قد انتهت')
+      ) {
+        markResolvedLocally(notif.id);
+        void markNotificationRead(notif.id);
+      }
+      setActionError(msg);
     } finally {
       setBusyId(null);
     }
@@ -293,6 +328,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
               </div>
             ) : (
               notifications.map((notif) => {
+                const isResolvedLocally = resolvedNotifIds.has(notif.id);
                 const pendingFriendReq =
                   notif.type === 'friend_request' && notif.relatedId
                     ? pendingReqMap.get(notif.relatedId)
@@ -302,6 +338,18 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                   notif.relatedId
                     ? pendingInviteMap.get(notif.relatedId)
                     : undefined;
+                const showFriendActions =
+                  !isResolvedLocally &&
+                  notif.type === 'friend_request' &&
+                  Boolean(notif.relatedId) &&
+                  (Boolean(pendingFriendReq) || !notif.isRead);
+                const showInviteActions =
+                  !isResolvedLocally &&
+                  (notif.type === 'play_invite' || notif.type === 'spectate_invite') &&
+                  Boolean(notif.relatedId) &&
+                  (Boolean(pendingInvite) ||
+                    (Boolean(notif.roomCode) &&
+                      (!notif.expiresAt || Number(notif.expiresAt) > Date.now())));
                 const isBusy = busyId === notif.id;
 
                 return (
@@ -352,7 +400,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                     </div>
 
                     {/* Quick inline actions for pending friend requests */}
-                    {pendingFriendReq && (
+                    {showFriendActions && (
                       <div
                         className="flex items-center gap-2 pr-10"
                         onClick={(e) => e.stopPropagation()}
@@ -378,7 +426,7 @@ export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({
                     )}
 
                     {/* Quick inline actions for pending game / spectate invites */}
-                    {pendingInvite && (
+                    {showInviteActions && (
                       <div
                         className="flex items-center gap-2 pr-10"
                         onClick={(e) => e.stopPropagation()}

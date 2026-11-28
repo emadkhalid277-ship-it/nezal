@@ -1,4 +1,4 @@
-import { QuestionTemplate } from './religion';
+import type { QuestionTemplate } from './religion.ts';
 
 export const SPORTS_QUESTIONS: Record<string, QuestionTemplate[]> = {
   'كرة السلة': [

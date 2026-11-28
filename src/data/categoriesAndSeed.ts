@@ -1,16 +1,16 @@
-import {
+import type {
   DifficultyLevel,
   MainCategoryMeta,
   MainCategoryName,
   PointValue,
   QuestionType,
   SubcategoryItem,
-} from '../types/game';
+} from '../types/game.ts';
 import {
   WALA_KALIMA_CONTENT_TYPES,
   WALA_KALIMA_MAIN_CATEGORY_ID,
   WALA_KALIMA_MAIN_CATEGORY_NAME,
-} from '../types/walaKalima';
+} from '../types/walaKalima.ts';
 
 export const MAIN_CATEGORIES: MainCategoryMeta[] = [
   {

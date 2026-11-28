@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import path from 'node:path';
 import type { Request, Response } from 'express';
 import {
   verifyFirebaseIdToken,
   type VerifiedFirebaseUser,
 } from './cloudinarySignCore.ts';
 import {
+  firestoreBatchGetDocs,
   firestoreCreateDoc,
   firestoreGetDoc,
   FirestoreHttpError,
@@ -13,6 +13,10 @@ import {
 } from './firestoreRestClient.ts';
 import { verifySubmittedAnswer } from '../src/utils/answerVerification.ts';
 import { evaluateMatchOutcome } from '../src/utils/matchOutcome.ts';
+import {
+  DEFAULT_SUBCATEGORIES,
+  INITIAL_SEED_QUESTIONS,
+} from '../src/data/categoriesAndSeed.ts';
 import type {
   ActiveQuestionState,
   OnlineGameRoom,
@@ -63,8 +67,8 @@ const roomLocks = new Map<string, Promise<void>>();
 const secretAnswerCache = new Map<string, CachedQuestionAnswer>();
 
 const METADATA_CACHE_TTL_MS = 5 * 60 * 1000;
-const PRESENCE_WRITE_MIN_INTERVAL_MS = 35_000;
-const HOST_STALE_THRESHOLD_MS = 95_000;
+const PRESENCE_WRITE_MIN_INTERVAL_MS = 65_000;
+const HOST_STALE_THRESHOLD_MS = 150_000;
 
 interface TtlCacheEntry<T> {
   value: T;
@@ -85,10 +89,23 @@ export function clearOnlineDuelCachesForTest(): void {
   secretAnswerCache.clear();
 }
 
-let builtinQuestionMapPromise: Promise<{
+let builtinSubcategoriesCache: Map<string, SubcategoryItem> | null = null;
+let builtinQuestionMapCache: {
   questionsById: Map<string, AuthoritativeQuestionRecord>;
   subcategoriesById: Map<string, SubcategoryItem>;
-}> | null = null;
+} | null = null;
+
+async function loadBuiltinSubcategories(): Promise<Map<string, SubcategoryItem>> {
+  if (!builtinSubcategoriesCache) {
+    const subcategoriesById = new Map<string, SubcategoryItem>();
+    for (const sub of DEFAULT_SUBCATEGORIES || []) {
+      subcategoriesById.set(sub.id, sub);
+      subcategoriesById.set(sanitizeDocId(sub.id), sub);
+    }
+    builtinSubcategoriesCache = subcategoriesById;
+  }
+  return builtinSubcategoriesCache;
+}
 
 function sanitizeDocId(rawId: string): string {
   const cleaned = String(rawId || '')
@@ -125,91 +142,50 @@ function withRoomLock<T>(roomCode: string, task: () => Promise<T>): Promise<T> {
   });
 }
 
-async function importTsModuleWithEsbuildFallback<T>(
-  importer: () => Promise<T>,
-  relPath: string
-): Promise<T> {
-  try {
-    return await importer();
-  } catch {
-    const esbuild = await import('esbuild');
-    const absPath = path.resolve(import.meta.dirname, relPath);
-    const built = await esbuild.build({
-      entryPoints: [absPath],
-      bundle: true,
-      write: false,
-      format: 'esm',
-      platform: 'node',
-      logLevel: 'silent',
-    });
-    const code = built.outputFiles[0]?.text || '';
-    const dataUrl = `data:text/javascript;base64,${Buffer.from(code, 'utf8').toString('base64')}`;
-    return (await import(dataUrl)) as T;
-  }
-}
-
 async function loadBuiltinCatalog(): Promise<{
   questionsById: Map<string, AuthoritativeQuestionRecord>;
   subcategoriesById: Map<string, SubcategoryItem>;
 }> {
-  if (!builtinQuestionMapPromise) {
-    builtinQuestionMapPromise = (async () => {
-      const questionsById = new Map<string, AuthoritativeQuestionRecord>();
-      const subcategoriesById = new Map<string, SubcategoryItem>();
+  if (!builtinQuestionMapCache) {
+    const questionsById = new Map<string, AuthoritativeQuestionRecord>();
+    const [subcategoriesById, expandedMod] = await Promise.all([
+      loadBuiltinSubcategories(),
+      import('../src/data/questions/index.ts'),
+    ]);
 
-      const [questionsMod, seedMod] = await Promise.all([
-        importTsModuleWithEsbuildFallback<{ ALL_EXPANDED_QUESTIONS: TriviaQuestion[] }>(
-          () => import('../src/data/questions/index.ts'),
-          '../src/data/questions/index.ts'
-        ),
-        importTsModuleWithEsbuildFallback<{
-          DEFAULT_SUBCATEGORIES: SubcategoryItem[];
-          INITIAL_SEED_QUESTIONS: Array<Partial<TriviaQuestion> & Pick<TriviaQuestion, 'id' | 'category' | 'questionText' | 'points' | 'correctAnswer'>>;
-        }>(
-          () => import('../src/data/categoriesAndSeed.ts'),
-          '../src/data/categoriesAndSeed.ts'
-        ),
-      ]);
-
-      for (const sub of seedMod.DEFAULT_SUBCATEGORIES || []) {
-        subcategoriesById.set(sub.id, sub);
-        subcategoriesById.set(sanitizeDocId(sub.id), sub);
-      }
-
-      const registerQuestion = (
-        q: Partial<TriviaQuestion> & Pick<TriviaQuestion, 'id' | 'category' | 'questionText' | 'points' | 'correctAnswer'>
-      ) => {
-        const rec: AuthoritativeQuestionRecord = {
-          id: q.id,
-          subcategoryId: q.subcategoryId,
-          category: q.category || 'عام',
-          questionText: q.questionText,
-          points: Number(q.points) || 100,
-          difficulty: q.difficulty || 'سهل',
-          correctAnswer: q.correctAnswer,
-          explanation: q.explanation || '',
-          mediaType: q.mediaType,
-          imageUrl: q.imageUrl,
-          imageDescription: q.imageDescription,
-          audioUrl: q.audioUrl,
-          audioMaxPlays: q.audioMaxPlays ?? null,
-          status: q.status,
-        };
-        questionsById.set(q.id, rec);
-        questionsById.set(sanitizeDocId(q.id), rec);
+    const registerQuestion = (
+      q: Partial<TriviaQuestion> & Pick<TriviaQuestion, 'id' | 'category' | 'questionText' | 'points' | 'correctAnswer'>
+    ) => {
+      const rec: AuthoritativeQuestionRecord = {
+        id: q.id,
+        subcategoryId: q.subcategoryId,
+        category: q.category || 'عام',
+        questionText: q.questionText,
+        points: Number(q.points) || 100,
+        difficulty: q.difficulty || 'سهل',
+        correctAnswer: q.correctAnswer,
+        explanation: q.explanation || '',
+        mediaType: q.mediaType,
+        imageUrl: q.imageUrl,
+        imageDescription: q.imageDescription,
+        audioUrl: q.audioUrl,
+        audioMaxPlays: q.audioMaxPlays ?? null,
+        status: q.status,
       };
+      questionsById.set(q.id, rec);
+      questionsById.set(sanitizeDocId(q.id), rec);
+    };
 
-      for (const q of seedMod.INITIAL_SEED_QUESTIONS || []) {
-        registerQuestion(q);
-      }
-      for (const q of questionsMod.ALL_EXPANDED_QUESTIONS || []) {
-        registerQuestion(q);
-      }
+    for (const q of INITIAL_SEED_QUESTIONS || []) {
+      registerQuestion(q);
+    }
+    for (const q of expandedMod.ALL_EXPANDED_QUESTIONS || []) {
+      registerQuestion(q);
+    }
 
-      return { questionsById, subcategoriesById };
-    })();
+    builtinQuestionMapCache = { questionsById, subcategoriesById };
   }
-  return builtinQuestionMapPromise;
+  return builtinQuestionMapCache;
 }
 
 async function resolveAuthoritativeQuestion(
@@ -278,90 +254,179 @@ async function resolveAuthoritativeQuestion(
   return questionsById.get(rawId) || questionsById.get(cleanId) || null;
 }
 
-async function checkSubcategoryIsComingSoon(
-  subcategoryId: string,
+interface MainCatFlags {
+  isComingSoon?: boolean;
+  isActive?: boolean;
+  isDeleted?: boolean;
+}
+
+async function checkSubcategoriesComingSoonBatch(
+  subcategoryIds: string[],
   idToken?: string
-): Promise<{ exists: boolean; isComingSoon: boolean; name: string }> {
-  const cleanId = sanitizeDocId(subcategoryId);
-  const { subcategoriesById } = await loadBuiltinCatalog();
-  const builtinSub = subcategoriesById.get(subcategoryId) || subcategoriesById.get(cleanId);
+): Promise<Map<string, { exists: boolean; isComingSoon: boolean; name: string }>> {
+  const uniqueRawIds = Array.from(new Set(subcategoryIds.map((id) => String(id || '').trim()).filter(Boolean)));
+  const out = new Map<string, { exists: boolean; isComingSoon: boolean; name: string }>();
+  if (uniqueRawIds.length === 0) return out;
 
-  let subName = builtinSub?.name || subcategoryId;
-  let subComingSoon = Boolean(builtinSub?.isComingSoon);
-  let mainCatId = builtinSub?.mainCategoryId || '';
-  let exists = Boolean(builtinSub);
-
+  const subcategoriesById = await loadBuiltinSubcategories();
   const now = Date.now();
-  const cachedSub = firestoreSubcategoryCache.get(cleanId);
-  if (cachedSub && cachedSub.expiresAt > now) {
-    const subData = cachedSub.value;
-    if (subData) {
-      exists = true;
-      subName = subData.name || subName;
-      subComingSoon = Boolean(subData.isComingSoon);
-      if (subData.isDeleted || subData.isActive === false) {
-        subComingSoon = true;
-      }
-      mainCatId = subData.mainCategoryId || mainCatId;
+
+  const resolvedState = new Map<
+    string,
+    {
+      rawId: string;
+      cleanId: string;
+      exists: boolean;
+      subName: string;
+      subComingSoon: boolean;
+      mainCatId: string;
     }
-  } else {
-    try {
-      const fsSub = await firestoreGetDoc<SubcategoryItem>('subcategories', cleanId, idToken);
-      firestoreSubcategoryCache.set(cleanId, {
-        value: fsSub.exists && fsSub.data ? fsSub.data : null,
-        expiresAt: now + METADATA_CACHE_TTL_MS,
-      });
-      if (fsSub.exists && fsSub.data) {
+  >();
+
+  const batchTargets: { collectionPath: string; docId: string }[] = [];
+  const queuedSubIds = new Set<string>();
+  const queuedMainIds = new Set<string>();
+
+  for (const rawId of uniqueRawIds) {
+    const cleanId = sanitizeDocId(rawId);
+    const builtinSub = subcategoriesById.get(rawId) || subcategoriesById.get(cleanId);
+    let exists = Boolean(builtinSub);
+    let subName = builtinSub?.name || rawId;
+    let subComingSoon = Boolean(builtinSub?.isComingSoon);
+    let mainCatId = builtinSub?.mainCategoryId || '';
+
+    const cachedSub = firestoreSubcategoryCache.get(cleanId);
+    if (cachedSub && cachedSub.expiresAt > now) {
+      const subData = cachedSub.value;
+      if (subData) {
         exists = true;
-        subName = fsSub.data.name || subName;
-        subComingSoon = Boolean(fsSub.data.isComingSoon);
-        if (fsSub.data.isDeleted || fsSub.data.isActive === false) {
+        subName = subData.name || subName;
+        subComingSoon = Boolean(subData.isComingSoon);
+        if (subData.isDeleted || subData.isActive === false) {
           subComingSoon = true;
         }
-        mainCatId = fsSub.data.mainCategoryId || mainCatId;
+        mainCatId = subData.mainCategoryId || mainCatId;
+      }
+    } else if (!queuedSubIds.has(cleanId)) {
+      queuedSubIds.add(cleanId);
+      batchTargets.push({ collectionPath: 'subcategories', docId: cleanId });
+    }
+
+    if (mainCatId) {
+      const cleanMainId = sanitizeDocId(mainCatId);
+      const cachedMain = firestoreMainCategoryCache.get(cleanMainId);
+      if (!cachedMain || cachedMain.expiresAt <= now) {
+        if (!queuedMainIds.has(cleanMainId)) {
+          queuedMainIds.add(cleanMainId);
+          batchTargets.push({ collectionPath: 'mainCategories', docId: cleanMainId });
+        }
+      }
+    }
+
+    resolvedState.set(rawId, {
+      rawId,
+      cleanId,
+      exists,
+      subName,
+      subComingSoon,
+      mainCatId,
+    });
+  }
+
+  // First roundtrip: batch-fetch all uncached subcategories (plus known mainCategories) at once
+  if (batchTargets.length > 0) {
+    try {
+      const batchMap = await firestoreBatchGetDocs<SubcategoryItem & MainCatFlags>(batchTargets, idToken);
+      for (const subCleanId of queuedSubIds) {
+        const res = batchMap.get(`subcategories/${subCleanId}`);
+        firestoreSubcategoryCache.set(subCleanId, {
+          value: res?.exists && res.data ? (res.data as SubcategoryItem) : null,
+          expiresAt: now + METADATA_CACHE_TTL_MS,
+        });
+      }
+      for (const mainCleanId of queuedMainIds) {
+        const res = batchMap.get(`mainCategories/${mainCleanId}`);
+        firestoreMainCategoryCache.set(mainCleanId, {
+          value: res?.exists && res.data ? (res.data as MainCatFlags) : null,
+          expiresAt: now + METADATA_CACHE_TTL_MS,
+        });
       }
     } catch (err) {
       if (err instanceof FirestoreHttpError && err.status === 429) {
         throw err;
       }
-      // ignore non-quota read error and rely on built-in catalog
+      // Fallback to built-in catalog / existing cache on non-quota error
     }
   }
 
-  if (mainCatId) {
-    const cleanMainId = sanitizeDocId(mainCatId);
-    const cachedMain = firestoreMainCategoryCache.get(cleanMainId);
-    if (cachedMain && cachedMain.expiresAt > now) {
-      const mainData = cachedMain.value;
-      if (mainData && (mainData.isComingSoon || mainData.isDeleted || mainData.isActive === false)) {
-        subComingSoon = true;
+  // Discover any custom subcategory mainCategoryIds that were not in DEFAULT_SUBCATEGORIES
+  const extraMainTargets: { collectionPath: string; docId: string }[] = [];
+  const queuedExtraMains = new Set<string>();
+  for (const state of resolvedState.values()) {
+    const cachedSub = firestoreSubcategoryCache.get(state.cleanId);
+    if (cachedSub && cachedSub.value) {
+      const subData = cachedSub.value;
+      state.exists = true;
+      state.subName = subData.name || state.subName;
+      state.subComingSoon = Boolean(subData.isComingSoon);
+      if (subData.isDeleted || subData.isActive === false) {
+        state.subComingSoon = true;
       }
-    } else {
-      try {
-        const fsMain = await firestoreGetDoc<{ isComingSoon?: boolean; isActive?: boolean; isDeleted?: boolean }>(
-          'mainCategories',
-          cleanMainId,
-          idToken
-        );
-        firestoreMainCategoryCache.set(cleanMainId, {
-          value: fsMain.exists && fsMain.data ? fsMain.data : null,
+      state.mainCatId = subData.mainCategoryId || state.mainCatId;
+    }
+    if (state.mainCatId) {
+      const cleanMainId = sanitizeDocId(state.mainCatId);
+      const cachedMain = firestoreMainCategoryCache.get(cleanMainId);
+      if (!cachedMain || cachedMain.expiresAt <= now) {
+        if (!queuedExtraMains.has(cleanMainId)) {
+          queuedExtraMains.add(cleanMainId);
+          extraMainTargets.push({ collectionPath: 'mainCategories', docId: cleanMainId });
+        }
+      }
+    }
+  }
+
+  if (extraMainTargets.length > 0) {
+    try {
+      const extraMap = await firestoreBatchGetDocs<MainCatFlags>(extraMainTargets, idToken);
+      for (const mainCleanId of queuedExtraMains) {
+        const res = extraMap.get(`mainCategories/${mainCleanId}`);
+        firestoreMainCategoryCache.set(mainCleanId, {
+          value: res?.exists && res.data ? res.data : null,
           expiresAt: now + METADATA_CACHE_TTL_MS,
         });
-        if (fsMain.exists && fsMain.data) {
-          if (fsMain.data.isComingSoon || fsMain.data.isDeleted || fsMain.data.isActive === false) {
-            subComingSoon = true;
-          }
-        }
-      } catch (err) {
-        if (err instanceof FirestoreHttpError && err.status === 429) {
-          throw err;
-        }
-        // ignore non-quota read error
+      }
+    } catch (err) {
+      if (err instanceof FirestoreHttpError && err.status === 429) {
+        throw err;
       }
     }
   }
 
-  return { exists, isComingSoon: subComingSoon, name: subName };
+  for (const state of resolvedState.values()) {
+    if (state.mainCatId) {
+      const cachedMain = firestoreMainCategoryCache.get(sanitizeDocId(state.mainCatId));
+      const mainData = cachedMain?.value;
+      if (mainData && (mainData.isComingSoon || mainData.isDeleted || mainData.isActive === false)) {
+        state.subComingSoon = true;
+      }
+    }
+    out.set(state.rawId, {
+      exists: state.exists,
+      isComingSoon: state.subComingSoon,
+      name: state.subName,
+    });
+  }
+
+  return out;
+}
+
+async function checkSubcategoryIsComingSoon(
+  subcategoryId: string,
+  idToken?: string
+): Promise<{ exists: boolean; isComingSoon: boolean; name: string }> {
+  const map = await checkSubcategoriesComingSoonBatch([subcategoryId], idToken);
+  return map.get(subcategoryId.trim()) || { exists: false, isComingSoon: false, name: subcategoryId };
 }
 
 function generateRoomCode(): string {
@@ -544,8 +609,59 @@ async function requireAuthenticatedUser(req: Request): Promise<{
   }
 }
 
-function handleEngineError(res: Response, err: unknown, fallbackMsg: string): void {
+interface EngineTraceContext {
+  endpoint: string;
+  actorRole?: 'host' | 'guest' | 'spectator' | 'unknown';
+}
+
+function mapFirestoreHttpMessage(err: FirestoreHttpError, fallbackMsg: string): string {
+  const lowerCode = String(err.code || '').toLowerCase();
+  const lowerMsg = String(err.message || '').toLowerCase();
+
+  if (
+    err.status === 429 ||
+    lowerCode.includes('quota-exceeded') ||
+    lowerCode.includes('resource_exhausted') ||
+    lowerMsg.includes('quota exceeded')
+  ) {
+    return err.message && /[\u0600-\u06FF]/.test(err.message)
+      ? err.message
+      : 'تم تجاوز حصة قاعدة البيانات (Firestore Quota Exceeded) مؤقتاً. تم إيقاف الطلبات المتكررة لحماية الحصة، يرجى الانتظار قليلاً والمحاولة مجدداً.';
+  }
+  if (
+    err.status === 403 ||
+    lowerCode.includes('permission_denied') ||
+    lowerCode.includes('permission-denied') ||
+    lowerMsg.includes('missing or insufficient permissions')
+  ) {
+    return 'تعذر تنفيذ الإجراء بسبب قيود الصلاحيات في قاعدة البيانات (Permission Denied). يرجى التحقق من عضويتك في الغرفة أو إعادة الدخول.';
+  }
+  if (err.status >= 500 || lowerCode.includes('unavailable') || lowerCode.includes('deadline')) {
+    return 'تعذر الاتصال بخادم قاعدة البيانات حالياً. يرجى المحاولة مجدداً بعد لحظات.';
+  }
+  if (err.message && /[\u0600-\u06FF]/.test(err.message)) {
+    return err.message;
+  }
+  return fallbackMsg;
+}
+
+function handleEngineError(
+  res: Response,
+  err: unknown,
+  fallbackMsg: string,
+  context?: EngineTraceContext
+): void {
+  const endpoint = context?.endpoint || '/api/online-rooms';
+  const actorRole = context?.actorRole || 'unknown';
+
   if (err instanceof ApiError) {
+    console.warn('[NIZAL OnlineDuelEngine Trace]', {
+      endpoint,
+      actorRole,
+      status: err.status,
+      code: err.code,
+      reason: 'api_validation_or_state_error',
+    });
     res.status(err.status).json({
       code: err.code,
       error: err.message,
@@ -553,18 +669,47 @@ function handleEngineError(res: Response, err: unknown, fallbackMsg: string): vo
     return;
   }
   if (err instanceof FirestoreHttpError) {
-    res.status(err.status).json({
+    const friendlyError = mapFirestoreHttpMessage(err, fallbackMsg);
+    const normalizedStatus = err.status === 429 ? 429 : err.status || 500;
+    console.warn('[NIZAL OnlineDuelEngine Trace]', {
+      endpoint,
+      actorRole,
+      status: normalizedStatus,
       code: err.code,
-      error: err.message,
+      reason:
+        normalizedStatus === 403
+          ? 'firestore_permission_denied'
+          : normalizedStatus === 429
+          ? 'firestore_quota_exceeded'
+          : normalizedStatus === 404
+          ? 'firestore_not_found'
+          : 'firestore_http_error',
+    });
+    res.status(normalizedStatus).json({
+      code: err.code,
+      error: friendlyError,
       ...(err.retryAfterMs ? { retryAfterMs: err.retryAfterMs } : {}),
     });
     return;
   }
-  const message = err instanceof Error ? err.message : fallbackMsg;
-  console.error('[NIZAL OnlineDuelEngine Error]', err);
-  res.status(400).json({
-    code: 'online-room/error',
-    error: message || fallbackMsg,
+  const lowerRaw = String((err as { message?: string })?.message || '').toLowerCase();
+  const isNetworkLike =
+    lowerRaw.includes('fetch failed') ||
+    lowerRaw.includes('network') ||
+    lowerRaw.includes('econnreset') ||
+    lowerRaw.includes('etimedout');
+  console.error('[NIZAL OnlineDuelEngine Trace]', {
+    endpoint,
+    actorRole,
+    status: isNetworkLike ? 503 : 400,
+    code: isNetworkLike ? 'network/unavailable' : 'online-room/error',
+    reason: isNetworkLike ? 'upstream_network_error' : 'unexpected_engine_error',
+  });
+  res.status(isNetworkLike ? 503 : 400).json({
+    code: isNetworkLike ? 'network/unavailable' : 'online-room/error',
+    error: isNetworkLike
+      ? 'تعذر الاتصال بخادم قاعدة البيانات حالياً. تحقق من الشبكة وأعد المحاولة.'
+      : fallbackMsg,
   });
 }
 
@@ -709,16 +854,21 @@ export async function handleCreateOnlineRoom(req: Request, res: Response): Promi
       }
     }
   } catch (err) {
-    handleEngineError(res, err, 'تعذر إنشاء غرفة اللعب عن بُعد.');
+    handleEngineError(res, err, 'تعذر إنشاء غرفة اللعب عن بُعد.', {
+      endpoint: '/api/online-rooms',
+      actorRole: 'host',
+    });
   }
 }
 
 export async function handleJoinOnlineRoom(req: Request, res: Response): Promise<void> {
+  let traceActorRole: 'host' | 'guest' | 'spectator' | 'unknown' = 'unknown';
   try {
     const { user, idToken } = await requireAuthenticatedUser(req);
     const code = parseRoomCode(String(req.params.code || ''));
     const body = getBodyObject(req);
     const roleRequested = body.role === 'spectator' ? 'spectator' : 'player';
+    traceActorRole = roleRequested === 'spectator' ? 'spectator' : 'guest';
     const playerName = String(body.playerName || user.email?.split('@')[0] || 'لاعب')
       .trim()
       .slice(0, 60);
@@ -867,7 +1017,10 @@ export async function handleJoinOnlineRoom(req: Request, res: Response): Promise
 
     res.json({ room: updatedRoom });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر الانضمام إلى الغرفة.');
+    handleEngineError(res, err, 'تعذر الانضمام إلى الغرفة.', {
+      endpoint: '/api/online-rooms/:code/join',
+      actorRole: traceActorRole,
+    });
   }
 }
 
@@ -951,7 +1104,10 @@ export async function handlePresenceUpdate(req: Request, res: Response): Promise
 
     res.json({ ok: true, changed: txOutcome.changed, room: txOutcome.room });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر تحديث حالة الاتصال.');
+    handleEngineError(res, err, 'تعذر تحديث حالة الاتصال.', {
+      endpoint: '/api/online-rooms/:code/presence',
+      actorRole: 'unknown',
+    });
   }
 }
 
@@ -1055,11 +1211,15 @@ export async function handleLeaveOnlineRoom(req: Request, res: Response): Promis
 
     res.json({ ok: true });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر مغادرة الغرفة.');
+    handleEngineError(res, err, 'تعذر مغادرة الغرفة.', {
+      endpoint: '/api/online-rooms/:code/leave',
+      actorRole: 'unknown',
+    });
   }
 }
 
 export async function handleToggleCategoryPick(req: Request, res: Response): Promise<void> {
+  let traceActorRole: 'host' | 'guest' | 'spectator' | 'unknown' = 'unknown';
   try {
     const { user, idToken } = await requireAuthenticatedUser(req);
     const code = parseRoomCode(String(req.params.code || ''));
@@ -1070,20 +1230,11 @@ export async function handleToggleCategoryPick(req: Request, res: Response): Pro
       throw new ApiError(400, 'room/invalid-subcategory', 'معرّف الفئة الفرعية مطلوب.');
     }
 
-    const subStatus = await checkSubcategoryIsComingSoon(subcategoryId, idToken);
-    if (subStatus.isComingSoon) {
-      throw new ApiError(
-        400,
-        'room/category-coming-soon',
-        'هذه الفئة في وضع «قريباً» ولا يمكن اختيارها.'
-      );
-    }
-
     const updatedRoom = await withRoomLock(code, async () => {
       const result = await runRoomCasTransaction<Record<string, unknown>>({
         roomCode: code,
         idToken,
-        mutator: (raw) => {
+        mutator: async (raw) => {
           const room = raw as unknown as OnlineGameRoom;
           if (
             room.status === 'playing' ||
@@ -1100,12 +1251,14 @@ export async function handleToggleCategoryPick(req: Request, res: Response): Pro
 
           const role = resolveActorRole(room, user.uid);
           if (!role) {
+            traceActorRole = room.spectators?.[user.uid] ? 'spectator' : 'unknown';
             throw new ApiError(
               403,
               'room/not-a-player',
               'أنت لست لاعباً في هذه الغرفة.'
             );
           }
+          traceActorRole = role;
 
           const isConfirmed =
             role === 'host'
@@ -1123,10 +1276,11 @@ export async function handleToggleCategoryPick(req: Request, res: Response): Pro
           const opponentTeamId = role === 'host' ? room.teams[1]?.id || 'team_2' : room.teams[0]?.id || 'team_1';
 
           const currentMyPicks = [...(room.teamSubcategoryIds?.[myTeamId] || [])];
-          const opponentPicks = room.teamSubcategoryIds?.[opponentTeamId] || [];
+          const opponentPicks = [...(room.teamSubcategoryIds?.[opponentTeamId] || [])];
 
           let nextMyPicks: string[];
           if (currentMyPicks.includes(subcategoryId)) {
+            // Removing an already-picked category needs zero metadata reads
             nextMyPicks = currentMyPicks.filter((id) => id !== subcategoryId);
           } else {
             if (opponentPicks.includes(subcategoryId)) {
@@ -1143,12 +1297,21 @@ export async function handleToggleCategoryPick(req: Request, res: Response): Pro
                 'لقد اخترت الحد الأقصى (3 فئات). أزل فئة أولاً لاختيار غيرها.'
               );
             }
+            const subStatus = await checkSubcategoryIsComingSoon(subcategoryId, idToken);
+            if (subStatus.isComingSoon) {
+              throw new ApiError(
+                400,
+                'room/category-coming-soon',
+                'هذه الفئة في وضع «قريباً» ولا يمكن اختيارها.'
+              );
+            }
             nextMyPicks = [...currentMyPicks, subcategoryId];
           }
 
           const nextTeamSubcategoryIds = {
             ...(room.teamSubcategoryIds || {}),
             [myTeamId]: nextMyPicks,
+            [opponentTeamId]: opponentPicks,
           };
 
           const nextConfirmations = {
@@ -1192,11 +1355,15 @@ export async function handleToggleCategoryPick(req: Request, res: Response): Pro
 
     res.json({ room: updatedRoom });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر تحديث اختيار الفئة.');
+    handleEngineError(res, err, 'تعذر تحديث اختيار الفئة.', {
+      endpoint: '/api/online-rooms/:code/categories/toggle',
+      actorRole: traceActorRole,
+    });
   }
 }
 
 export async function handleConfirmCategories(req: Request, res: Response): Promise<void> {
+  let traceActorRole: 'host' | 'guest' | 'spectator' | 'unknown' = 'unknown';
   try {
     const { user, idToken } = await requireAuthenticatedUser(req);
     const code = parseRoomCode(String(req.params.code || ''));
@@ -1224,8 +1391,10 @@ export async function handleConfirmCategories(req: Request, res: Response): Prom
 
           const role = resolveActorRole(room, user.uid);
           if (!role) {
+            traceActorRole = room.spectators?.[user.uid] ? 'spectator' : 'unknown';
             throw new ApiError(403, 'room/not-a-player', 'أنت لست لاعباً في هذه الغرفة.');
           }
+          traceActorRole = role;
 
           const myTeamId = role === 'host' ? room.teams[0]?.id || 'team_1' : room.teams[1]?.id || 'team_2';
           const myPicks = room.teamSubcategoryIds?.[myTeamId] || [];
@@ -1280,11 +1449,15 @@ export async function handleConfirmCategories(req: Request, res: Response): Prom
 
     res.json({ room: updatedRoom });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر تأكيد الفئات.');
+    handleEngineError(res, err, 'تعذر تأكيد الفئات.', {
+      endpoint: '/api/online-rooms/:code/categories/confirm',
+      actorRole: traceActorRole,
+    });
   }
 }
 
 export async function handleStartOnlineMatch(req: Request, res: Response): Promise<void> {
+  let traceActorRole: 'host' | 'guest' | 'spectator' | 'unknown' = 'unknown';
   try {
     const { user, idToken } = await requireAuthenticatedUser(req);
     const code = parseRoomCode(String(req.params.code || ''));
@@ -1296,6 +1469,7 @@ export async function handleStartOnlineMatch(req: Request, res: Response): Promi
         mutator: async (raw) => {
           const room = raw as unknown as OnlineGameRoom;
           const hostUid = room.hostUid || room.hostId;
+          traceActorRole = resolveActorRole(room, user.uid) || 'unknown';
           if (user.uid !== hostUid) {
             throw new ApiError(403, 'room/host-only', 'المضيف فقط يملك صلاحية بدء المباراة.');
           }
@@ -1338,9 +1512,10 @@ export async function handleStartOnlineMatch(req: Request, res: Response): Promi
             );
           }
 
+          const batchChecks = await checkSubcategoriesComingSoonBatch(merged, idToken);
           for (const subId of merged) {
-            const check = await checkSubcategoryIsComingSoon(subId, idToken);
-            if (check.isComingSoon) {
+            const check = batchChecks.get(subId);
+            if (check?.isComingSoon) {
               throw new ApiError(
                 400,
                 'room/coming-soon',
@@ -1392,7 +1567,10 @@ export async function handleStartOnlineMatch(req: Request, res: Response): Promi
 
     res.json({ room: updatedRoom });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر بدء المباراة.');
+    handleEngineError(res, err, 'تعذر بدء المباراة.', {
+      endpoint: '/api/online-rooms/:code/start',
+      actorRole: traceActorRole,
+    });
   }
 }
 
@@ -1560,7 +1738,10 @@ export async function handleSelectQuestion(req: Request, res: Response): Promise
 
     res.json({ room: updatedRoom });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر فتح السؤال.');
+    handleEngineError(res, err, 'تعذر فتح السؤال.', {
+      endpoint: '/api/online-rooms/:code/select-question',
+      actorRole: 'unknown',
+    });
   }
 }
 
@@ -1727,7 +1908,10 @@ export async function handleSubmitAnswer(req: Request, res: Response): Promise<v
 
     res.json({ room: updatedRoom });
   } catch (err) {
-    handleEngineError(res, err, 'تعذر إرسال الإجابة وتقييمها.');
+    handleEngineError(res, err, 'تعذر إرسال الإجابة وتقييمها.', {
+      endpoint: '/api/online-rooms/:code/submit-answer',
+      actorRole: 'unknown',
+    });
   }
 }
 

@@ -1,4 +1,4 @@
-import { QuestionTemplate } from './religion';
+import type { QuestionTemplate } from './religion.ts';
 
 export const GAMES_QUESTIONS: Record<string, QuestionTemplate[]> = {
   'العاب عام': [

@@ -2510,7 +2510,12 @@ export async function seedInitialQuestionsToFirestore(
   authorId: string,
   existingIds: Set<string>
 ): Promise<number> {
+  if (isFirestoreQuotaPaused()) {
+    return 0;
+  }
+
   const batch = writeBatch(db);
+  let metadataBatchOps = 0;
   let addedCount = 0;
 
   // Ensure default main categories exist in Firestore without overwriting existing ones
@@ -2534,6 +2539,7 @@ export async function seedInitialQuestionsToFirestore(
         updatedBy: authorId.slice(0, 128),
         updatedAt: serverTimestamp(),
       });
+      metadataBatchOps++;
     }
   }
 
@@ -2556,10 +2562,23 @@ export async function seedInitialQuestionsToFirestore(
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      metadataBatchOps++;
     }
   }
 
-  // Combine full expanded bank of 1,975 questions with legacy seed questions (deduplicated by ID)
+  if (metadataBatchOps > 0) {
+    try {
+      await batch.commit();
+      trackFirestoreOp('questions_bootstrap', 'write', metadataBatchOps, 'seed_metadata_categories');
+    } catch (metaErr) {
+      if (isFirestoreQuotaExceededError(metaErr)) {
+        triggerFirestoreQuotaCooldown('questions_bootstrap', metaErr);
+      }
+      throw metaErr;
+    }
+  }
+
+  // Combine full expanded question bank with legacy seed questions (deduplicated by ID)
   const legacyItems: TriviaQuestion[] = INITIAL_SEED_QUESTIONS.map((seed) => ({
     id: seed.id,
     category: seed.category,
@@ -2596,16 +2615,23 @@ export async function seedInitialQuestionsToFirestore(
   // Commit in safe chunks of 100 documents per batch to avoid limits and timeouts
   const BATCH_CHUNK_SIZE = 100;
   for (let i = 0; i < uniqueItems.length; i += BATCH_CHUNK_SIZE) {
+    if (isFirestoreQuotaPaused()) {
+      break;
+    }
+
     const chunk = uniqueItems.slice(i, i + BATCH_CHUNK_SIZE);
     const chunkBatch = writeBatch(db);
 
     for (const item of chunk) {
       const cleanId = sanitizeId(item.id);
       const docRef = doc(db, QUESTIONS_COLLECTION, cleanId);
+      const cleanSubcategoryId = item.subcategoryId
+        ? sanitizeId(item.subcategoryId)
+        : undefined;
 
       chunkBatch.set(docRef, {
         id: cleanId,
-        subcategoryId: item.subcategoryId ? sanitizeId(item.subcategoryId) : undefined,
+        ...(cleanSubcategoryId ? { subcategoryId: cleanSubcategoryId } : {}),
         category: item.category.trim().slice(0, 80),
         questionText: item.questionText.trim().slice(0, 600),
         questionType: 'direct',
@@ -2627,10 +2653,18 @@ export async function seedInitialQuestionsToFirestore(
 
     try {
       await chunkBatch.commit();
+      trackFirestoreOp('questions_bootstrap', 'write', chunk.length, 'seed_questions_batch');
     } catch (batchErr) {
+      if (isFirestoreQuotaExceededError(batchErr)) {
+        triggerFirestoreQuotaCooldown('questions_bootstrap', batchErr);
+      }
       console.error(`Batch commit failed at offset ${i}:`, batchErr);
       // Stop gracefully to keep successfully saved batches intact
       throw batchErr;
+    }
+
+    if (i + BATCH_CHUNK_SIZE < uniqueItems.length) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
     }
   }
 

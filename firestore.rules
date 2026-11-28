@@ -1035,6 +1035,7 @@ service cloud.firestore {
     // Friend Requests (fromUid_toUid)
     match /friendRequests/{requestId} {
       allow get: if isSignedIn() && isValidId(requestId) && (
+        resource == null ||
         resource.data.fromUid == request.auth.uid ||
         resource.data.toUid == request.auth.uid
       );
@@ -1099,6 +1100,7 @@ service cloud.firestore {
     // Verified Mutual Friendships (sorted minUid_maxUid)
     match /friendships/{pairId} {
       allow get: if isSignedIn() && isValidId(pairId) && (
+        resource == null ||
         resource.data.user1 == request.auth.uid ||
         resource.data.user2 == request.auth.uid
       );
@@ -1145,6 +1147,7 @@ service cloud.firestore {
     // Game Invites (Play & Spectator invitations)
     match /gameInvites/{inviteId} {
       allow get: if isSignedIn() && isValidId(inviteId) && (
+        resource == null ||
         resource.data.fromUid == request.auth.uid ||
         resource.data.toUid == request.auth.uid
       );
@@ -1194,10 +1197,13 @@ service cloud.firestore {
             existing().status == 'pending' &&
             incoming().status in ['cancelled', 'expired']
           ) ||
-          // Sender can re-issue a previously resolved/expired/cancelled invite
+          // Sender can re-issue a previously resolved/expired/cancelled invite (or one whose TTL passed)
           (
             existing().fromUid == request.auth.uid &&
-            existing().status in ['rejected', 'cancelled', 'expired', 'accepted'] &&
+            (
+              existing().status in ['rejected', 'cancelled', 'expired', 'accepted'] ||
+              (existing().status == 'pending' && existing().expiresAt <= request.time.toMillis())
+            ) &&
             incoming().status == 'pending' &&
             isNotBlockedBetween(existing().fromUid, existing().toUid) &&
             (

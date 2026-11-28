@@ -38,6 +38,7 @@ import {
   blockUser,
   cancelFriendRequest,
   cancelGameInvite,
+  formatSocialErrorMessage,
   rejectFriendRequest,
   rejectGameInvite,
   removeFriend,
@@ -51,6 +52,7 @@ import {
   unblockUser,
   updateAcceptsInvitesSetting,
 } from '../services/socialService';
+import { OnlineGameRoom } from '../types/multiplayer';
 import { createOnlineRoom } from '../services/multiplayerService';
 import { AlertBanner, EmptyState, StatusBadge, UI_CLASSES } from '../components/ui';
 
@@ -333,6 +335,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
     try {
       let targetRoomCode = activeOnlineRoomCode?.trim().toUpperCase() || '';
       let createdNewRoom = false;
+      let createdRoomSnapshot: OnlineGameRoom | null = null;
 
       if (!targetRoomCode) {
         const hostName =
@@ -344,6 +347,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
           timerDuration: 60,
         });
         targetRoomCode = room.code;
+        createdRoomSnapshot = room;
         createdNewRoom = true;
       }
 
@@ -352,6 +356,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
         toPlayer: { uid: friend.uid, displayName: friend.displayName },
         roomCode: targetRoomCode,
         inviteType,
+        roomSnapshot: createdRoomSnapshot,
       });
 
       if (createdNewRoom) {
@@ -364,7 +369,12 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
         );
       }
     } catch (err: any) {
-      showError(err?.message || 'تعذر إرسال الدعوة');
+      showError(
+        formatSocialErrorMessage(
+          err,
+          'تعذر إرسال الدعوة لهذا الصديق. يرجى التحقق من الاتصال وحالة الغرفة.'
+        )
+      );
     } finally {
       setBusyAction(null);
     }
@@ -382,7 +392,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
         res.inviteType === 'spectate' ? 'spectator' : 'player'
       );
     } catch (err: any) {
-      showError(err?.message || 'تعذر قبول الدعوة');
+      showError(formatSocialErrorMessage(err, 'تعذر قبول الدعوة.'));
     } finally {
       setBusyAction(null);
     }
@@ -395,7 +405,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
       await rejectGameInvite(user, inv);
       showSuccess('تم رفض الدعوة');
     } catch (err: any) {
-      showError(err?.message || 'تعذر رفض الدعوة');
+      showError(formatSocialErrorMessage(err, 'تعذر رفض الدعوة.'));
     } finally {
       setBusyAction(null);
     }
@@ -408,7 +418,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
       await cancelGameInvite(user, inv);
       showSuccess('تم إلغاء الدعوة المرسلة');
     } catch (err: any) {
-      showError(err?.message || 'تعذر إلغاء الدعوة');
+      showError(formatSocialErrorMessage(err, 'تعذر إلغاء الدعوة.'));
     } finally {
       setBusyAction(null);
     }

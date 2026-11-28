@@ -5,6 +5,14 @@ interface VercelDispatchRequest extends IncomingMessage {
   query?: Record<string, string | string[] | undefined>;
 }
 
+function safeDecodeSegment(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 function extractSegmentsFromRequest(req: VercelDispatchRequest): string[] | undefined {
   const rawCode = req.query?.__code;
   const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
@@ -16,17 +24,17 @@ function extractSegmentsFromRequest(req: VercelDispatchRequest): string[] | unde
       ? [rawAction]
       : [];
     const actionSegments = actionList
-      .flatMap((part) => String(part).split('/'))
-      .map((s) => s.trim())
+      .flatMap((part) => safeDecodeSegment(String(part)).split('/'))
+      .map((s) => safeDecodeSegment(s).trim())
       .filter(Boolean);
-    return [code.trim(), ...actionSegments];
+    return [safeDecodeSegment(code).trim(), ...actionSegments];
   }
 
   const rawSlug = req.query?.slug;
   if (rawSlug) {
     const slugSegments = (Array.isArray(rawSlug) ? rawSlug : [rawSlug])
-      .flatMap((part) => String(part).split('/'))
-      .map((s) => s.trim())
+      .flatMap((part) => safeDecodeSegment(String(part)).split('/'))
+      .map((s) => safeDecodeSegment(s).trim())
       .filter((s) => Boolean(s) && s !== 'dispatch');
     if (slugSegments.length > 0) {
       return slugSegments;

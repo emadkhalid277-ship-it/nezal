@@ -3360,7 +3360,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                     >
                       <RefreshCw className={`w-4 h-4 text-[#F07842] ${seeding ? 'animate-spin' : ''}`} />
                       <span>
-                        {seeding ? 'جارٍ الحفظ والتزامن بدفعات...' : 'تزامن بنك الأسئلة الشامل (1,975 سؤال)'}
+                        {seeding ? 'جارٍ الحفظ والتزامن بدفعات...' : `تزامن بنك الأسئلة الشامل (${TARGET_TOTAL_QUESTIONS.toLocaleString('en-US')} سؤال)`}
                       </span>
                     </button>
                   </div>

@@ -25,15 +25,18 @@ export const PLAYER_PROFILES_COLLECTION = 'playerProfiles';
 export const SOCIAL_FALLBACK_COLLECTION = 'gameSessions';
 
 // Fallback crash timeout ONLY when a browser crashes without firing pagehide/signOut
-export const PRESENCE_CRASH_STALE_MS = 95_000;
-export const PRESENCE_HEARTBEAT_INTERVAL_MS = 45_000;
+export const PRESENCE_CRASH_STALE_MS = 160_000;
+export const PRESENCE_HEARTBEAT_INTERVAL_MS = 75_000;
 const EXPLICIT_PRESENCE_DEDUP_MS = 15_000;
+const PROFILE_SYNC_DEDUP_MS = 15_000;
 
 const TAB_SESSION_ID = `sess_${Date.now().toString(36)}_${Math.random()
   .toString(36)
   .slice(2, 8)}`;
 
 let cachedIdToken: string | null = null;
+const cachedAcceptsInvitesByUid = new Map<string, boolean>();
+const lastProfileSyncByUid = new Map<string, number>();
 let activePresenceState: {
   uid: string;
   status: Exclude<PresenceStatus, 'offline'>;
@@ -66,8 +69,50 @@ export function isUsingFallbackSocialStore(): boolean {
   return socialStoreMode === 'fallback';
 }
 
+export function getCurrentSocialStoreMode(): 'unknown' | 'native' | 'fallback' {
+  return socialStoreMode;
+}
+
 export function enableFallbackSocialStore(): void {
   socialStoreMode = 'fallback';
+}
+
+export function resetSocialStoreModeForTest(): void {
+  socialStoreMode = 'unknown';
+  storeProbePromise = null;
+  lastExplicitPresenceWrite = null;
+  activePresenceState = null;
+  cachedIdToken = null;
+  cachedAcceptsInvitesByUid.clear();
+  lastProfileSyncByUid.clear();
+}
+
+export function setCachedAcceptsInvitesPreference(uid: string, acceptsInvites: boolean): void {
+  if (uid) {
+    cachedAcceptsInvitesByUid.set(uid, acceptsInvites);
+  }
+}
+
+export function logSocialTrace(
+  action: string,
+  details: {
+    storeMode?: string;
+    status?: number | string;
+    code?: string;
+    reason?: string;
+    inviteType?: string;
+    hasRoomCode?: boolean;
+  }
+): void {
+  console.warn('[NIZAL Social Trace]', {
+    action,
+    storeMode: details.storeMode || socialStoreMode,
+    ...(details.status !== undefined ? { status: details.status } : {}),
+    ...(details.code ? { code: details.code } : {}),
+    ...(details.reason ? { reason: details.reason } : {}),
+    ...(details.inviteType ? { inviteType: details.inviteType } : {}),
+    ...(details.hasRoomCode !== undefined ? { hasRoomCode: details.hasRoomCode } : {}),
+  });
 }
 
 export async function ensureSocialStoreMode(
@@ -168,8 +213,22 @@ export async function syncPublicPlayerProfile(
     trackFirestoreOp('presence', 'dedup_skip', 1, 'quota_paused_sync_profile');
     return;
   }
-  const mode = await ensureSocialStoreMode(user.uid);
   const now = Date.now();
+  const hasExplicitOverrides = Boolean(
+    overrides &&
+      (overrides.presenceStatus !== undefined ||
+        overrides.isExplicitlyOnline !== undefined ||
+        overrides.currentRoomCode !== undefined)
+  );
+  if (!hasExplicitOverrides) {
+    const prevSyncAt = lastProfileSyncByUid.get(user.uid) || 0;
+    if (now - prevSyncAt < PROFILE_SYNC_DEDUP_MS) {
+      trackFirestoreOp('presence', 'dedup_skip', 1, 'recent_sync_profile');
+      return;
+    }
+  }
+
+  const mode = await ensureSocialStoreMode(user.uid);
   const resolvedName = (
     overrides?.displayName ||
     user.displayName ||
@@ -177,29 +236,34 @@ export async function syncPublicPlayerProfile(
     'لاعب نِزال'
   ).trim();
 
-  await refreshCachedAuthToken(user);
+  if (!cachedIdToken) {
+    await refreshCachedAuthToken(user);
+  }
 
   const readRef =
     mode === 'fallback'
       ? doc(db, SOCIAL_FALLBACK_COLLECTION, `soc_prof_${user.uid}`)
       : doc(db, PLAYER_PROFILES_COLLECTION, user.uid);
 
-  let acceptsInvites = true;
-  try {
-    trackFirestoreOp('presence', 'read', 1, 'syncPublicPlayerProfile');
-    const snap = await getDoc(readRef);
-    if (snap.exists()) {
-      const existing = snap.data() as PlayerProfile;
-      if (typeof existing.acceptsInvites === 'boolean') {
-        acceptsInvites = existing.acceptsInvites;
+  let acceptsInvites = cachedAcceptsInvitesByUid.get(user.uid) ?? true;
+  if (!cachedAcceptsInvitesByUid.has(user.uid)) {
+    try {
+      trackFirestoreOp('presence', 'read', 1, 'syncPublicPlayerProfile');
+      const snap = await getDoc(readRef);
+      if (snap.exists()) {
+        const existing = snap.data() as PlayerProfile;
+        if (typeof existing.acceptsInvites === 'boolean') {
+          acceptsInvites = existing.acceptsInvites;
+        }
       }
+      cachedAcceptsInvitesByUid.set(user.uid, acceptsInvites);
+    } catch (err) {
+      if (isFirestoreQuotaExceededError(err)) {
+        triggerFirestoreQuotaCooldown('presence', err);
+        return;
+      }
+      // proceed with default
     }
-  } catch (err) {
-    if (isFirestoreQuotaExceededError(err)) {
-      triggerFirestoreQuotaCooldown('presence', err);
-      return;
-    }
-    // proceed with default
   }
 
   const nextStatus: PresenceStatus = overrides?.presenceStatus || 'online';
@@ -207,6 +271,8 @@ export async function syncPublicPlayerProfile(
     typeof overrides?.isExplicitlyOnline === 'boolean'
       ? overrides.isExplicitlyOnline
       : nextStatus !== 'offline';
+  const resolvedRoomCode =
+    overrides?.currentRoomCode !== undefined ? overrides.currentRoomCode : null;
 
   const payload: PlayerProfile = {
     uid: user.uid,
@@ -216,8 +282,7 @@ export async function syncPublicPlayerProfile(
     acceptsInvites,
     presenceStatus: nextStatus,
     isExplicitlyOnline: nextExplicit,
-    currentRoomCode:
-      overrides?.currentRoomCode !== undefined ? overrides.currentRoomCode : null,
+    currentRoomCode: resolvedRoomCode,
     sessionId: TAB_SESSION_ID,
     lastHeartbeat: now,
     updatedAt: now,
@@ -227,9 +292,11 @@ export async function syncPublicPlayerProfile(
     activePresenceState = {
       uid: user.uid,
       status: nextStatus,
-      roomCode: payload.currentRoomCode || null,
+      roomCode: resolvedRoomCode,
     };
   }
+
+  const explicitKey = `${user.uid}|${nextStatus}|${nextExplicit ? resolvedRoomCode || '' : ''}`;
 
   if (mode === 'fallback') {
     trackFirestoreOp('presence', 'write', 1, 'syncPublicPlayerProfile_fallback');
@@ -238,6 +305,8 @@ export async function syncPublicPlayerProfile(
       { ...payload, socialDocType: 'playerProfile', _deleted: false },
       { merge: true }
     );
+    lastProfileSyncByUid.set(user.uid, now);
+    lastExplicitPresenceWrite = { key: explicitKey, sentAt: now };
     return;
   }
 
@@ -246,6 +315,8 @@ export async function syncPublicPlayerProfile(
     await setDoc(doc(db, PLAYER_PROFILES_COLLECTION, user.uid), payload, {
       merge: true,
     });
+    lastProfileSyncByUid.set(user.uid, now);
+    lastExplicitPresenceWrite = { key: explicitKey, sentAt: now };
   } catch (err) {
     if (isFirestoreQuotaExceededError(err)) {
       triggerFirestoreQuotaCooldown('presence', err);
@@ -259,6 +330,8 @@ export async function syncPublicPlayerProfile(
         { ...payload, socialDocType: 'playerProfile', _deleted: false },
         { merge: true }
       );
+      lastProfileSyncByUid.set(user.uid, now);
+      lastExplicitPresenceWrite = { key: explicitKey, sentAt: now };
     } else {
       throw err;
     }

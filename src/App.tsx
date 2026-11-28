@@ -964,20 +964,6 @@ export default function App() {
         syncPublicPlayerProfile(currentUser).catch(() => {});
       }
 
-      if (adminStatus && currentUser && !isFirestoreQuotaPaused()) {
-        // Run migration/cleanup at most once per session in background without blocking initial render
-        const migrationKey = 'nizal_admin_cleanup_done_v1';
-        if (!sessionStorage.getItem(migrationKey)) {
-          sessionStorage.setItem(migrationKey, 'true');
-          cleanupRemovedMoviesCategoryInFirestore().catch((err) =>
-            console.error('Cleanup/convert legacy data error:', err)
-          );
-          convertExistingQuestionsToDirectInFirestore().catch((err) =>
-            console.error('Convert questions error:', err)
-          );
-        }
-      }
-
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         const offlineSnap = await loadActiveOfflineDataset();
         if (offlineSnap) {
@@ -998,13 +984,14 @@ export default function App() {
         bootstrappedCatalogScopeRef.current = targetScope;
 
         // Probe categories first so if Firestore returns 429, circuit breaker pauses before firing remaining reads
-        const loadedMains = await loadMainCategories(adminStatus);
+        // Never forceRefresh=true on initial auth bootstrap so reloads reuse 8m session cache
+        const loadedMains = await loadMainCategories(false);
         const questionsPromise = isFirestoreQuotaPaused()
           ? Promise.resolve([])
-          : loadQuestions(adminStatus, adminStatus);
+          : loadQuestions(adminStatus, false);
 
         const [loadedSubs] = await Promise.all([
-          loadSubcategories(adminStatus, loadedMains, adminStatus),
+          loadSubcategories(adminStatus, loadedMains, false),
           loadContactSettings(),
           loadQuestionDedupSettings(),
           loadVisualEffectsSettings(),
@@ -1012,6 +999,38 @@ export default function App() {
         setCategoriesLoaded(true);
 
         const loadedQuestions = await questionsPromise;
+
+        if (adminStatus && currentUser && !isFirestoreQuotaPaused()) {
+          // Run one-time legacy data cleanup across sessions via persistent storage guard
+          const migrationKey = 'nizal_admin_cleanup_done_v2';
+          let alreadyCleaned = false;
+          try {
+            alreadyCleaned =
+              localStorage.getItem(migrationKey) === 'true' ||
+              sessionStorage.getItem(migrationKey) === 'true';
+          } catch {
+            // ignore storage access issues
+          }
+          if (!alreadyCleaned) {
+            try {
+              localStorage.setItem(migrationKey, 'true');
+              sessionStorage.setItem(migrationKey, 'true');
+            } catch {
+              // ignore storage errors
+            }
+            cleanupRemovedMoviesCategoryInFirestore().catch((err) =>
+              console.error('Cleanup/convert legacy data error:', err)
+            );
+            const hasLegacyOptions = (loadedQuestions || []).some(
+              (q) => q.questionType !== 'direct' || (Array.isArray(q.options) && q.options.length > 0)
+            );
+            if (hasLegacyOptions) {
+              convertExistingQuestionsToDirectInFirestore().catch((err) =>
+                console.error('Convert questions error:', err)
+              );
+            }
+          }
+        }
 
         // Defer checksum-guarded IndexedDB sync to idle background without eager image downloads
         if (!hasSyncedInitialSnapshotRef.current) {
@@ -1242,6 +1261,18 @@ export default function App() {
   const effectivePresenceRoomCode =
     activePage === 'online_multiplayer' ? onlineActivity.roomCode : null;
 
+  const effectivePresenceRef = useRef<{
+    status: Exclude<PresenceStatus, 'offline'>;
+    roomCode: string | null;
+  }>({
+    status: effectivePresenceStatus,
+    roomCode: effectivePresenceRoomCode,
+  });
+  effectivePresenceRef.current = {
+    status: effectivePresenceStatus,
+    roomCode: effectivePresenceRoomCode,
+  };
+
   useEffect(() => {
     if (!user || !isOnline || playMode === 'offline_local' || isFirestoreQuotaPaused()) return;
     void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
@@ -1256,7 +1287,8 @@ export default function App() {
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && !isFirestoreQuotaPaused()) {
-        void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
+        const current = effectivePresenceRef.current;
+        void setExplicitPresence(user, current.status, current.roomCode);
       }
     };
     const handleNetworkOffline = () => {
@@ -1264,7 +1296,8 @@ export default function App() {
     };
     const handleNetworkOnline = () => {
       if (!isFirestoreQuotaPaused()) {
-        void setExplicitPresence(user, effectivePresenceStatus, effectivePresenceRoomCode);
+        const current = effectivePresenceRef.current;
+        void setExplicitPresence(user, current.status, current.roomCode);
       }
     };
 
@@ -1288,7 +1321,7 @@ export default function App() {
       window.removeEventListener('online', handleNetworkOnline);
       window.clearInterval(heartbeatTimer);
     };
-  }, [user, isOnline, playMode, effectivePresenceStatus, effectivePresenceRoomCode]);
+  }, [user, isOnline, playMode]);
 
   const handlePresenceActivityChange = useCallback(
     (status: 'online' | 'in_lobby' | 'in_match', roomCode?: string | null) => {
@@ -1304,6 +1337,7 @@ export default function App() {
 
   const handleJoinRoomFromInvite = useCallback(
     (roomCode: string, role: 'player' | 'spectator') => {
+      setPlayMode('online_cloud');
       setInitialRoomCode(roomCode.trim().toUpperCase());
       setInitialJoinRole(role);
       setAutoJoinNonce((n) => n + 1);
@@ -1312,6 +1346,22 @@ export default function App() {
     },
     []
   );
+
+  const handleAutoJoinConsumed = useCallback(() => {
+    setInitialRoomCode(null);
+    setAutoJoinNonce(0);
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('room') || url.searchParams.has('join') || url.searchParams.has('role')) {
+        url.searchParams.delete('room');
+        url.searchParams.delete('join');
+        url.searchParams.delete('role');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      }
+    } catch {
+      // ignore history errors
+    }
+  }, []);
 
   const approvedQuestions = useMemo(
     () => allQuestions.filter((q) => q.status !== 'rejected'),
@@ -2217,6 +2267,7 @@ export default function App() {
                 initialRoomCode={initialRoomCode}
                 initialJoinRole={initialJoinRole}
                 autoJoinNonce={autoJoinNonce}
+                onAutoJoinConsumed={handleAutoJoinConsumed}
                 onPresenceActivityChange={handlePresenceActivityChange}
                 visualEffectsSettings={visualEffectsSettings}
                 walaKalimaSettings={walaKalimaSettings}

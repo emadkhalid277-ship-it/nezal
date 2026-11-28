@@ -165,7 +165,7 @@ export const DIFFICULTY_TO_POINTS: Record<DifficultyLevel, PointValue> = {
 
 export const SUBCATEGORIES_PER_TEAM = 3;
 export const TARGET_QUESTIONS_PER_CATEGORY = 25;
-export const TARGET_TOTAL_QUESTIONS = 1975;
+export const TARGET_TOTAL_QUESTIONS = 3045;
 export const DEFAULT_BRAND_NAME = 'نِزال';
 
 export interface UserQuestionList {
